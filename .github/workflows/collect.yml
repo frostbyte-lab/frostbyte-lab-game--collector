@@ -1,0 +1,44 @@
+name: Game Resource Collector
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL game yang ingin di-capture"
+        required: true
+        type: string
+      wait_seconds:
+        description: "Waktu tunggu setelah load (detik)"
+        required: false
+        default: "8"
+        type: string
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: |
+          npm install
+          npx playwright install chromium --with-deps
+      - name: Capture
+        env:
+          TARGET_URL: ${{ github.event.inputs.url }}
+          WAIT_SECONDS: ${{ github.event.inputs.wait_seconds }}
+        run: node scripts/collect.js
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-resources
+          path: output/*.zip
+          retention-days: 5
+      - name: Summary
+        run: |
+          echo "### Capture Selesai" >> $GITHUB_STEP_SUMMARY
+          echo "URL: ${{ github.event.inputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "Download ZIP di bagian Artifacts." >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "game-resource-collector",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "browser": { "binding": "MYBROWSER" },
+  "r2_buckets": [
+    { "binding": "COLLECTOR_BUCKET", "bucket_name": "REPLACE_WITH_YOUR_R2_BUCKET" }
+  ],
+  "assets": { "directory": "./public" }
+}

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Game Collector</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 20px 16px;
+      background: #0f1117;
+      color: #e4e4e7;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+    .sub { color: #71717a; font-size: 0.85rem; margin-bottom: 20px; }
+    input {
+      width: 100%;
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid #27272a;
+      background: #18181b;
+      color: #fff;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+    .row { display: flex; gap: 10px; margin-bottom: 16px; }
+    button {
+      flex: 1;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:disabled { background: #1e3a5f; color: #64748b; }
+    .btn-secondary { background: #27272a; color: #a1a1aa; }
+    #status {
+      white-space: pre-wrap;
+      background: #18181b;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 60px;
+      border: 1px solid #27272a;
+    }
+    .error { color: #f87171; }
+    .ok { color: #4ade80; }
+    .warn { color: #fbbf24; }
+    .tip {
+      margin-top: 20px;
+      padding: 12px;
+      background: #1c1917;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #a8a29e;
+      border: 1px solid #292524;
+    }
+    a { color: #60a5fa; }
+  </style>
+</head>
+<body>
+  <h1>Game Collector</h1>
+  <p class="sub">Ambil resource game (HTML, JS, CSS, gambar, audio)</p>
+
+  <input id="url" type="url" placeholder="https://contoh.com/game" value="">
+  <div class="row">
+    <button class="btn-primary" id="btn" onclick="run()">Capture</button>
+    <button class="btn-secondary" onclick="clearStatus()">Clear</button>
+  </div>
+
+  <div id="status">Masukkan URL game lalu tekan Capture.</div>
+
+  <div class="tip">
+    <b>Limit Cloudflare Free:</b> 10 menit browser per hari.<br>
+    Kalau kena limit, pakai <a href="https://github.com/frostbyte-lab/frostbyte-lab-game--collector/actions" target="_blank">GitHub Actions</a> (gratis tanpa limit).
+  </div>
+
+<script>
+const statusEl = document.getElementById("status");
+const btn = document.getElementById("btn");
+const urlInput = document.getElementById("url");
+
+function clearStatus() {
+  statusEl.textContent = "Masukkan URL game lalu tekan Capture.";
+  statusEl.className = "";
+}
+
+async function run() {
+  const url = urlInput.value.trim();
+  if (!url) {
+    statusEl.textContent = "URL belum diisi.";
+    statusEl.className = "error";
+    return;
+  }
+
+  btn.disabled = true;
+  statusEl.className = "";
+  statusEl.textContent = "Sedang capture...\nMohon tunggu 10–30 detik.";
+
+  try {
+    const res = await fetch("/api/collect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+
+    if (res.status === 429 || data.error === "LIMIT_BROWSER") {
+      statusEl.className = "warn";
+      statusEl.textContent = "⚠ LIMIT BROWSER TERCAPAI\n\n" +
+        (data.message || "Limit 10 menit/hari Cloudflare Free sudah habis.") +
+        "\n\nSolusi:\n• Tunggu sampai besok, atau\n• Pakai GitHub Actions (gratis tanpa limit)\n  → buka repo → tab Actions → Run workflow";
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || data.message || "Gagal");
+    }
+
+    statusEl.className = "ok";
+    statusEl.textContent = `✓ BERHASIL\n\nID: ${data.id}\nFile: ${data.files}\nZIP size: ${Math.round((data.zipSize||0)/1024)} KB\n\n${data.message || ""}`;
+  } catch (err) {
+    statusEl.className = "error";
+    statusEl.textContent = "Error: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
