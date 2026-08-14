@@ -15,8 +15,17 @@ function safe(s) {
 }
 
 function folderOf(type) {
-  return ({document:"html",script:"js",stylesheet:"css",image:"images",
-    media:"media",font:"fonts",xhr:"data",fetch:"data"})[type] || "other";
+  // Struktur profesional sesuai konsep
+  return ({
+    document: "assets/html",
+    script: "assets/js",
+    stylesheet: "assets/css",
+    image: "assets/images",
+    media: "assets/audio",
+    font: "assets/fonts",
+    xhr: "assets/data",
+    fetch: "assets/data"
+  })[type] || "assets/other";
 }
 
 function isExcluded(url) {
@@ -297,9 +306,21 @@ Smart rewrite: ${smart.rewritten} file · frame-buster dinetralisir: ${smart.neu
         await env.COLLECTOR_BUCKET.put(zipKey, zipData, {
           httpMetadata: {
             contentType: "application/zip",
-            contentDisposition: `attachment; filename="game-resources.zip"`
+            contentDisposition: `attachment; filename="game-package.zip"`
           }
         });
+      }
+
+      // Kirim ZIP ke client jika masih masuk akal (≤ 12 MB) agar bisa download langsung + buka Workspace
+      const MAX_INLINE = 12 * 1024 * 1024;
+      let zipBase64 = null;
+      if (zipData.byteLength <= MAX_INLINE) {
+        let binary = "";
+        const chunk = 0x8000;
+        for (let i = 0; i < zipData.length; i += chunk) {
+          binary += String.fromCharCode.apply(null, zipData.subarray(i, i + chunk));
+        }
+        zipBase64 = btoa(binary);
       }
 
       return Response.json({
@@ -308,7 +329,10 @@ Smart rewrite: ${smart.rewritten} file · frame-buster dinetralisir: ${smart.neu
         files: manifest.length,
         zipSize: zipData.byteLength,
         smartRewrite: smart,
-        message: `Capture berhasil (smart rewrite: ${smart.rewritten} file, frame-buster: ${smart.neutralized}). Download ZIP atau buka di Workspace.`
+        zipBase64,
+        message: zipBase64
+          ? `Capture berhasil. ZIP siap di-download & bisa langsung dibuka di Workspace (offline).`
+          : `Capture berhasil (ZIP besar ${Math.round(zipData.byteLength/1024/1024)} MB). Download via R2/GitHub Actions, lalu load di Workspace.`
       });
 
     } catch (e) {

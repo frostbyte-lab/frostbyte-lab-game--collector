@@ -271,7 +271,45 @@
         if (!res.ok) throw new Error(data.error || data.message || 'Gagal');
 
         statusEl.className = 'ok';
-        statusEl.textContent = `✓ BERHASIL\n\nID: ${data.id}\nFile: ${data.files}\nZIP size: ${Math.round((data.zipSize||0)/1024)} KB\n\n${data.message || ''}`;
+        const sizeKB = Math.round((data.zipSize || 0) / 1024);
+        let extra = '';
+
+        // Auto-download ZIP jika server mengirim base64
+        if (data.zipBase64) {
+          try {
+            const bin = atob(data.zipBase64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            const blob = new Blob([bytes], { type: 'application/zip' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `game-package-${data.id || Date.now()}.zip`;
+            a.click();
+            // Simpan untuk Workspace (tanpa upload ulang)
+            window.__gc_lastZipBlob = blob;
+            window.__gc_lastZipName = a.download;
+            extra = '\n\n✓ ZIP otomatis di-download.\nKlik "Buka di Workspace" untuk preview offline.';
+          } catch (e) {
+            extra = '\n\nZIP tersedia tapi gagal auto-download: ' + e.message;
+          }
+        } else {
+          extra = '\n\nZIP terlalu besar untuk inline. Pakai GitHub Actions artifact atau R2.';
+        }
+
+        statusEl.innerHTML = '';
+        statusEl.textContent = `✓ BERHASIL\n\nID: ${data.id}\nFile: ${data.files}\nZIP: ${sizeKB} KB\n\n${data.message || ''}${extra}`;
+
+        // Tombol buka Workspace
+        if (window.__gc_lastZipBlob) {
+          const btn = document.createElement('button');
+          btn.className = 'btn-success';
+          btn.style.marginTop = '12px';
+          btn.textContent = '▶ Buka di Workspace (Offline)';
+          btn.onclick = () => openLastZipInWorkspace();
+          statusEl.appendChild(document.createElement('br'));
+          statusEl.appendChild(btn);
+        }
+
         addHistory({ url, status: 'ok', id: data.id, files: data.files, zipSize: data.zipSize });
       } catch (err) {
         statusEl.className = 'error';
@@ -280,6 +318,19 @@
       } finally {
         btnCollect.disabled = false;
       }
+    }
+
+    async function openLastZipInWorkspace() {
+      if (!window.__gc_lastZipBlob) return;
+      document.querySelector('[data-panel="workspace"]').click();
+      // Fake file input via DataTransfer
+      const file = new File([window.__gc_lastZipBlob], window.__gc_lastZipName || 'game.zip', { type: 'application/zip' });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      const input = document.getElementById('zip-input');
+      input.files = dt.files;
+      await loadZip();
+      log('Paket dari Collect dimuat otomatis — siap Preview offline');
     }
 
     // ========== HISTORY ==========

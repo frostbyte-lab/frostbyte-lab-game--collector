@@ -26,8 +26,16 @@ function safe(s) {
 }
 
 function folderOf(type) {
-  return ({ document: "html", script: "js", stylesheet: "css", image: "images",
-    media: "media", font: "fonts", xhr: "data", fetch: "data" })[type] || "other";
+  return ({
+    document: "assets/html",
+    script: "assets/js",
+    stylesheet: "assets/css",
+    image: "assets/images",
+    media: "assets/audio",
+    font: "assets/fonts",
+    xhr: "assets/data",
+    fetch: "assets/data"
+  })[type] || "assets/other";
 }
 
 const FRAME_BUSTER_RE = [

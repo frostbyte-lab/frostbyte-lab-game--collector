@@ -29,10 +29,12 @@ Mendukung dua jalur collect:
 - **AI Assistant** — analisis paket & saran perbaikan (Groq / OpenAI-compatible)
 
 ### Collect pintar (offline-ready)
+- Struktur paket rapi: `assets/js`, `assets/css`, `assets/images`, `assets/audio`, …
 - Smart path rewrite (absolute → local)
 - Frame-buster neutralization saat collect
 - Base tag + offline bootstrap (blokir fetch eksternal)
-- Protector anti-iframe injection
+- ZIP langsung download dari browser (≤12 MB)
+- Satu klik **Buka di Workspace** tanpa upload ulang
 
 ### Riwayat
 - Disimpan di localStorage browser
