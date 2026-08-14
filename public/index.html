@@ -2,137 +2,575 @@
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Game Collector</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>Game Collector Pro</title>
   <style>
-    * { box-sizing: border-box; }
+    :root {
+      --bg: #0b0d12;
+      --surface: #13161e;
+      --surface2: #1a1e28;
+      --border: #2a2f3a;
+      --text: #e8eaed;
+      --muted: #8b93a7;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: system-ui, -apple-system, sans-serif;
-      max-width: 520px;
-      margin: 0 auto;
-      padding: 20px 16px;
-      background: #0f1117;
-      color: #e4e4e7;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
-    }
-    h1 { font-size: 1.4rem; margin: 0 0 4px; }
-    .sub { color: #71717a; font-size: 0.85rem; margin-bottom: 20px; }
-    input {
-      width: 100%;
-      padding: 14px;
-      border-radius: 10px;
-      border: 1px solid #27272a;
-      background: #18181b;
-      color: #fff;
-      font-size: 15px;
-      margin-bottom: 12px;
-    }
-    .row { display: flex; gap: 10px; margin-bottom: 16px; }
-    button {
-      flex: 1;
-      padding: 14px;
-      border: none;
-      border-radius: 10px;
-      font-weight: 600;
-      font-size: 15px;
-      cursor: pointer;
-    }
-    .btn-primary { background: #3b82f6; color: #fff; }
-    .btn-primary:disabled { background: #1e3a5f; color: #64748b; }
-    .btn-secondary { background: #27272a; color: #a1a1aa; }
-    #status {
-      white-space: pre-wrap;
-      background: #18181b;
-      border-radius: 10px;
-      padding: 14px;
-      font-size: 13px;
       line-height: 1.5;
-      min-height: 60px;
-      border: 1px solid #27272a;
     }
-    .error { color: #f87171; }
-    .ok { color: #4ade80; }
-    .warn { color: #fbbf24; }
+    .app { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+    }
+    .logo { font-weight: 700; font-size: 1.25rem; letter-spacing: -0.02em; }
+    .logo span { color: var(--accent); }
+    nav { display: flex; gap: 6px; }
+    .nav-btn {
+      background: transparent; border: 1px solid transparent; color: var(--muted);
+      padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 500;
+    }
+    .nav-btn:hover { color: var(--text); background: var(--surface); }
+    .nav-btn.active { color: var(--text); background: var(--surface2); border-color: var(--border); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px; margin-bottom: 16px;
+    }
+    h2 { font-size: 1.1rem; margin-bottom: 12px; }
+    .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 16px; }
+    input[type="url"], input[type="text"], input[type="file"] {
+      width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text); font-size: 0.95rem; margin-bottom: 12px;
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    button, .btn {
+      padding: 11px 18px; border: none; border-radius: 10px; font-weight: 600;
+      font-size: 0.9rem; cursor: pointer; transition: 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { background: #1e3a5f; color: #64748b; cursor: not-allowed; }
+    .btn-secondary { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+    .btn-secondary:hover { color: var(--text); }
+    .btn-success { background: #166534; color: #bbf7d0; }
+    .btn-danger { background: #7f1d1d; color: #fecaca; }
+    #status, .log-box {
+      white-space: pre-wrap; background: var(--surface2); border-radius: 10px;
+      padding: 14px; font-size: 13px; line-height: 1.55; min-height: 70px;
+      border: 1px solid var(--border); font-family: ui-monospace, monospace;
+    }
+    .error { color: var(--danger); }
+    .ok { color: var(--success); }
+    .warn { color: var(--warn); }
     .tip {
-      margin-top: 20px;
-      padding: 12px;
-      background: #1c1917;
-      border-radius: 10px;
-      font-size: 13px;
-      color: #a8a29e;
-      border: 1px solid #292524;
+      margin-top: 16px; padding: 12px 14px; background: #1c1917;
+      border-radius: 10px; font-size: 13px; color: #a8a29e; border: 1px solid #292524;
     }
     a { color: #60a5fa; }
+    .workspace-grid {
+      display: grid; grid-template-columns: 1fr 340px; gap: 16px;
+    }
+    @media (max-width: 860px) {
+      .workspace-grid { grid-template-columns: 1fr; }
+    }
+    .preview-frame-wrap {
+      position: relative; background: #000; border-radius: var(--radius);
+      border: 1px solid var(--border); overflow: hidden; min-height: 480px;
+      aspect-ratio: 16/10;
+    }
+    .preview-frame-wrap iframe {
+      width: 100%; height: 100%; border: 0; display: block; background: #111;
+    }
+    .preview-toolbar {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
+    }
+    .badge-ok { background: #14532d; color: #86efac; }
+    .badge-warn { background: #713f12; color: #fde68a; }
+    .file-list {
+      max-height: 220px; overflow-y: auto; font-size: 12px;
+      background: var(--surface2); border-radius: 8px; padding: 8px; border: 1px solid var(--border);
+    }
+    .file-list div { padding: 3px 0; color: var(--muted); border-bottom: 1px solid #222; }
+    .file-list div:last-child { border-bottom: none; }
+    .history-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px; border-bottom: 1px solid var(--border); gap: 10px;
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-meta { font-size: 12px; color: var(--muted); }
+    .empty { text-align: center; color: var(--muted); padding: 40px 20px; }
   </style>
 </head>
 <body>
-  <h1>Game Collector</h1>
-  <p class="sub">Ambil resource game (HTML, JS, CSS, gambar, audio)</p>
+  <div class="app">
+    <header>
+      <div class="logo">Game Collector <span>Pro</span></div>
+      <nav>
+        <button class="nav-btn active" data-panel="collect">Collect</button>
+        <button class="nav-btn" data-panel="workspace">Workspace</button>
+        <button class="nav-btn" data-panel="history">Riwayat</button>
+      </nav>
+    </header>
 
-  <input id="url" type="url" placeholder="https://contoh.com/game" value="">
-  <div class="row">
-    <button class="btn-primary" id="btn" onclick="run()">Capture</button>
-    <button class="btn-secondary" onclick="clearStatus()">Clear</button>
+    <!-- COLLECT -->
+    <section id="panel-collect" class="panel active">
+      <div class="card">
+        <h2>Collect Game Resources</h2>
+        <p class="sub">Ambil HTML, JS, CSS, gambar, audio → hasil ZIP siap offline</p>
+        <input id="url" type="url" placeholder="https://contoh.com/game">
+        <div class="row">
+          <button class="btn-primary" id="btn-collect" onclick="runCollect()">Capture</button>
+          <button class="btn-secondary" onclick="clearStatus()">Clear</button>
+        </div>
+        <div id="status">Masukkan URL game lalu tekan Capture.</div>
+        <div class="tip">
+          <b>Limit Cloudflare Free:</b> 10 menit browser/hari.<br>
+          Jika kena limit → pakai <a href="https://github.com/frostbyte-lab/frostbyte-lab-game--collector/actions" target="_blank">GitHub Actions</a> (gratis tanpa limit).
+        </div>
+      </div>
+    </section>
+
+    <!-- WORKSPACE -->
+    <section id="panel-workspace" class="panel">
+      <div class="card">
+        <h2>Workspace — Preview & Repair</h2>
+        <p class="sub">Load ZIP hasil collect, jalankan di environment terkontrol (anti-iframe aware)</p>
+
+        <div class="row">
+          <input type="file" id="zip-input" accept=".zip,application/zip" style="flex:1">
+          <button class="btn-primary" onclick="loadZip()">Load ZIP</button>
+        </div>
+
+        <div class="preview-toolbar" id="preview-toolbar" style="display:none">
+          <button class="btn-success" onclick="startPreview('sandbox')">▶ Preview (Sandbox)</button>
+          <button class="btn-secondary" onclick="startPreview('protected')">🛡 Protected Mode</button>
+          <button class="btn-secondary" onclick="startPreview('window')">⧉ Open Isolated Window</button>
+          <button class="btn-secondary" onclick="stopPreview()">Stop</button>
+          <span id="preview-status" class="badge badge-ok">Ready</span>
+        </div>
+
+        <div class="workspace-grid">
+          <div>
+            <div class="preview-frame-wrap" id="preview-wrap">
+              <div class="empty" id="preview-placeholder">Load ZIP terlebih dahulu untuk preview</div>
+              <iframe id="game-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock" allow="fullscreen; autoplay; clipboard-read; clipboard-write; gamepad" style="display:none"></iframe>
+            </div>
+          </div>
+          <div>
+            <div class="card" style="padding:14px">
+              <h2 style="font-size:0.95rem">Terminal / Log</h2>
+              <div class="log-box" id="terminal" style="min-height:140px;max-height:200px;overflow:auto">Menunggu ZIP...</div>
+            </div>
+            <div class="card" style="padding:14px;margin-top:12px">
+              <h2 style="font-size:0.95rem">Daftar File</h2>
+              <div class="file-list" id="file-list"><div class="empty" style="padding:12px">—</div></div>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button class="btn-secondary" onclick="runAutoRepair()" id="btn-repair" disabled>Auto Repair</button>
+              <button class="btn-secondary" onclick="repackage()" id="btn-repack" disabled>Packaging Ulang</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="panel-history" class="panel">
+      <div class="card">
+        <h2>Riwayat Collect</h2>
+        <p class="sub">Disimpan di browser (localStorage)</p>
+        <div id="history-list"><div class="empty">Belum ada riwayat</div></div>
+      </div>
+    </section>
   </div>
 
-  <div id="status">Masukkan URL game lalu tekan Capture.</div>
-
-  <div class="tip">
-    <b>Limit Cloudflare Free:</b> 10 menit browser per hari.<br>
-    Kalau kena limit, pakai <a href="https://github.com/frostbyte-lab/frostbyte-lab-game--collector/actions" target="_blank">GitHub Actions</a> (gratis tanpa limit).
-  </div>
-
-<script>
-const statusEl = document.getElementById("status");
-const btn = document.getElementById("btn");
-const urlInput = document.getElementById("url");
-
-function clearStatus() {
-  statusEl.textContent = "Masukkan URL game lalu tekan Capture.";
-  statusEl.className = "";
-}
-
-async function run() {
-  const url = urlInput.value.trim();
-  if (!url) {
-    statusEl.textContent = "URL belum diisi.";
-    statusEl.className = "error";
-    return;
-  }
-
-  btn.disabled = true;
-  statusEl.className = "";
-  statusEl.textContent = "Sedang capture...\nMohon tunggu 10–30 detik.";
-
-  try {
-    const res = await fetch("/api/collect", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url })
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script>
+    // ========== NAV ==========
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
+        if (btn.dataset.panel === 'history') renderHistory();
+      });
     });
-    const data = await res.json();
 
-    if (res.status === 429 || data.error === "LIMIT_BROWSER") {
-      statusEl.className = "warn";
-      statusEl.textContent = "⚠ LIMIT BROWSER TERCAPAI\n\n" +
-        (data.message || "Limit 10 menit/hari Cloudflare Free sudah habis.") +
-        "\n\nSolusi:\n• Tunggu sampai besok, atau\n• Pakai GitHub Actions (gratis tanpa limit)\n  → buka repo → tab Actions → Run workflow";
-      return;
+    // ========== COLLECT ==========
+    const statusEl = document.getElementById('status');
+    const btnCollect = document.getElementById('btn-collect');
+
+    function clearStatus() {
+      statusEl.textContent = 'Masukkan URL game lalu tekan Capture.';
+      statusEl.className = '';
     }
 
-    if (!res.ok) {
-      throw new Error(data.error || data.message || "Gagal");
+    function addHistory(entry) {
+      const list = JSON.parse(localStorage.getItem('gc_history') || '[]');
+      list.unshift({ ...entry, ts: Date.now() });
+      localStorage.setItem('gc_history', JSON.stringify(list.slice(0, 30)));
     }
 
-    statusEl.className = "ok";
-    statusEl.textContent = `✓ BERHASIL\n\nID: ${data.id}\nFile: ${data.files}\nZIP size: ${Math.round((data.zipSize||0)/1024)} KB\n\n${data.message || ""}`;
-  } catch (err) {
-    statusEl.className = "error";
-    statusEl.textContent = "Error: " + err.message;
-  } finally {
-    btn.disabled = false;
-  }
-}
-</script>
+    async function runCollect() {
+      const url = document.getElementById('url').value.trim();
+      if (!url) {
+        statusEl.textContent = 'URL belum diisi.';
+        statusEl.className = 'error';
+        return;
+      }
+      btnCollect.disabled = true;
+      statusEl.className = '';
+      statusEl.textContent = 'Sedang capture...\nMohon tunggu 10–40 detik.';
+
+      try {
+        const res = await fetch('/api/collect', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+
+        if (res.status === 429 || data.error === 'LIMIT_BROWSER') {
+          statusEl.className = 'warn';
+          statusEl.textContent = '⚠ LIMIT BROWSER TERCAPAI\n\n' +
+            (data.message || 'Limit 10 menit/hari Cloudflare Free sudah habis.') +
+            '\n\nSolusi: pakai GitHub Actions (gratis tanpa limit)\n→ repo → tab Actions → Run workflow';
+          addHistory({ url, status: 'limit', message: data.message });
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || data.message || 'Gagal');
+
+        statusEl.className = 'ok';
+        statusEl.textContent = `✓ BERHASIL\n\nID: ${data.id}\nFile: ${data.files}\nZIP size: ${Math.round((data.zipSize||0)/1024)} KB\n\n${data.message || ''}`;
+        addHistory({ url, status: 'ok', id: data.id, files: data.files, zipSize: data.zipSize });
+      } catch (err) {
+        statusEl.className = 'error';
+        statusEl.textContent = 'Error: ' + err.message;
+        addHistory({ url, status: 'error', message: err.message });
+      } finally {
+        btnCollect.disabled = false;
+      }
+    }
+
+    // ========== HISTORY ==========
+    function renderHistory() {
+      const list = JSON.parse(localStorage.getItem('gc_history') || '[]');
+      const el = document.getElementById('history-list');
+      if (!list.length) {
+        el.innerHTML = '<div class="empty">Belum ada riwayat</div>';
+        return;
+      }
+      el.innerHTML = list.map(item => `
+        <div class="history-item">
+          <div>
+            <div style="font-size:13px;word-break:break-all">${esc(item.url || '-')}</div>
+            <div class="history-meta">${new Date(item.ts).toLocaleString('id-ID')} · ${item.status}${item.files ? ' · ' + item.files + ' files' : ''}</div>
+          </div>
+          <button class="btn-secondary" style="padding:6px 10px;font-size:12px" onclick="document.querySelector('[data-panel=workspace]').click()">Workspace</button>
+        </div>
+      `).join('');
+    }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // ========== WORKSPACE / ADVANCED PREVIEW ==========
+    let zipFS = null;
+    let currentBlobUrl = null;
+    let isolatedWin = null;
+
+    const terminal = document.getElementById('terminal');
+    function log(msg, type = '') {
+      const time = new Date().toLocaleTimeString('id-ID');
+      terminal.textContent += `[${time}] ${msg}\n`;
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    async function loadZip() {
+      const input = document.getElementById('zip-input');
+      if (!input.files || !input.files[0]) {
+        log('Pilih file ZIP dulu');
+        return;
+      }
+      terminal.textContent = '';
+      log('Membaca ZIP...');
+      try {
+        const buf = await input.files[0].arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+        zipFS = {};
+        const paths = [];
+        for (const [path, entry] of Object.entries(zip.files)) {
+          if (entry.dir) continue;
+          zipFS[path] = await entry.async('uint8array');
+          paths.push(path);
+        }
+        paths.sort();
+        document.getElementById('file-list').innerHTML = paths.map(p => `<div>${esc(p)}</div>`).join('') || '<div>—</div>';
+        document.getElementById('preview-toolbar').style.display = 'flex';
+        document.getElementById('btn-repair').disabled = false;
+        document.getElementById('btn-repack').disabled = false;
+        log(`ZIP loaded · ${paths.length} file`);
+        document.getElementById('preview-status').textContent = 'ZIP Ready';
+        document.getElementById('preview-status').className = 'badge badge-ok';
+      } catch (e) {
+        log('Gagal load ZIP: ' + e.message);
+      }
+    }
+
+    // --- Frame-busting neutralizer (level tinggi) ---
+    const FRAME_BUSTER_PATTERNS = [
+      /if\s*\(\s*(?:window\.)?top\s*!==?\s*(?:window\.)?(?:self|this)\s*\)/gi,
+      /if\s*\(\s*(?:window\.)?self\s*!==?\s*(?:window\.)?top\s*\)/gi,
+      /if\s*\(\s*(?:window\.)?parent\s*!==?\s*(?:window\.)?(?:self|this|window)\s*\)/gi,
+      /top\.location\s*=/gi,
+      /parent\.location\s*=/gi,
+      /top\.location\.href\s*=/gi,
+      /parent\.location\.href\s*=/gi,
+      /window\.top\.location/gi,
+      /frameElement/gi,
+      /if\s*\(\s*window\s*!==\s*window\.top\s*\)/gi,
+      /if\s*\(\s*top\s*!=\s*self\s*\)/gi,
+    ];
+
+    function neutralizeFrameBusters(html) {
+      let out = html;
+      let count = 0;
+      FRAME_BUSTER_PATTERNS.forEach(re => {
+        out = out.replace(re, (m) => {
+          count++;
+          return '/* GC-PRO-NEUTRALIZED */ false && ' + m;
+        });
+      });
+      const protector = `
+<script>
+(function(){
+  try {
+    Object.defineProperty(window, 'top', { get: function(){ return window; }, configurable: false });
+  } catch(e){}
+  try {
+    Object.defineProperty(window, 'parent', { get: function(){ return window; }, configurable: false });
+  } catch(e){}
+  try {
+    if (window.frameElement) {
+      Object.defineProperty(window, 'frameElement', { get: function(){ return null; } });
+    }
+  } catch(e){}
+  window.__gc_frame_protected = true;
+})();
+<\/script>`;
+      if (out.includes('<head>')) {
+        out = out.replace('<head>', '<head>' + protector);
+      } else if (out.includes('<html')) {
+        out = out.replace(/<html[^>]*>/i, (m) => m + protector);
+      } else {
+        out = protector + out;
+      }
+      return { html: out, neutralized: count };
+    }
+
+    function findIndexHtml() {
+      const candidates = Object.keys(zipFS).filter(p => /index\.html?$/i.test(p) || p === 'index.html');
+      if (candidates.length) return candidates.sort((a,b) => a.length - b.length)[0];
+      const anyHtml = Object.keys(zipFS).find(p => /\.html?$/i.test(p));
+      return anyHtml || null;
+    }
+
+    function mimeOf(path) {
+      const ext = (path.split('.').pop() || '').toLowerCase();
+      const map = {
+        html: 'text/html', htm: 'text/html', js: 'application/javascript', mjs: 'application/javascript',
+        css: 'text/css', json: 'application/json', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', woff: 'font/woff', woff2: 'font/woff2',
+        mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', mp4: 'video/mp4', webm: 'video/webm'
+      };
+      return map[ext] || 'application/octet-stream';
+    }
+
+    function buildVirtualFS() {
+      const urls = {};
+      for (const [path, data] of Object.entries(zipFS)) {
+        const blob = new Blob([data], { type: mimeOf(path) });
+        urls[path] = URL.createObjectURL(blob);
+        const bare = path.split('/').pop();
+        if (!urls[bare]) urls[bare] = urls[path];
+      }
+      return urls;
+    }
+
+    async function prepareHtml(mode) {
+      const idx = findIndexHtml();
+      if (!idx) throw new Error('Tidak menemukan index.html di dalam ZIP');
+      let raw = new TextDecoder().decode(zipFS[idx]);
+      let neutralized = 0;
+
+      if (mode === 'protected' || mode === 'sandbox') {
+        const res = neutralizeFrameBusters(raw);
+        raw = res.html;
+        neutralized = res.neutralized;
+        log(`Frame-buster neutralization: ${neutralized} pola dinetralisir`);
+      }
+
+      const urls = buildVirtualFS();
+      const mapScript = `<script>
+window.__GC_ASSETS = ${JSON.stringify(urls)};
+(function(){
+  const origFetch = window.fetch;
+  window.fetch = function(input, init) {
+    try {
+      let u = typeof input === 'string' ? input : (input && input.url);
+      if (u && window.__GC_ASSETS[u]) return origFetch(window.__GC_ASSETS[u], init);
+      const bare = (u||'').split('/').pop();
+      if (bare && window.__GC_ASSETS[bare]) return origFetch(window.__GC_ASSETS[bare], init);
+    } catch(e){}
+    return origFetch.apply(this, arguments);
+  };
+})();
+<\/script>`;
+      if (raw.includes('<head>')) raw = raw.replace('<head>', '<head>' + mapScript);
+      else raw = mapScript + raw;
+
+      const blob = new Blob([raw], { type: 'text/html' });
+      return URL.createObjectURL(blob);
+    }
+
+    async function startPreview(mode) {
+      if (!zipFS) { log('Load ZIP dulu'); return; }
+      stopPreview();
+      const statusBadge = document.getElementById('preview-status');
+      const frame = document.getElementById('game-frame');
+      const placeholder = document.getElementById('preview-placeholder');
+
+      try {
+        log(`Starting preview mode: ${mode}`);
+        statusBadge.textContent = 'Loading...';
+        statusBadge.className = 'badge badge-warn';
+
+        const blobUrl = await prepareHtml(mode);
+        currentBlobUrl = blobUrl;
+
+        if (mode === 'window') {
+          isolatedWin = window.open(blobUrl, 'gc-preview', 'noopener,noreferrer,width=1024,height=720');
+          if (!isolatedWin) {
+            log('Popup diblokir browser. Izinkan popup untuk Isolated Window.');
+            statusBadge.textContent = 'Popup blocked';
+            statusBadge.className = 'badge badge-warn';
+            return;
+          }
+          log('Isolated Window dibuka (full control, anti-iframe bypass via top-level)');
+          statusBadge.textContent = 'Isolated Window';
+          statusBadge.className = 'badge badge-ok';
+          return;
+        }
+
+        placeholder.style.display = 'none';
+        frame.style.display = 'block';
+
+        if (mode === 'protected') {
+          frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock allow-orientation-lock');
+        } else {
+          frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock');
+        }
+        frame.setAttribute('allow', 'fullscreen; autoplay; clipboard-read; clipboard-write; gamepad; accelerometer; gyroscope');
+        frame.setAttribute('referrerpolicy', 'no-referrer');
+        frame.src = blobUrl;
+
+        frame.onload = () => {
+          log('Iframe loaded');
+          statusBadge.textContent = mode === 'protected' ? 'Protected Active' : 'Sandbox Active';
+          statusBadge.className = 'badge badge-ok';
+          try {
+            const w = frame.contentWindow;
+            if (w && w.__gc_frame_protected) log('Frame protection active inside game');
+          } catch (e) {
+            log('Cross-origin isolation (normal untuk blob)');
+          }
+        };
+        frame.onerror = () => log('Iframe error');
+      } catch (e) {
+        log('Preview error: ' + e.message);
+        statusBadge.textContent = 'Error';
+        statusBadge.className = 'badge badge-warn';
+      }
+    }
+
+    function stopPreview() {
+      const frame = document.getElementById('game-frame');
+      frame.src = 'about:blank';
+      frame.style.display = 'none';
+      document.getElementById('preview-placeholder').style.display = 'block';
+      if (currentBlobUrl) {
+        try { URL.revokeObjectURL(currentBlobUrl); } catch {}
+        currentBlobUrl = null;
+      }
+      if (isolatedWin && !isolatedWin.closed) {
+        try { isolatedWin.close(); } catch {}
+      }
+      isolatedWin = null;
+      document.getElementById('preview-status').textContent = 'Stopped';
+      document.getElementById('preview-status').className = 'badge badge-warn';
+      log('Preview stopped');
+    }
+
+    function runAutoRepair() {
+      if (!zipFS) return;
+      log('Auto Repair dimulai...');
+      let fixed = 0;
+      for (const [path, data] of Object.entries(zipFS)) {
+        if (!/\.(html?|js)$/i.test(path)) continue;
+        let text = new TextDecoder().decode(data);
+        const before = text;
+        const res = neutralizeFrameBusters(text);
+        text = res.html;
+        text = text.replace(/https?:\/\/[^"'\\s]+/g, (url) => {
+          try {
+            const name = new URL(url).pathname.split('/').pop();
+            if (name && Object.keys(zipFS).some(p => p.endsWith(name))) {
+              fixed++;
+              return name;
+            }
+          } catch {}
+          return url;
+        });
+        if (text !== before) {
+          zipFS[path] = new TextEncoder().encode(text);
+          fixed += res.neutralized;
+        }
+      }
+      log(`Auto Repair selesai · ~${fixed} perbaikan diterapkan (frame-buster + path hint)`);
+      document.getElementById('preview-status').textContent = 'Repaired';
+      document.getElementById('preview-status').className = 'badge badge-ok';
+    }
+
+    async function repackage() {
+      if (!zipFS) return;
+      log('Packaging ulang...');
+      const zip = new JSZip();
+      for (const [path, data] of Object.entries(zipFS)) {
+        zip.file(path, data);
+      }
+      zip.file('README.txt', `Game Collector Pro — Repackaged\nTanggal: ${new Date().toISOString()}\nGunakan local server (npx serve .) untuk hasil terbaik.\n`);
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `game-repacked-${Date.now()}.zip`;
+      a.click();
+      log('ZIP baru di-download');
+    }
+  </script>
 </body>
 </html>
