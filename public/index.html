@@ -185,6 +185,18 @@
               <button class="btn-secondary" onclick="runAutoRepair()" id="btn-repair" disabled>Auto Repair</button>
               <button class="btn-secondary" onclick="repackage()" id="btn-repack" disabled>Packaging Ulang</button>
             </div>
+            <div class="card" style="padding:14px;margin-top:12px" id="ai-card">
+              <h2 style="font-size:0.95rem">AI Assistant</h2>
+              <p class="sub" style="margin-bottom:8px">Analisis error & saran perbaikan kode (OpenAI-compatible)</p>
+              <input id="ai-endpoint" type="text" placeholder="API endpoint" value="https://api.groq.com/openai/v1/chat/completions" style="margin-bottom:8px">
+              <input id="ai-key" type="password" placeholder="API Key (Groq free / OpenRouter / OpenAI)" style="margin-bottom:8px">
+              <input id="ai-model" type="text" placeholder="Model" value="llama-3.3-70b-versatile" style="margin-bottom:8px">
+              <div class="row">
+                <button class="btn-primary" onclick="askAI('analyze')" id="btn-ai" disabled style="flex:1">Analisis Paket</button>
+                <button class="btn-secondary" onclick="askAI('fix')" id="btn-ai-fix" disabled style="flex:1">Saran Perbaikan</button>
+              </div>
+              <div class="log-box" id="ai-out" style="min-height:100px;max-height:240px;overflow:auto;margin-top:10px;font-size:12px">Masukkan API key (mis. Groq gratis) lalu tekan Analisis / Saran.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -324,9 +336,18 @@
         document.getElementById('preview-toolbar').style.display = 'flex';
         document.getElementById('btn-repair').disabled = false;
         document.getElementById('btn-repack').disabled = false;
+        document.getElementById('btn-ai').disabled = false;
+        document.getElementById('btn-ai-fix').disabled = false;
         log(`ZIP loaded · ${paths.length} file`);
         document.getElementById('preview-status').textContent = 'ZIP Ready';
         document.getElementById('preview-status').className = 'badge badge-ok';
+        // Restore saved AI key if any
+        try {
+          const saved = JSON.parse(localStorage.getItem('gc_ai') || '{}');
+          if (saved.key) document.getElementById('ai-key').value = saved.key;
+          if (saved.endpoint) document.getElementById('ai-endpoint').value = saved.endpoint;
+          if (saved.model) document.getElementById('ai-model').value = saved.model;
+        } catch {}
       } catch (e) {
         log('Gagal load ZIP: ' + e.message);
       }
@@ -570,6 +591,114 @@ window.__GC_ASSETS = ${JSON.stringify(urls)};
       a.download = `game-repacked-${Date.now()}.zip`;
       a.click();
       log('ZIP baru di-download');
+    }
+
+    // ========== AI ASSISTANT ==========
+    async function askAI(mode) {
+      if (!zipFS) { log('Load ZIP dulu'); return; }
+      const endpoint = document.getElementById('ai-endpoint').value.trim();
+      const key = document.getElementById('ai-key').value.trim();
+      const model = document.getElementById('ai-model').value.trim() || 'llama-3.3-70b-versatile';
+      const out = document.getElementById('ai-out');
+
+      if (!key) {
+        out.textContent = 'API Key masih kosong.\n\nGratis: daftar di console.groq.com → buat API key → tempel di sini.';
+        return;
+      }
+
+      // Save prefs
+      localStorage.setItem('gc_ai', JSON.stringify({ key, endpoint, model }));
+
+      const files = Object.keys(zipFS).slice(0, 80);
+      let indexSample = '';
+      const idx = findIndexHtml();
+      if (idx) {
+        const raw = new TextDecoder().decode(zipFS[idx]);
+        indexSample = raw.slice(0, 3500);
+      }
+      const term = terminal.textContent.slice(-1500);
+
+      const system = `Kamu adalah AI assistant untuk Game Collector Pro. Tugasmu membantu memperbaiki game web hasil collect agar bisa jalan offline.
+Jawab dalam Bahasa Indonesia, ringkas, praktis, dan actionable.
+Fokus pada: file hilang, path salah, frame-buster, error JS umum, struktur asset.`;
+
+      let userPrompt = '';
+      if (mode === 'analyze') {
+        userPrompt = `Analisis paket game offline ini.
+
+Daftar file (${files.length}):
+${files.join('\n')}
+
+Cuplikan index.html:
+\`\`\`html
+${indexSample}
+\`\`\`
+
+Log terminal:
+${term || '(kosong)'}
+
+Berikan:
+1. Ringkasan kesehatan paket
+2. Masalah yang terdeteksi
+3. Prioritas perbaikan`;
+      } else {
+        userPrompt = `Berikan saran perbaikan konkret untuk paket game offline ini agar bisa dijalankan di browser lokal / iframe.
+
+Daftar file:
+${files.join('\n')}
+
+Cuplikan index.html:
+\`\`\`html
+${indexSample}
+\`\`\`
+
+Log:
+${term || '(kosong)'}
+
+Format jawaban:
+- Masalah
+- File yang perlu diubah
+- Contoh kode / perubahan (jika ada)
+- Langkah manual jika AI tidak bisa otomatis`;
+      }
+
+      out.textContent = 'Memanggil AI...';
+      document.getElementById('btn-ai').disabled = true;
+      document.getElementById('btn-ai-fix').disabled = true;
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + key
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.3,
+            max_tokens: 1200
+          })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`API ${res.status}: ${errText.slice(0, 300)}`);
+        }
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content || JSON.stringify(data, null, 2);
+        out.textContent = text;
+        log('AI selesai (' + mode + ')');
+      } catch (e) {
+        out.textContent = 'Error AI: ' + e.message + '\n\nPastikan endpoint + key benar.\nContoh gratis: Groq (console.groq.com)';
+        log('AI error: ' + e.message);
+      } finally {
+        document.getElementById('btn-ai').disabled = false;
+        document.getElementById('btn-ai-fix').disabled = false;
+      }
     }
   </script>
 </body>

@@ -15,15 +15,20 @@ Dilengkapi **Workspace** dengan Preview Runtime level tinggi yang mampu menangan
 - Otomatis fallback info saat limit Cloudflare
 - Output ZIP + manifest
 
-### Workspace (Baru)
+### Workspace
 - Load ZIP hasil collect
 - **Preview Sandbox** — iframe terkontrol
 - **Protected Mode** — netralisasi frame-buster + protector script
 - **Isolated Window** — buka di window baru (bypass anti-iframe paling kuat)
-- Terminal / log
-- Daftar file
+- Terminal / log · Daftar file
 - Auto Repair (frame-buster + path hint)
 - Packaging ulang
+- **AI Assistant** — analisis paket & saran perbaikan (Groq / OpenAI-compatible)
+
+### Collect pintar
+- Smart path rewrite (absolute → local)
+- Frame-buster neutralization saat collect
+- Base tag + protector injection
 
 ### Riwayat
 - Disimpan di localStorage browser
@@ -73,11 +78,21 @@ Dilengkapi **Workspace** dengan Preview Runtime level tinggi yang mampu menangan
 - Gunakan hanya pada game yang kamu miliki atau punya izin
 - Auto Repair tidak menjamin 100% semua game berjalan sempurna (logic server-side tetap sulit)
 
+## AI Assistant
+
+Di tab Workspace, isi API key (disarankan **Groq** gratis: https://console.groq.com).
+
+- **Analisis Paket** — kesehatan file, path, potensi error
+- **Saran Perbaikan** — rekomendasi konkret + contoh perubahan kode
+
+Endpoint default sudah diisi untuk Groq. Bisa diganti OpenRouter / OpenAI / provider lain yang compatible.
+
 ## Roadmap
 
 - [x] Collect + GitHub fallback
 - [x] Workspace + Preview anti-iframe
-- [x] Auto Repair dasar + Packaging ulang
-- [ ] Path rewriting lebih cerdas saat collect
+- [x] Auto Repair + Packaging ulang
+- [x] Smart path rewrite saat collect
+- [x] AI Assistant (analisis + saran)
 - [ ] Estimasi waktu & notifikasi
 - [ ] Perbandingan sebelum/sesudah repair

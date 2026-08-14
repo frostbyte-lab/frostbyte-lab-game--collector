@@ -23,13 +23,99 @@ function isExcluded(url) {
   return EXCLUDE.some(r => r.test(url));
 }
 
+// === Smart offline packaging helpers ===
+const FRAME_BUSTER_RE = [
+  /if\s*\(\s*(?:window\.)?top\s*!==?\s*(?:window\.)?(?:self|this)\s*\)/gi,
+  /if\s*\(\s*(?:window\.)?self\s*!==?\s*(?:window\.)?top\s*\)/gi,
+  /if\s*\(\s*(?:window\.)?parent\s*!==?\s*(?:window\.)?(?:self|this|window)\s*\)/gi,
+  /top\.location\s*=/gi,
+  /parent\.location\s*=/gi,
+  /top\.location\.href\s*=/gi,
+  /parent\.location\.href\s*=/gi,
+  /window\.top\.location/gi,
+  /if\s*\(\s*window\s*!==\s*window\.top\s*\)/gi,
+  /if\s*\(\s*top\s*!=\s*self\s*\)/gi,
+];
+
+function neutralizeFrameBusters(text) {
+  let out = text;
+  let n = 0;
+  for (const re of FRAME_BUSTER_RE) {
+    out = out.replace(re, (m) => { n++; return "/* GC-PRO */ false && " + m; });
+  }
+  return { text: out, count: n };
+}
+
+function buildUrlToLocalMap(manifest) {
+  const map = new Map();
+  for (const r of manifest) {
+    if (r.url && r.localPath) {
+      map.set(r.url, r.localPath);
+      try {
+        const u = new URL(r.url);
+        map.set(u.pathname, r.localPath);
+        const bare = u.pathname.split("/").pop();
+        if (bare) map.set(bare, r.localPath);
+      } catch {}
+    }
+  }
+  return map;
+}
+
+function rewriteContent(text, urlMap, isHtml) {
+  let out = text;
+  // Replace full absolute URLs first
+  for (const [from, to] of urlMap) {
+    if (from.startsWith("http") && out.includes(from)) {
+      out = out.split(from).join(to);
+    }
+  }
+  // Neutralize frame-busters handled by caller for JS/HTML
+  if (isHtml) {
+    // Inject base tag for relative resolution if missing
+    if (!/<base\s/i.test(out) && out.includes("<head>")) {
+      out = out.replace("<head>", '<head>\n<base href="./">');
+    }
+    // Inject small protector
+    const protector = `<script>(function(){try{Object.defineProperty(window,"top",{get:function(){return window}})}catch(e){}try{Object.defineProperty(window,"parent",{get:function(){return window}})}catch(e){}window.__gc_protected=1})();<\/script>`;
+    if (out.includes("<head>")) out = out.replace("<head>", "<head>" + protector);
+  }
+  return out;
+}
+
+function smartPackage(zipFiles, manifest) {
+  const urlMap = buildUrlToLocalMap(manifest);
+  const result = { rewritten: 0, neutralized: 0 };
+  for (const key of Object.keys(zipFiles)) {
+    const isHtml = /\.html?$/i.test(key) || key === "index.html";
+    const isJs = /\.js$/i.test(key);
+    const isCss = /\.css$/i.test(key);
+    if (!isHtml && !isJs && !isCss) continue;
+    try {
+      let text = new TextDecoder().decode(zipFiles[key]);
+      const before = text;
+      text = rewriteContent(text, urlMap, isHtml);
+      if (isJs || isHtml) {
+        const res = neutralizeFrameBusters(text);
+        text = res.text;
+        result.neutralized += res.count;
+      }
+      if (text !== before) {
+        zipFiles[key] = strToU8(text);
+        result.rewritten++;
+      }
+    } catch {}
+  }
+  return result;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     // Health
     if (request.method === "GET" && url.pathname === "/api/health") {
-      return Response.json({ ok: true, service: "game-collector", version: "3.0" });
+      return Response.json({ ok: true, service: "game-collector-pro", version: "4.0" });
     }
 
     // Serve frontend
@@ -157,26 +243,32 @@ export default {
       let html = await page.content();
       zipFiles["index.html"] = strToU8(html);
 
+      // Smart offline packaging: path rewrite + frame-buster neutralize
+      const smart = smartPackage(zipFiles, manifest);
+
       // Manifest
       const manifestData = {
         target: target.href,
         collectedAt: new Date().toISOString(),
         totalFiles: manifest.length,
+        smartRewrite: smart,
         note: "Hanya resource client-side. Gunakan hanya pada game yang kamu miliki/izin.",
         resources: manifest
       };
       zipFiles["manifest.json"] = strToU8(JSON.stringify(manifestData, null, 2));
 
       // README
-      zipFiles["README.md"] = strToU8(`# Game Resource Package
+      zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
 Target: ${target.href}
 Tanggal: ${new Date().toISOString()}
 Total file: ${manifest.length}
+Smart rewrite: ${smart.rewritten} file · frame-buster dinetralisir: ${smart.neutralized}
 
 ## Cara pakai
 1. Extract ZIP
 2. Jalankan local server: npx serve .
 3. Buka di browser
+4. Atau buka di Workspace Game Collector Pro untuk Preview + Auto Repair + AI
 `);
 
       await browser.close();
@@ -200,7 +292,8 @@ Total file: ${manifest.length}
         id,
         files: manifest.length,
         zipSize: zipData.byteLength,
-        message: "Capture berhasil. Download ZIP dari R2 atau gunakan GitHub Actions jika limit browser habis."
+        smartRewrite: smart,
+        message: `Capture berhasil (smart rewrite: ${smart.rewritten} file, frame-buster: ${smart.neutralized}). Download ZIP atau buka di Workspace.`
       });
 
     } catch (e) {

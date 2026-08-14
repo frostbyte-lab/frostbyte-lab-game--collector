@@ -30,6 +30,75 @@ function folderOf(type) {
     media: "media", font: "fonts", xhr: "data", fetch: "data" })[type] || "other";
 }
 
+const FRAME_BUSTER_RE = [
+  /if\s*\(\s*(?:window\.)?top\s*!==?\s*(?:window\.)?(?:self|this)\s*\)/gi,
+  /if\s*\(\s*(?:window\.)?self\s*!==?\s*(?:window\.)?top\s*\)/gi,
+  /if\s*\(\s*(?:window\.)?parent\s*!==?\s*(?:window\.)?(?:self|this|window)\s*\)/gi,
+  /top\.location\s*=/gi,
+  /parent\.location\s*=/gi,
+  /top\.location\.href\s*=/gi,
+  /parent\.location\.href\s*=/gi,
+  /window\.top\.location/gi,
+  /if\s*\(\s*window\s*!==\s*window\.top\s*\)/gi,
+  /if\s*\(\s*top\s*!=\s*self\s*\)/gi,
+];
+
+function neutralizeFrameBusters(text) {
+  let out = text, n = 0;
+  for (const re of FRAME_BUSTER_RE) {
+    out = out.replace(re, (m) => { n++; return "/* GC-PRO */ false && " + m; });
+  }
+  return { text: out, count: n };
+}
+
+function smartPackage(zipFiles, resources) {
+  const urlMap = new Map();
+  for (const r of resources) {
+    if (r.url && r.localPath) {
+      urlMap.set(r.url, r.localPath);
+      try {
+        const u = new URL(r.url);
+        urlMap.set(u.pathname, r.localPath);
+        const bare = u.pathname.split("/").pop();
+        if (bare) urlMap.set(bare, r.localPath);
+      } catch {}
+    }
+  }
+  let rewritten = 0, neutralized = 0;
+  for (const key of Object.keys(zipFiles)) {
+    const isHtml = /\.html?$/i.test(key) || key === "index.html";
+    const isJs = /\.js$/i.test(key);
+    const isCss = /\.css$/i.test(key);
+    if (!isHtml && !isJs && !isCss) continue;
+    try {
+      let text = new TextDecoder().decode(zipFiles[key]);
+      const before = text;
+      for (const [from, to] of urlMap) {
+        if (String(from).startsWith("http") && text.includes(from)) {
+          text = text.split(from).join(to);
+        }
+      }
+      if (isHtml || isJs) {
+        const res = neutralizeFrameBusters(text);
+        text = res.text;
+        neutralized += res.count;
+      }
+      if (isHtml && !/<base\s/i.test(text) && text.includes("<head>")) {
+        text = text.replace("<head>", '<head>\n<base href="./">');
+      }
+      if (isHtml && text.includes("<head>")) {
+        const protector = `<script>(function(){try{Object.defineProperty(window,"top",{get:function(){return window}})}catch(e){}try{Object.defineProperty(window,"parent",{get:function(){return window}})}catch(e){}window.__gc_protected=1})();<\/script>`;
+        text = text.replace("<head>", "<head>" + protector);
+      }
+      if (text !== before) {
+        zipFiles[key] = strToU8(text);
+        rewritten++;
+      }
+    } catch {}
+  }
+  return { rewritten, neutralized };
+}
+
 async function main() {
   console.log("Target:", TARGET_URL);
   console.log("Wait  :", WAIT_SECONDS, "detik");
@@ -98,14 +167,27 @@ async function main() {
   let html = await page.content();
   zipFiles["index.html"] = strToU8(html);
 
+  // Smart offline packaging
+  const smart = smartPackage(zipFiles, resources);
+
   // Manifest
   const manifest = {
     target: TARGET_URL,
     collectedAt: new Date().toISOString(),
     totalFiles: resources.length,
+    smartRewrite: smart,
     resources
   };
   zipFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
+  zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
+Target: ${TARGET_URL}
+Tanggal: ${new Date().toISOString()}
+Total: ${resources.length} file
+Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
+
+Cara pakai: extract → npx serve . → buka browser
+Atau load di Workspace Game Collector Pro.
+`);
 
   await browser.close();
 
@@ -117,6 +199,7 @@ async function main() {
 
   console.log("Selesai!");
   console.log("Total resource:", resources.length);
+  console.log("Smart rewrite:", smart.rewritten, "file · frame-buster:", smart.neutralized);
   console.log("ZIP:", zipName);
 }
 
