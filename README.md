@@ -1,23 +1,28 @@
-# Game Resource Collector
+# Game Resource Collector (GitHub Actions)
 
-Ambil resource game web (HTML, JS, CSS, gambar, audio) lalu bungkus jadi ZIP.
+**Gratis total · Tanpa limit harian Cloudflare**
 
-## Dua Cara Pakai
+Ambil resource game (HTML, JS, CSS, gambar, audio) lalu dapatkan file ZIP.
 
-### 1. Cloudflare Worker (cepat, ada limit)
-- Limit free: **10 menit browser per hari**
-- Cocok untuk capture cepat dari HP
+## Cara Pakai dari HP
 
-### 2. GitHub Actions (gratis total, tanpa limit harian)
-1. Buka tab **Actions**
-2. Pilih **Game Resource Collector**
-3. Klik **Run workflow**
-4. Masukkan URL game
-5. Tunggu selesai → download ZIP di **Artifacts**
+1. Buka repository ini
+2. Klik tab **Actions**
+3. Di sebelah kiri pilih **Game Resource Collector**
+4. Klik **Run workflow**
+5. Isi **URL** game
+6. Klik tombol hijau **Run workflow**
+7. Tunggu 1–3 menit sampai selesai (tanda hijau)
+8. Klik hasil run yang baru → bagian **Artifacts**
+9. Download **game-resources**
 
-## Deploy ke Cloudflare
-1. Ganti nama R2 bucket di `wrangler.jsonc`
-2. `npm install`
-3. `npx wrangler deploy`
+## Catatan
 
-Gunakan hanya pada game yang kamu miliki atau punya izin.
+- Hanya mengambil resource yang dikirim ke browser
+- Tidak mengambil backend, database, atau proteksi DRM
+- Gunakan hanya pada game yang kamu miliki atau punya izin
+
+## Struktur
+
+- `.github/workflows/collect.yml` → workflow GitHub Actions
+- `scripts/collect.js` → script Playwright yang jalan di GitHub
