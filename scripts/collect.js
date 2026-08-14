@@ -87,8 +87,25 @@ function smartPackage(zipFiles, resources) {
         text = text.replace("<head>", '<head>\n<base href="./">');
       }
       if (isHtml && text.includes("<head>")) {
-        const protector = `<script>(function(){try{Object.defineProperty(window,"top",{get:function(){return window}})}catch(e){}try{Object.defineProperty(window,"parent",{get:function(){return window}})}catch(e){}window.__gc_protected=1})();<\/script>`;
-        text = text.replace("<head>", "<head>" + protector);
+        const offlineBoot = `<script>
+(function(){
+  try{Object.defineProperty(window,"top",{get:function(){return window}})}catch(e){}
+  try{Object.defineProperty(window,"parent",{get:function(){return window}})}catch(e){}
+  window.__gc_offline=1;window.__gc_protected=1;
+  var _f=window.fetch;
+  window.fetch=function(u,i){
+    try{
+      var s=typeof u==="string"?u:(u&&u.url)||"";
+      if(/^https?:\\/\\//i.test(s)&&!/^(blob:|data:)/i.test(s)){
+        console.warn("[GC-Offline] blocked external:",s);
+        return Promise.reject(new Error("offline"));
+      }
+    }catch(e){}
+    return _f.apply(this,arguments);
+  };
+})();
+<\/script>`;
+        text = text.replace("<head>", "<head>" + offlineBoot);
       }
       if (text !== before) {
         zipFiles[key] = strToU8(text);

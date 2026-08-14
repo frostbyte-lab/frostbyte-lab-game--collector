@@ -2,11 +2,14 @@
 
 **Tools profesional untuk mengumpulkan, memperbaiki, dan menjalankan game web secara offline.**
 
-Mendukung dua jalur:
+Setelah di-collect, game bisa di-**preview & dimainkan offline** di browser:
+- Tidak butuh server lokal
+- Tidak memanggil API / server game asli
+- Semua resource sudah ada di dalam ZIP
+
+Mendukung dua jalur collect:
 - **Cloudflare Worker** (cepat, ada limit free tier)
 - **GitHub Actions** (gratis tanpa limit browser)
-
-Dilengkapi **Workspace** dengan Preview Runtime level tinggi yang mampu menangani konten anti-iframe (frame-busting script + isolation).
 
 ## Fitur
 
@@ -25,10 +28,11 @@ Dilengkapi **Workspace** dengan Preview Runtime level tinggi yang mampu menangan
 - Packaging ulang
 - **AI Assistant** — analisis paket & saran perbaikan (Groq / OpenAI-compatible)
 
-### Collect pintar
+### Collect pintar (offline-ready)
 - Smart path rewrite (absolute → local)
 - Frame-buster neutralization saat collect
-- Base tag + protector injection
+- Base tag + offline bootstrap (blokir fetch eksternal)
+- Protector anti-iframe injection
 
 ### Riwayat
 - Disimpan di localStorage browser
@@ -46,13 +50,16 @@ Dilengkapi **Workspace** dengan Preview Runtime level tinggi yang mampu menangan
 3. **Run workflow** → isi URL
 4. Download artifact **game-resources**
 
-### Workspace
+### Preview & mainkan offline (tanpa server)
 1. Tab **Workspace**
-2. Load file ZIP
+2. Load file ZIP hasil collect
 3. Pilih mode Preview:
-   - Sandbox (default)
-   - Protected (anti frame-buster)
-   - Isolated Window (paling kuat)
+   - **Sandbox** — default, aman
+   - **Protected** — anti frame-buster
+   - **Isolated Window** — paling kuat
+4. Game jalan 100% di browser (blob URL). Tidak ada request ke server game asli.
+
+> Tip: AI Assistant opsional (butuh API key). Preview & Auto Repair **tidak** butuh AI.
 
 ## Struktur
 

@@ -64,21 +64,36 @@ function buildUrlToLocalMap(manifest) {
 
 function rewriteContent(text, urlMap, isHtml) {
   let out = text;
-  // Replace full absolute URLs first
-  for (const [from, to] of urlMap) {
-    if (from.startsWith("http") && out.includes(from)) {
-      out = out.split(from).join(to);
-    }
+  // Replace full absolute URLs (longest first)
+  const entries = [...urlMap.entries()].filter(([k]) => String(k).startsWith("http"));
+  entries.sort((a, b) => b[0].length - a[0].length);
+  for (const [from, to] of entries) {
+    if (out.includes(from)) out = out.split(from).join(to);
   }
-  // Neutralize frame-busters handled by caller for JS/HTML
   if (isHtml) {
-    // Inject base tag for relative resolution if missing
     if (!/<base\s/i.test(out) && out.includes("<head>")) {
       out = out.replace("<head>", '<head>\n<base href="./">');
     }
-    // Inject small protector
-    const protector = `<script>(function(){try{Object.defineProperty(window,"top",{get:function(){return window}})}catch(e){}try{Object.defineProperty(window,"parent",{get:function(){return window}})}catch(e){}window.__gc_protected=1})();<\/script>`;
-    if (out.includes("<head>")) out = out.replace("<head>", "<head>" + protector);
+    // Offline bootstrap: frame protect + soft-block external network
+    const offlineBoot = `<script>
+(function(){
+  try{Object.defineProperty(window,"top",{get:function(){return window}})}catch(e){}
+  try{Object.defineProperty(window,"parent",{get:function(){return window}})}catch(e){}
+  window.__gc_offline=1;window.__gc_protected=1;
+  var _f=window.fetch;
+  window.fetch=function(u,i){
+    try{
+      var s=typeof u==="string"?u:(u&&u.url)||"";
+      if(/^https?:\\/\\//i.test(s)&&!/^(blob:|data:)/i.test(s)){
+        console.warn("[GC-Offline] blocked external:",s);
+        return Promise.reject(new Error("offline"));
+      }
+    }catch(e){}
+    return _f.apply(this,arguments);
+  };
+})();
+<\/script>`;
+    if (out.includes("<head>")) out = out.replace("<head>", "<head>" + offlineBoot);
   }
   return out;
 }
