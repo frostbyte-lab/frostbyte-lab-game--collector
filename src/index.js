@@ -31,6 +31,7 @@ import {
   getSession,
   deleteSession
 } from "./history/kv.js";
+import { hasProgressStore, setProgress, getProgress } from "./progress/store.js";
 
 const GH_OWNER = "frostbyte-lab";
 const GH_REPO = "frostbyte-lab-game--collector";
@@ -53,7 +54,8 @@ export default {
           maxRawTotalMB: Math.round(MAX_RAW_TOTAL / 1024 / 1024),
           maxZipResponseMB: Math.round(MAX_ZIP_RESPONSE / 1024 / 1024),
           r2: Boolean(env.COLLECTOR_BUCKET),
-          historyKV: hasKV(env)
+          historyKV: hasKV(env),
+          progressKV: hasProgressStore(env)
         }
       });
     }
@@ -197,6 +199,24 @@ export default {
           "Content-Disposition": 'attachment; filename="game-resources.zip"'
         }
       });
+    }
+
+    // --- Progress collect (poll) ---
+    if (request.method === "GET" && url.pathname === "/api/progress") {
+      const id = url.searchParams.get("id");
+      if (!id) return Response.json({ error: "id required" }, { status: 400 });
+      if (!hasProgressStore(env)) {
+        return Response.json({
+          ok: false,
+          error: "NO_KV",
+          message: "Progress server butuh KV GC_HISTORY"
+        }, { status: 503 });
+      }
+      const row = await getProgress(env, id);
+      if (!row) {
+        return Response.json({ ok: true, id, pct: 0, phase: "waiting", label: "Menunggu collect...", done: false });
+      }
+      return Response.json({ ok: true, ...row });
     }
 
     // --- History (KV) ---
@@ -352,6 +372,10 @@ export default {
     }
 
     const id = crypto.randomUUID();
+    const progressId = String(body.progressId || body.progress_id || id).slice(0, 80);
+    const report = (pct, phase, label, extra = {}) =>
+      setProgress(env, progressId, { pct, phase, label, ...extra });
+    await report(2, "init", "Menyiapkan collect...");
     const manifest = [];
     const seen = new Set();
     const zipFiles = {};
@@ -366,6 +390,7 @@ export default {
       } catch (launchErr) {
         const msg = String(launchErr.message || launchErr);
         if (msg.includes("429") || msg.includes("Rate limit") || msg.includes("limit exceeded")) {
+          await report(0, "error", "Limit browser Cloudflare tercapai", { done: true, error: "LIMIT_BROWSER" });
           return Response.json({
             error: "LIMIT_BROWSER",
             message: "Limit browser Cloudflare Free (10 menit/hari) sudah tercapai. Coba lagi besok, atau gunakan GitHub Actions (gratis tanpa limit).",
@@ -375,7 +400,9 @@ export default {
         throw launchErr;
       }
 
+      await report(8, "browser", "Browser siap, membuka halaman...");
       const page = await browser.newPage();
+      await report(12, "page", "Navigasi ke URL game...");
 
       // Collect network resources
       page.on("response", async (response) => {
@@ -477,7 +504,9 @@ export default {
 
       // Navigate
       await page.goto(target.href, { waitUntil: "domcontentloaded", timeout: 40000 });
+      await report(22, "loaded", "Halaman termuat, capture network...");
       await page.waitForTimeout(3000);
+      await report(30, "interact", "Auto-click Play / Start...");
 
       // === Auto-click Play / Start / Mulai / Continue buttons ===
       try {
@@ -538,6 +567,7 @@ export default {
         }
       } catch {}
 
+      await report(42, "scroll", "Scroll & lazy-load asset...");
       // Scroll halaman utama (trigger lazy load)
       await page.evaluate(async () => {
         const total = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0, 2000);
@@ -548,12 +578,14 @@ export default {
         window.scrollTo(0, 0);
       });
       await page.waitForTimeout(2500);
+      await report(55, "html", "Ambil HTML + resource tertangkap...", { files: manifest.length });
 
       // Ambil HTML
       let html = await page.content();
       zipFiles["index.html"] = strToU8(html);
 
       // Pass 2: scan referensi yang belum ter-download → auto-fetch yang kurang
+      await report(62, "fill", "Auto-lengkapi file yang kurang...", { files: manifest.length });
       let fillReport = { scanned: 0, missingFound: 0, fetched: 0, failed: 0, stillMissing: [] };
       try {
         fillReport = await fillMissingAssets(zipFiles, manifest, seen, target.href, id, env);
@@ -578,9 +610,11 @@ export default {
         }
       } catch {}
 
+      await report(72, "rewrite", "Smart path rewrite + frame-buster...", { files: manifest.length });
       // Smart offline packaging: path rewrite + frame-buster neutralize
       const smart = smartPackage(zipFiles, manifest);
 
+      await report(80, "analyze", "Analisis slot (symbols/paytable/audio/engine)...", { files: manifest.length });
       // Poin 2+3: analisis isi JSON/config + deteksi engine
       let analysis = null;
       try {
@@ -701,6 +735,7 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
       }
 
       // Buat ZIP (level 7: lebih kecil, sedikit lebih CPU)
+      await report(90, "zip", "Packaging ZIP...", { files: manifest.length });
       const zipData = zipSync(zipFiles, { level: 7 });
       const zipKey = `${id}/game-package.zip`;
 
@@ -743,6 +778,8 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
         }
       } catch {}
 
+      await report(100, "done", "Selesai", { files: manifest.length, done: true });
+
       // ZIP binary langsung (jalur Worker untuk paket kecil/sedang)
       return new Response(zipData, {
         status: 200,
@@ -751,6 +788,7 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
           "Content-Disposition": `attachment; filename="game-package-${id}.zip"`,
           "X-GC-Ok": "1",
           "X-GC-Id": id,
+          "X-GC-Progress-Id": progressId,
           "X-GC-Session-Id": resumeSessionId || "",
           "X-GC-Still-Missing": String((fillReport.stillMissing || []).length),
           "X-GC-Files": String(manifest.length),
