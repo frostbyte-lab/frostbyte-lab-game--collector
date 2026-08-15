@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-15 (auto-failover GitHub tanpa R2)
+Update terakhir: 2026-08-15 (P5 asset relations)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -28,6 +28,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | P3 | Deteksi fitur game lebih dalam | ✅ | FreeSpin, Bonus, Cascade, Wild, Scatter, Multiplier, Jackpot, Respin, Gamble, BuyFeature |
 | P4 | Paytable lebih akurat | ✅ | structured map/array + symbol refs + skor kualitas |
 | P9alt | ZIP besar tanpa R2 → GitHub | ✅ | Auto-failover TOO_LARGE / LIMIT_BROWSER → Actions artifact |
+| P5 | Mapping relasi asset | ✅ | symbol ↔ image/atlas/spine ↔ audio + feature→audio |
 | KV | Namespace `gc-history` | ✅ | ID `3869a97c9eaf49129a666476fcb672e8` |
 | Deploy | Worker live + binding | ✅ | MYBROWSER, GC_HISTORY, GITHUB_TOKEN |
 
@@ -42,7 +43,6 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 ### Tier 2 — Slot intelligence
 | # | Item | Status |
 |---|------|--------|
-| 5 | Mapping relasi asset (symbol ↔ animation ↔ audio) | ❌ |
 
 ### Tier 3 — Repair
 | # | Item | Status |
@@ -113,4 +113,14 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - Capture Worker gagal `TOO_LARGE` (413) atau `LIMIT_BROWSER` (429) → UI auto panggil `runGitHubCollect({ auto: true })`
 - Tidak perlu R2; artifact Actions jadi jalur paket besar
 - User tetap bisa klik manual **Collect via GitHub**
+
+
+
+## Catatan teknis Asset Relations (P5)
+
+- Modul: `src/analyze/relations.js`
+- Output: `relations.json`
+- Match heuristik nama: symbol → images, atlas regions, spine anim/attach, audio
+- Feature type → kategori audio (FreeSpin→Bonus/Win, Cascade→Spin/ReelStop, …)
+- UI: skor "Asset relations linked?" + sample Relations: wild:img:atlas:sfx
 
