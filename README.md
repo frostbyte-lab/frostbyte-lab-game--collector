@@ -101,7 +101,12 @@ Endpoint default sudah diisi untuk Groq. Bisa diganti OpenRouter / OpenAI / prov
 - [x] Collect + GitHub fallback
 - [x] Workspace + Preview anti-iframe
 - [x] Auto Repair + Packaging ulang
-- [x] Smart path rewrite saat collect
+- [x] Smart path rewrite saat collect (v2 — relative, CSS url, protocol-relative)
 - [x] AI Assistant (analisis + saran)
-- [ ] Estimasi waktu & notifikasi
-- [ ] Perbandingan sebelum/sesudah repair
+- [x] Estimasi waktu & progress real-time Collect
+- [x] Notifikasi selesai (browser notification + suara)
+- [x] Perbandingan sebelum/sesudah repair
+- [x] Auto-click tombol Play / Start / Mulai
+- [x] PWA / install sebagai app
+- [ ] R2 otomatis untuk ZIP besar (butuh enable R2 di dashboard Cloudflare)
+- [ ] History server-side (KV / Durable Object)

@@ -62,9 +62,21 @@ function buildUrlToLocalMap(manifest) {
       map.set(r.url, r.localPath);
       try {
         const u = new URL(r.url);
+        // Full URL
+        map.set(u.href, r.localPath);
+        // Protocol-relative
+        map.set("//" + u.host + u.pathname + u.search, r.localPath);
+        // Path + query
+        map.set(u.pathname + u.search, r.localPath);
         map.set(u.pathname, r.localPath);
+        // Bare filename
         const bare = u.pathname.split("/").pop();
-        if (bare) map.set(bare, r.localPath);
+        if (bare) {
+          map.set(bare, r.localPath);
+          map.set(bare + u.search, r.localPath);
+        }
+        // Without query for matching
+        if (u.search) map.set(u.origin + u.pathname, r.localPath);
       } catch {}
     }
   }
@@ -73,17 +85,52 @@ function buildUrlToLocalMap(manifest) {
 
 function rewriteContent(text, urlMap, isHtml) {
   let out = text;
-  // Replace full absolute URLs (longest first)
-  const entries = [...urlMap.entries()].filter(([k]) => String(k).startsWith("http"));
-  entries.sort((a, b) => b[0].length - a[0].length);
+
+  // 1. Full absolute + protocol-relative (longest first)
+  const entries = [...urlMap.entries()]
+    .filter(([k]) => k.includes("/") || k.startsWith("http") || k.startsWith("//"))
+    .sort((a, b) => b[0].length - a[0].length);
+
   for (const [from, to] of entries) {
+    if (from.length < 4) continue;
     if (out.includes(from)) out = out.split(from).join(to);
   }
+
+  // 2. Relative path patterns common in games (src="./xxx", url(xxx), import("xxx"))
+  // Map bare names that appear in zip
+  const bareMap = new Map();
+  for (const [k, v] of urlMap) {
+    if (!k.includes("/") && k.length > 3) bareMap.set(k, v);
+  }
+
+  // 3. CSS url() rewrite
+  out = out.replace(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi, (m, p) => {
+    const clean = p.trim().split("?")[0].split("#")[0];
+    const name = clean.split("/").pop();
+    if (urlMap.has(p)) return `url(${urlMap.get(p)})`;
+    if (urlMap.has(clean)) return `url(${urlMap.get(clean)})`;
+    if (name && bareMap.has(name)) return `url(${bareMap.get(name)})`;
+    return m;
+  });
+
+  // 4. HTML src/href that still absolute
   if (isHtml) {
+    out = out.replace(/(src|href|data-src|data-href)=["'](https?:\/\/[^"']+)["']/gi, (m, attr, u) => {
+      if (urlMap.has(u)) return `${attr}="${urlMap.get(u)}"`;
+      try {
+        const path = new URL(u).pathname;
+        if (urlMap.has(path)) return `${attr}="${urlMap.get(path)}"`;
+        const bare = path.split("/").pop();
+        if (bare && bareMap.has(bare)) return `${attr}="${bareMap.get(bare)}"`;
+      } catch {}
+      return m;
+    });
+
     if (!/<base\s/i.test(out) && out.includes("<head>")) {
       out = out.replace("<head>", '<head>\n<base href="./">');
     }
-    // Offline bootstrap: frame protect + soft-block external network
+
+    // Offline bootstrap: frame protect + soft-block external network + common game fixes
     const offlineBoot = `<script>
 (function(){
   try{Object.defineProperty(window,"top",{get:function(){return window}})}catch(e){}
@@ -99,6 +146,15 @@ function rewriteContent(text, urlMap, isHtml) {
       }
     }catch(e){}
     return _f.apply(this,arguments);
+  };
+  // Soft XHR block
+  var _x=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(m,u){
+    if(typeof u==="string"&&/^https?:\\/\\//i.test(u)&&!/^(blob:|data:)/i.test(u)){
+      console.warn("[GC-Offline] blocked XHR:",u);
+      u="data:," ;
+    }
+    return _x.apply(this,arguments);
   };
 })();
 <\/script>`;
@@ -358,7 +414,42 @@ export default {
 
       // Navigate
       await page.goto(target.href, { waitUntil: "domcontentloaded", timeout: 40000 });
-      await page.waitForTimeout(5000);
+      await page.waitForTimeout(3000);
+
+      // === Auto-click Play / Start / Mulai / Continue buttons ===
+      try {
+        await page.evaluate(async () => {
+          const keywords = [
+            "play", "start", "mulai", "continue", "lanjut", "main", "go", "enter",
+            "tap to play", "click to play", "klik untuk main", "start game", "play now",
+            "mulai game", "lanjutkan", "ok", "yes", "accept", "agree"
+          ];
+          const candidates = [];
+          const all = document.querySelectorAll("button, a, div, span, input[type=button], [role=button], .btn, .button");
+          for (const el of all) {
+            const text = ((el.textContent || "") + " " + (el.getAttribute("aria-label") || "") + " " + (el.id || "") + " " + (el.className || "")).toLowerCase();
+            if (keywords.some(k => text.includes(k))) {
+              const style = window.getComputedStyle(el);
+              if (style.display !== "none" && style.visibility !== "hidden" && el.offsetParent !== null) {
+                candidates.push(el);
+              }
+            }
+          }
+          // Prefer larger / more centered buttons
+          candidates.sort((a, b) => {
+            const ra = a.getBoundingClientRect();
+            const rb = b.getBoundingClientRect();
+            return (rb.width * rb.height) - (ra.width * ra.height);
+          });
+          for (const el of candidates.slice(0, 3)) {
+            try {
+              el.click();
+              await new Promise(r => setTimeout(r, 800));
+            } catch {}
+          }
+        });
+        await page.waitForTimeout(2000);
+      } catch {}
 
       // Coba deteksi & masuk ke iframe jika ada
       try {
@@ -367,15 +458,24 @@ export default {
           if (frame === page.mainFrame()) continue;
           const frameUrl = frame.url();
           if (frameUrl && frameUrl !== "about:blank" && !frameUrl.startsWith("chrome")) {
-            // Scroll di dalam frame juga
             await frame.evaluate(() => {
               window.scrollTo(0, document.body?.scrollHeight || 0);
             }).catch(() => {});
+            // Auto-click play di dalam iframe juga
+            try {
+              await frame.evaluate(() => {
+                const kws = ["play", "start", "mulai", "continue", "main"];
+                document.querySelectorAll("button, a, div, [role=button]").forEach(el => {
+                  const t = ((el.textContent || "") + " " + (el.className || "")).toLowerCase();
+                  if (kws.some(k => t.includes(k))) try { el.click(); } catch {}
+                });
+              });
+            } catch {}
           }
         }
       } catch {}
 
-      // Scroll halaman utama
+      // Scroll halaman utama (trigger lazy load)
       await page.evaluate(async () => {
         const total = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0, 2000);
         for (let y = 0; y < total; y += 700) {

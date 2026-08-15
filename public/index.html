@@ -2,7 +2,12 @@
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
   <title>Game Collector Pro</title>
   <style>
     :root {
@@ -125,6 +130,31 @@
     }
     .badge-ok { background: #14532d; color: #86efac; }
     .badge-warn { background: #713f12; color: #fde68a; }
+    .progress-wrap {
+      margin: 12px 0 8px; display: none;
+    }
+    .progress-wrap.active { display: block; }
+    .progress-bar {
+      height: 8px; background: var(--surface2); border-radius: 99px; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .progress-bar > div {
+      height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #60a5fa);
+      border-radius: 99px; transition: width 0.4s ease;
+    }
+    .progress-meta {
+      display: flex; justify-content: space-between; font-size: 12px; color: var(--muted);
+      margin-top: 6px;
+    }
+    .diff-box {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px; font-size: 13px; margin-top: 10px; display: none;
+    }
+    .diff-box.active { display: block; }
+    .diff-box .diff-row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .diff-box .diff-item { flex: 1; min-width: 120px; }
+    .diff-box .num { font-size: 1.4rem; font-weight: 700; }
+    .diff-box .label { color: var(--muted); font-size: 11px; }
     .file-list {
       max-height: 220px; overflow-y: auto; font-size: 12px;
       background: var(--surface2); border-radius: 8px; padding: 8px; border: 1px solid var(--border);
@@ -184,11 +214,19 @@
           <button class="btn-success" id="btn-gh" onclick="runGitHubCollect()">Collect via GitHub</button>
           <button class="btn-secondary" onclick="clearStatus()">Clear</button>
         </div>
+        <div class="progress-wrap" id="progress-wrap">
+          <div class="progress-bar"><div id="progress-fill"></div></div>
+          <div class="progress-meta">
+            <span id="progress-label">Menyiapkan...</span>
+            <span id="progress-eta">Estimasi: —</span>
+          </div>
+        </div>
         <div id="status">Masukkan URL → Capture (Cloudflare) atau Collect via GitHub (tanpa buka GitHub manual).</div>
         <div class="tip">
-          <b>Capture (Cloudflare):</b> cepat, limit ~10 menit browser/hari.<br>
+          <b>Capture (Cloudflare):</b> cepat, limit ~10 menit browser/hari. Auto-click Play + path rewrite pintar aktif.<br>
           <b>Collect via GitHub:</b> dari web ini juga — tanpa buka GitHub. Lebih stabil, tanpa limit itu.<br><br>
-          <b>Offline:</b> Setelah ZIP siap → tab <b>Workspace</b> → Load ZIP → Preview.
+          <b>Offline:</b> Setelah ZIP siap → tab <b>Workspace</b> → Load ZIP → Preview.<br>
+          <b>Notifikasi:</b> Izinkan notifikasi browser agar tahu saat collect selesai.
         </div>
       </div>
 
@@ -312,12 +350,98 @@
     function clearStatus() {
       statusEl.textContent = 'Masukkan URL game lalu tekan Capture.';
       statusEl.className = '';
+      stopProgress();
     }
 
     function addHistory(entry) {
       const list = JSON.parse(localStorage.getItem('gc_history') || '[]');
       list.unshift({ ...entry, ts: Date.now() });
       localStorage.setItem('gc_history', JSON.stringify(list.slice(0, 30)));
+      renderHistory();
+    }
+
+    // ========== Progress + ETA ==========
+    let progressTimer = null;
+    let progressStart = 0;
+    const PROGRESS_STAGES = [
+      { pct: 8, label: "Launch browser..." },
+      { pct: 18, label: "Buka halaman game..." },
+      { pct: 32, label: "Auto-click Play / Start..." },
+      { pct: 48, label: "Collect resource (JS/CSS/img)..." },
+      { pct: 65, label: "Scroll & lazy-load..." },
+      { pct: 78, label: "Smart path rewrite..." },
+      { pct: 90, label: "Packaging ZIP..." },
+      { pct: 97, label: "Hampir selesai..." }
+    ];
+
+    function startProgress(estSeconds = 28) {
+      const wrap = document.getElementById('progress-wrap');
+      const fill = document.getElementById('progress-fill');
+      const label = document.getElementById('progress-label');
+      const eta = document.getElementById('progress-eta');
+      wrap.classList.add('active');
+      progressStart = Date.now();
+      let stageIdx = 0;
+      fill.style.width = '3%';
+      label.textContent = PROGRESS_STAGES[0].label;
+      eta.textContent = `Estimasi: ~${estSeconds}s`;
+
+      if (progressTimer) clearInterval(progressTimer);
+      progressTimer = setInterval(() => {
+        const elapsed = (Date.now() - progressStart) / 1000;
+        const targetPct = Math.min(96, (elapsed / estSeconds) * 100);
+        // Advance stage labels
+        while (stageIdx < PROGRESS_STAGES.length - 1 && targetPct >= PROGRESS_STAGES[stageIdx + 1].pct) {
+          stageIdx++;
+        }
+        fill.style.width = targetPct + '%';
+        label.textContent = PROGRESS_STAGES[stageIdx].label;
+        const remain = Math.max(0, Math.round(estSeconds - elapsed));
+        eta.textContent = remain > 0 ? `Estimasi: ~${remain}s tersisa` : 'Hampir selesai...';
+      }, 400);
+    }
+
+    function stopProgress(success = false) {
+      if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+      const wrap = document.getElementById('progress-wrap');
+      const fill = document.getElementById('progress-fill');
+      if (success) {
+        fill.style.width = '100%';
+        document.getElementById('progress-label').textContent = 'Selesai!';
+        document.getElementById('progress-eta').textContent = '';
+        setTimeout(() => wrap.classList.remove('active'), 1200);
+      } else {
+        wrap.classList.remove('active');
+        fill.style.width = '0%';
+      }
+    }
+
+    // ========== Notifikasi + suara ==========
+    function requestNotifyPermission() {
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    }
+
+    function notifyDone(title, body) {
+      // Suara singkat (Web Audio)
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = 880;
+        g.gain.value = 0.08;
+        o.start();
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        o.stop(ctx.currentTime + 0.35);
+      } catch {}
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(title, { body, icon: '/manifest.json' });
+        } catch {}
+      }
     }
 
     async function runCollect() {
@@ -327,9 +451,11 @@
         statusEl.className = 'error';
         return;
       }
+      requestNotifyPermission();
       btnCollect.disabled = true;
       statusEl.className = '';
-      statusEl.textContent = 'Sedang capture...\nMohon tunggu 10–40 detik.';
+      statusEl.textContent = 'Sedang capture...\nAuto-click Play aktif · Path rewrite pintar aktif.';
+      startProgress(30);
 
       try {
         const res = await fetch('/api/collect', {
@@ -340,9 +466,9 @@
 
         const ct = (res.headers.get('content-type') || '').toLowerCase();
 
-        // Error JSON (limit / gagal)
         if (!res.ok || ct.includes('application/json')) {
           const data = await res.json().catch(() => ({}));
+          stopProgress(false);
           if (res.status === 429 || data.error === 'LIMIT_BROWSER') {
             statusEl.className = 'warn';
             statusEl.textContent = '⚠ LIMIT BROWSER TERCAPAI\n\n' +
@@ -354,14 +480,16 @@
           throw new Error(data.error || data.message || 'Gagal capture');
         }
 
-        // Sukses: response = file ZIP binary (mendukung file besar, tanpa base64/R2)
         const blob = await res.blob();
         const id = res.headers.get('X-GC-Id') || String(Date.now());
         const files = res.headers.get('X-GC-Files') || '?';
         const zipSize = parseInt(res.headers.get('X-GC-Zip-Size') || blob.size, 10);
+        const rewritten = res.headers.get('X-GC-Smart-Rewritten') || '0';
+        const neutralized = res.headers.get('X-GC-Smart-Neutralized') || '0';
         const msg = res.headers.get('X-GC-Message') || 'Capture berhasil';
         const sizeKB = Math.round(zipSize / 1024);
         const name = `game-package-${id}.zip`;
+        const elapsed = Math.round((Date.now() - progressStart) / 1000);
 
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -371,8 +499,9 @@
         window.__gc_lastZipBlob = blob;
         window.__gc_lastZipName = name;
 
+        stopProgress(true);
         statusEl.className = 'ok';
-        statusEl.textContent = `✓ BERHASIL\n\nID: ${id}\nFile: ${files}\nZIP: ${sizeKB} KB\n\n${msg}\n\n✓ ZIP otomatis di-download (binary, mendukung file besar).\nKlik tombol di bawah untuk Preview offline.`;
+        statusEl.textContent = `✓ BERHASIL (${elapsed}s)\n\nID: ${id}\nFile: ${files}\nZIP: ${sizeKB} KB\nPath rewrite: ${rewritten} · Frame-buster: ${neutralized}\n\n${msg}\n\n✓ ZIP otomatis di-download.\nKlik tombol di bawah untuk Preview offline.`;
 
         const btn = document.createElement('button');
         btn.className = 'btn-success';
@@ -382,8 +511,10 @@
         statusEl.appendChild(document.createElement('br'));
         statusEl.appendChild(btn);
 
-        addHistory({ url, status: 'ok', id, files, zipSize });
+        addHistory({ url, status: 'ok', id, files, zipSize, elapsed });
+        notifyDone('Collect selesai', `${files} file · ${sizeKB} KB · ${elapsed}s`);
       } catch (err) {
+        stopProgress(false);
         statusEl.className = 'error';
         statusEl.textContent = 'Error: ' + err.message;
         addHistory({ url, status: 'error', message: err.message });
@@ -561,6 +692,9 @@
         const buf = await input.files[0].arrayBuffer();
         const zip = await JSZip.loadAsync(buf);
         zipFS = {};
+        zipFSOriginal = null; // reset snapshot repair
+        const diffBox = document.getElementById('repair-diff');
+        if (diffBox) { diffBox.classList.remove('active'); diffBox.innerHTML = ''; }
         const paths = [];
         for (const [path, entry] of Object.entries(zip.files)) {
           if (entry.dir) continue;
@@ -783,34 +917,111 @@ window.__GC_ASSETS = ${JSON.stringify(urls)};
       log('Preview stopped');
     }
 
+    let zipFSOriginal = null; // snapshot sebelum repair
+
     function runAutoRepair() {
       if (!zipFS) return;
       log('Auto Repair dimulai...');
+      // Simpan snapshot sebelum (untuk perbandingan)
+      if (!zipFSOriginal) {
+        zipFSOriginal = {};
+        for (const [p, d] of Object.entries(zipFS)) {
+          zipFSOriginal[p] = d.slice ? d.slice(0) : new Uint8Array(d);
+        }
+      }
+
       let fixed = 0;
+      let filesChanged = 0;
+      let frameBusters = 0;
+      let pathFixes = 0;
+      const bareNames = new Set();
+      for (const p of Object.keys(zipFS)) {
+        const bare = p.split('/').pop();
+        if (bare) bareNames.add(bare);
+      }
+
       for (const [path, data] of Object.entries(zipFS)) {
-        if (!/\.(html?|js)$/i.test(path)) continue;
+        if (!/\.(html?|js|css)$/i.test(path)) continue;
         let text = new TextDecoder().decode(data);
         const before = text;
-        const res = neutralizeFrameBusters(text);
-        text = res.html;
-        text = text.replace(/https?:\/\/[^"'\\s]+/g, (url) => {
+        let localFixed = 0;
+
+        // Frame-buster
+        if (/\.(html?|js)$/i.test(path)) {
+          const res = neutralizeFrameBusters(text);
+          text = res.html;
+          frameBusters += res.neutralized;
+          localFixed += res.neutralized;
+        }
+
+        // Absolute URL → local path (lebih pintar)
+        text = text.replace(/https?:\/\/[^"'\s)\\]+/g, (url) => {
           try {
-            const name = new URL(url).pathname.split('/').pop();
-            if (name && Object.keys(zipFS).some(p => p.endsWith(name))) {
-              fixed++;
-              return name;
+            const u = new URL(url);
+            const name = u.pathname.split('/').pop();
+            if (name && bareNames.has(name)) {
+              pathFixes++;
+              localFixed++;
+              // Cari path lengkap di zip
+              const full = Object.keys(zipFS).find(p => p.endsWith('/' + name) || p === name);
+              return full || name;
             }
           } catch {}
           return url;
         });
+
+        // CSS url()
+        if (/\.css$/i.test(path)) {
+          text = text.replace(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi, (m, p) => {
+            const name = p.trim().split('?')[0].split('#')[0].split('/').pop();
+            if (name && bareNames.has(name)) {
+              pathFixes++;
+              localFixed++;
+              const full = Object.keys(zipFS).find(x => x.endsWith('/' + name) || x === name);
+              return `url(${full || name})`;
+            }
+            return m;
+          });
+        }
+
         if (text !== before) {
           zipFS[path] = new TextEncoder().encode(text);
-          fixed += res.neutralized;
+          filesChanged++;
+          fixed += localFixed;
         }
       }
-      log(`Auto Repair selesai · ~${fixed} perbaikan diterapkan (frame-buster + path hint)`);
+
+      log(`Auto Repair selesai · ${filesChanged} file diubah · frame-buster: ${frameBusters} · path: ${pathFixes}`);
       document.getElementById('preview-status').textContent = 'Repaired';
       document.getElementById('preview-status').className = 'badge badge-ok';
+
+      // Tampilkan perbandingan sebelum / sesudah
+      showRepairDiff(filesChanged, frameBusters, pathFixes);
+    }
+
+    function showRepairDiff(filesChanged, frameBusters, pathFixes) {
+      let box = document.getElementById('repair-diff');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'repair-diff';
+        box.className = 'diff-box';
+        const toolbar = document.getElementById('preview-toolbar');
+        if (toolbar) toolbar.parentNode.insertBefore(box, toolbar.nextSibling);
+      }
+      const beforeFiles = zipFSOriginal ? Object.keys(zipFSOriginal).length : 0;
+      const afterFiles = Object.keys(zipFS).length;
+      box.innerHTML = `
+        <div style="font-weight:600;margin-bottom:8px">Perbandingan sebelum & sesudah Repair</div>
+        <div class="diff-row">
+          <div class="diff-item"><div class="num">${beforeFiles}</div><div class="label">File sebelum</div></div>
+          <div class="diff-item"><div class="num">${afterFiles}</div><div class="label">File sesudah</div></div>
+          <div class="diff-item"><div class="num" style="color:var(--success)">${filesChanged}</div><div class="label">File diubah</div></div>
+          <div class="diff-item"><div class="num" style="color:var(--accent)">${frameBusters}</div><div class="label">Frame-buster</div></div>
+          <div class="diff-item"><div class="num" style="color:var(--warn)">${pathFixes}</div><div class="label">Path diperbaiki</div></div>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--muted)">Snapshot original disimpan. Kamu bisa Preview ulang untuk melihat hasil repair.</div>
+      `;
+      box.classList.add('active');
     }
 
     async function repackage() {
@@ -936,6 +1147,18 @@ Format jawaban:
         document.getElementById('btn-ai-fix').disabled = false;
       }
     }
+
+    // ========== PWA Service Worker ==========
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then((reg) => {
+          console.log('[GC] SW registered', reg.scope);
+        }).catch((err) => console.warn('[GC] SW failed', err));
+      });
+    }
+
+    // Minta izin notifikasi saat pertama kali buka
+    setTimeout(requestNotifyPermission, 2000);
   </script>
 </body>
 </html>
