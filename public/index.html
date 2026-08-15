@@ -602,35 +602,69 @@
       { pct: 97, label: "Hampir selesai..." }
     ];
 
-    function startProgress(estSeconds = 28) {
+    let progressPollTimer = null;
+    let currentProgressId = null;
+
+    function startProgress(estSeconds = 28, progressId = null) {
       const wrap = document.getElementById('progress-wrap');
       const fill = document.getElementById('progress-fill');
       const label = document.getElementById('progress-label');
       const eta = document.getElementById('progress-eta');
       wrap.classList.add('active');
       progressStart = Date.now();
-      let stageIdx = 0;
-      fill.style.width = '3%';
-      label.textContent = PROGRESS_STAGES[0].label;
-      eta.textContent = `Estimasi: ~${estSeconds}s`;
+      currentProgressId = progressId;
+      fill.style.width = '2%';
+      label.textContent = 'Menyiapkan collect...';
+      eta.textContent = progressId ? 'Progress server...' : ('Estimasi: ~' + estSeconds + 's');
 
       if (progressTimer) clearInterval(progressTimer);
+      if (progressPollTimer) clearInterval(progressPollTimer);
+
+      // Fallback estimasi lokal (jika poll gagal / belum ada data)
+      let stageIdx = 0;
+      let displayPct = 0;
       progressTimer = setInterval(() => {
+        if (currentProgressId) return; // real poll mengisi UI
         const elapsed = (Date.now() - progressStart) / 1000;
-        const targetPct = Math.min(96, (elapsed / estSeconds) * 100);
-        // Advance stage labels
+        let targetPct = Math.min(96, (elapsed / estSeconds) * 100);
         while (stageIdx < PROGRESS_STAGES.length - 1 && targetPct >= PROGRESS_STAGES[stageIdx + 1].pct) {
           stageIdx++;
         }
-        fill.style.width = targetPct + '%';
+        displayPct = Math.max(displayPct, Math.min(targetPct, PROGRESS_STAGES[stageIdx].pct + 5));
+        fill.style.width = displayPct + '%';
         label.textContent = PROGRESS_STAGES[stageIdx].label;
         const remain = Math.max(0, Math.round(estSeconds - elapsed));
-        eta.textContent = remain > 0 ? `Estimasi: ~${remain}s tersisa` : 'Hampir selesai...';
+        eta.textContent = remain > 0 ? ('Estimasi: ~' + remain + 's') : 'Hampir selesai...';
       }, 400);
+
+      // Poll server progress
+      if (progressId) {
+        const poll = async () => {
+          try {
+            const res = await fetch('/api/progress?id=' + encodeURIComponent(progressId));
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || data.ok === false) return;
+            const pct = Math.max(0, Math.min(100, Number(data.pct) || 0));
+            fill.style.width = pct + '%';
+            label.textContent = data.label || data.phase || 'Collect...';
+            const elapsed = Math.round((Date.now() - progressStart) / 1000);
+            const extra = data.files != null ? (' · ' + data.files + ' file') : '';
+            eta.textContent = data.done ? 'Selesai' : (elapsed + 's' + extra + ' · ' + (data.phase || ''));
+            if (data.done) {
+              if (progressPollTimer) { clearInterval(progressPollTimer); progressPollTimer = null; }
+            }
+          } catch {}
+        };
+        poll();
+        progressPollTimer = setInterval(poll, 800);
+      }
     }
 
     function stopProgress(success = false) {
       if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+      if (progressPollTimer) { clearInterval(progressPollTimer); progressPollTimer = null; }
+      currentProgressId = null;
       const wrap = document.getElementById('progress-wrap');
       const fill = document.getElementById('progress-fill');
       if (success) {
@@ -643,6 +677,7 @@
         fill.style.width = '0%';
       }
     }
+
 
     // ========== Notifikasi + suara ==========
     function requestNotifyPermission() {
@@ -682,14 +717,15 @@
       requestNotifyPermission();
       btnCollect.disabled = true;
       statusEl.className = '';
-      statusEl.textContent = 'Sedang capture...\nAuto-click Play aktif · Path rewrite pintar aktif.';
-      startProgress(30);
+      statusEl.textContent = 'Sedang capture...\nProgress real dari server (poll).';
+      const progressId = (crypto.randomUUID && crypto.randomUUID()) || ('p-' + Date.now());
+      startProgress(30, progressId);
 
       try {
         const res = await fetch('/api/collect', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ url })
+          body: JSON.stringify({ url, progressId })
         });
 
         const ct = (res.headers.get('content-type') || '').toLowerCase();
