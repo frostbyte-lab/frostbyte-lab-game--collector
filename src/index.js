@@ -278,7 +278,7 @@ function classifyResource(url, type, contentType, bodyText) {
   return { category: "game", reason: "default" };
 }
 
-function buildKeterangan(target, manifest, smart) {
+function buildKeterangan(target, manifest, smart, analysis = null) {
   const game = manifest.filter(r => r.category === "game");
   const api = manifest.filter(r => r.category === "api");
   const server = manifest.filter(r => r.category === "server");
@@ -340,6 +340,40 @@ function buildKeterangan(target, manifest, smart) {
     lines.push("_Tidak ada sub-klasifikasi (belum ada asset game)._");
   }
   lines.push("");
+
+  // Poin 2 — ringkasan analisis isi file
+  lines.push("## Analisis isi file (Poin 2)");
+  lines.push("");
+  if (analysis && analysis.summary && !analysis.error) {
+    const s = analysis.summary;
+    lines.push("| Temuan | Jumlah |");
+    lines.push("|--------|--------|");
+    lines.push(`| JSON ter-parse | ${s.jsonParsed ?? 0} |`);
+    lines.push(`| Paytable hits | ${s.paytableHits ?? 0} |`);
+    lines.push(`| Symbol terdeteksi | ${s.symbolCount ?? 0} |`);
+    lines.push(`| Feature hits | ${s.featureHits ?? 0} |`);
+    lines.push(`| Bet / lines config | ${s.betConfigs ?? 0} |`);
+    lines.push(`| Atlas / spritesheet | ${s.atlasCount ?? 0} |`);
+    lines.push(`| Spine / skel | ${s.spineCount ?? 0} |`);
+    lines.push(`| Audio sprite map | ${s.audioMapCount ?? 0} |`);
+    lines.push(`| API snapshot | ${s.apiSnapshotCount ?? 0} |`);
+    lines.push("");
+    if (analysis.symbols && analysis.symbols.length) {
+      lines.push("**Contoh symbol:** " + analysis.symbols.slice(0, 30).join(", "));
+      lines.push("");
+    }
+    if (analysis.features && analysis.features.length) {
+      lines.push("**Feature keys:** " + analysis.features.map(f => f.key).slice(0, 20).join(", "));
+      lines.push("");
+    }
+    lines.push("Detail lengkap ada di `analisis.json`.");
+  } else if (analysis && analysis.error) {
+    lines.push("_Analisis gagal: " + analysis.error + "_");
+  } else {
+    lines.push("_Analisis tidak dijalankan._");
+  }
+  lines.push("");
+
   lines.push("## Host / server yang terdeteksi");
   lines.push("");
   for (const [host, info] of [...hosts.entries()].sort((a, b) => b[1].count - a[1].count)) {
@@ -406,6 +440,7 @@ function buildKeterangan(target, manifest, smart) {
       server: server.length
     },
     slotSubCategories: subCounts,
+    analysisSummary: analysis?.summary || null,
     hosts: [...hosts.entries()].map(([host, info]) => ({
       host,
       count: info.count,
@@ -599,6 +634,250 @@ function guessTypeFromUrl(u, ct) {
   if (ct.includes("audio") || ct.includes("video") || /\.(mp3|ogg|wav|mp4|webm)(\?|$)/.test(p)) return "media";
   if (ct.includes("json") || /\.json(\?|$)/.test(p)) return "fetch";
   return "fetch";
+}
+
+/**
+ * Poin 2 — Analisis isi file (JSON / config / atlas / API snapshot)
+ * Membaca konten yang sudah ter-collect, mencari struktur slot.
+ */
+function analyzeGameContent(zipFiles, manifest) {
+  const result = {
+    scannedFiles: 0,
+    parsedJson: 0,
+    paytables: [],
+    symbols: [],
+    features: [],
+    bets: [],
+    atlases: [],
+    spine: [],
+    audioMaps: [],
+    apiSnapshots: [],
+    hints: [],
+    summary: {}
+  };
+
+  const symbolSet = new Set();
+  const featureSet = new Set();
+
+  function tryParseJson(text) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  }
+
+  function walkObject(obj, path, visitor, depth = 0) {
+    if (depth > 8 || obj == null) return;
+    if (Array.isArray(obj)) {
+      obj.forEach((v, i) => walkObject(v, path + "[" + i + "]", visitor, depth + 1));
+      return;
+    }
+    if (typeof obj !== "object") return;
+    for (const [k, v] of Object.entries(obj)) {
+      visitor(k, v, path);
+      if (v && typeof v === "object") walkObject(v, path ? path + "." + k : k, visitor, depth + 1);
+    }
+  }
+
+  function looksLikePaytable(key, value) {
+    const k = String(key).toLowerCase();
+    if (/paytable|pay[_-]?table|payouts?|pays|win[_-]?table/i.test(k)) return true;
+    if (Array.isArray(value) && value.length >= 3) {
+      const sample = value.slice(0, 5);
+      if (sample.every(x => typeof x === "number" || (x && typeof x === "object" && ("pay" in x || "payout" in x || "prize" in x)))) {
+        return /pay|win|prize|award/i.test(k);
+      }
+    }
+    return false;
+  }
+
+  function extractSymbolsFromValue(key, value) {
+    const k = String(key).toLowerCase();
+    if (!/symbol|symbols|symb|icons?|tiles?/i.test(k)) return;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === "string" && item.length < 64) symbolSet.add(item);
+        else if (item && typeof item === "object") {
+          const name = item.name || item.id || item.key || item.symbol || item.code;
+          if (name != null) symbolSet.add(String(name));
+        }
+      }
+    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+      for (const [sk, sv] of Object.entries(value)) {
+        if (typeof sv === "string" || typeof sv === "number") symbolSet.add(String(sk));
+        else if (sv && typeof sv === "object") {
+          const name = sv.name || sv.id || sk;
+          symbolSet.add(String(name));
+        }
+      }
+    }
+  }
+
+  function extractFeatures(key, value) {
+    const k = String(key).toLowerCase();
+    if (/freespin|free[_-]?spin|bonus|scatter|wild|multiplier|cascade|tumble|feature|jackpot/i.test(k)) {
+      featureSet.add(k);
+      if (value && typeof value === "object") {
+        result.features.push({
+          key: k,
+          pathHint: key,
+          sample: Array.isArray(value) ? { type: "array", length: value.length } : { type: "object", keys: Object.keys(value).slice(0, 12) }
+        });
+      } else if (value != null && typeof value !== "object") {
+        result.features.push({ key: k, value: value });
+      }
+    }
+  }
+
+  function extractBets(key, value) {
+    const k = String(key).toLowerCase();
+    if (!/bet|bets|stake|stakes|coin|denom|lines?|ways|level|betlevels?/i.test(k)) return;
+    if (Array.isArray(value) && value.every(x => typeof x === "number")) {
+      result.bets.push({ key: k, values: value.slice(0, 40) });
+    } else if (typeof value === "number") {
+      result.bets.push({ key: k, value });
+    } else if (value && typeof value === "object") {
+      result.bets.push({ key: k, keys: Object.keys(value).slice(0, 20) });
+    }
+  }
+
+  // Scan semua file di ZIP
+  for (const [path, data] of Object.entries(zipFiles)) {
+    if (!data || typeof data === "string") continue;
+    const lower = path.toLowerCase();
+    const isJson = /\.json$/i.test(lower) || lower.includes("/config/") || lower.includes("server/api/");
+    const isAtlas = /\.atlas$/i.test(lower);
+    const isSkel = /\.(skel|spine)$/i.test(lower);
+    const isJs = /\.(js|mjs)$/i.test(lower);
+    if (!isJson && !isAtlas && !isSkel && !isJs) continue;
+    if (data.byteLength > 2_000_000) continue; // skip file sangat besar
+
+    let text = "";
+    try {
+      text = new TextDecoder().decode(data);
+    } catch {
+      continue;
+    }
+    result.scannedFiles++;
+
+    // Spine / atlas file names
+    if (isSkel) {
+      result.spine.push({ path, size: data.byteLength });
+      continue;
+    }
+    if (isAtlas) {
+      result.atlases.push({ path, size: data.byteLength, format: "libgdx-atlas" });
+      // Atlas text often lists texture names
+      const pages = text.split("\n").filter(l => /\.(png|jpg|webp)/i.test(l)).slice(0, 20);
+      if (pages.length) result.atlases[result.atlases.length - 1].textures = pages.map(l => l.trim());
+      continue;
+    }
+
+    // JSON parse
+    if (isJson || text.trimStart().startsWith("{") || text.trimStart().startsWith("[")) {
+      const json = tryParseJson(text);
+      if (!json) continue;
+      result.parsedJson++;
+
+      // TexturePacker / spritesheet JSON
+      if (json.frames && (json.meta || json.textures)) {
+        result.atlases.push({
+          path,
+          format: "texturepacker",
+          frameCount: Object.keys(json.frames).length,
+          meta: json.meta || null
+        });
+      }
+      if (Array.isArray(json.textures) || (json.meta && json.meta.app)) {
+        result.atlases.push({ path, format: "spritesheet-json", size: data.byteLength });
+      }
+
+      // Audio sprite map (howler-style)
+      if (json.sprite && typeof json.sprite === "object" && (json.urls || json.src)) {
+        result.audioMaps.push({
+          path,
+          format: "audio-sprite",
+          keys: Object.keys(json.sprite).slice(0, 50)
+        });
+      }
+
+      // Walk for paytable / symbols / features / bets
+      walkObject(json, "", (key, value) => {
+        if (looksLikePaytable(key, value)) {
+          result.paytables.push({
+            file: path,
+            key,
+            kind: Array.isArray(value) ? "array" : typeof value,
+            preview: Array.isArray(value)
+              ? value.slice(0, 5)
+              : (value && typeof value === "object" ? Object.keys(value).slice(0, 15) : value)
+          });
+        }
+        extractSymbolsFromValue(key, value);
+        extractFeatures(key, value);
+        extractBets(key, value);
+      });
+
+      // API snapshot heuristics (server/api)
+      if (path.startsWith("server/api/") || path.includes("/api/")) {
+        const keys = json && typeof json === "object" && !Array.isArray(json) ? Object.keys(json) : [];
+        const joined = keys.join(",").toLowerCase();
+        let kind = "unknown";
+        if (/balance|credit|wallet|cash/.test(joined)) kind = "balance";
+        if (/spin|reel|result|outcome|winamount|winsymbol|slot/.test(joined)) kind = "spin-result";
+        if (/session|token|auth|login|launch/.test(joined)) kind = "session-auth";
+        if (/error|code|message/.test(joined) && keys.length <= 6) kind = "error-or-status";
+        result.apiSnapshots.push({
+          path,
+          kind,
+          topKeys: keys.slice(0, 20),
+          size: data.byteLength
+        });
+      }
+    }
+
+    // JS: light string scan for known keys (no full parse)
+    if (isJs && text.length < 500_000) {
+      const symMatches = text.match(/["'](?:symbol|symb|wild|scatter|bonus)[_-]?[a-z0-9]*["']/gi);
+      if (symMatches) {
+        for (const m of symMatches.slice(0, 30)) {
+          symbolSet.add(m.replace(/["']/g, ""));
+        }
+      }
+      if (/paytable|payTable|PAYTABLE/i.test(text)) {
+        result.hints.push({ file: path, hint: "paytable-reference-in-js" });
+      }
+      if (/freeSpin|free_spin|FreeSpin|scatter|cascad|tumble/i.test(text)) {
+        result.hints.push({ file: path, hint: "feature-reference-in-js" });
+      }
+    }
+  }
+
+  result.symbols = [...symbolSet].slice(0, 200);
+  // dedupe features by key
+  const featKeys = new Set();
+  result.features = result.features.filter(f => {
+    const k = f.key || "";
+    if (featKeys.has(k)) return false;
+    featKeys.add(k);
+    return true;
+  }).slice(0, 50);
+
+  result.summary = {
+    jsonParsed: result.parsedJson,
+    paytableHits: result.paytables.length,
+    symbolCount: result.symbols.length,
+    featureHits: result.features.length,
+    betConfigs: result.bets.length,
+    atlasCount: result.atlases.length,
+    spineCount: result.spine.length,
+    audioMapCount: result.audioMaps.length,
+    apiSnapshotCount: result.apiSnapshots.length,
+    note: "Hasil heuristik dari isi file yang ter-collect. Bukan reverse-engineer server."
+  };
+
+  return result;
 }
 
 async function fillMissingAssets(zipFiles, manifest, seen, targetHref, id, env) {
@@ -1132,8 +1411,16 @@ export default {
       // Smart offline packaging: path rewrite + frame-buster neutralize
       const smart = smartPackage(zipFiles, manifest);
 
+      // Poin 2: analisis isi JSON/config/atlas/API snapshot
+      let analysis = null;
+      try {
+        analysis = analyzeGameContent(zipFiles, manifest);
+      } catch (e) {
+        analysis = { error: String(e.message || e), summary: {} };
+      }
+
       // Keterangan + pemisahan game vs API/server
-      const ket = buildKeterangan(target.href, manifest, smart);
+      const ket = buildKeterangan(target.href, manifest, smart, analysis);
       const gameCount = manifest.filter(r => r.category === "game").length;
       const apiCount = manifest.filter(r => r.category === "api").length;
       const serverCount = manifest.filter(r => r.category === "server").length;
@@ -1145,12 +1432,14 @@ export default {
         totals: { game: gameCount, api: apiCount, server: serverCount },
         smartRewrite: smart,
         autoFill: fillReport,
-        note: "Asset game di assets/. API/server di server/ (terpisah). Lihat KETERANGAN.md.",
+        analysisSummary: analysis?.summary || null,
+        note: "Asset game di assets/ (sub-folder slot). API/server di server/. Lihat KETERANGAN.md + analisis.json.",
         resources: manifest
       };
       zipFiles["manifest.json"] = strToU8(JSON.stringify(manifestData, null, 2));
       zipFiles["keterangan.json"] = strToU8(JSON.stringify(ket.json, null, 2));
       zipFiles["KETERANGAN.md"] = strToU8(ket.md);
+      zipFiles["analisis.json"] = strToU8(JSON.stringify(analysis, null, 2));
       zipFiles["kelengkapan.json"] = strToU8(JSON.stringify({
         autoFill: fillReport,
         summary: {
@@ -1169,15 +1458,16 @@ Target: ${target.href}
 Tanggal: ${new Date().toISOString()}
 Total: ${manifest.length} file (game: ${gameCount} · api: ${apiCount} · server: ${serverCount})
 Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
+Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis?.summary?.symbolCount ?? 0} · features=${analysis?.summary?.featureHits ?? 0} · atlas=${analysis?.summary?.atlasCount ?? 0}
 
 ## Pemisahan otomatis
-- \`assets/\` — asset game (HTML/JS/CSS/gambar/audio)
+- \`assets/\` — asset game (symbols, reels, ui, audio, config, ...)
 - \`server/api/\` — snapshot response API (terpisah dari game)
-- \`KETERANGAN.md\` — deskripsi host, endpoint, kategori
-- \`keterangan.json\` — ringkasan mesin
+- \`analisis.json\` — hasil parsing paytable / symbol / feature / atlas (Poin 2)
+- \`KETERANGAN.md\` — deskripsi host, endpoint, kategori + sub-folder
 
 ## Cara pakai
-1. Baca **KETERANGAN.md** dulu
+1. Baca **KETERANGAN.md** dan **analisis.json** dulu
 2. Extract ZIP → \`npx serve .\` atau load di Workspace Game Collector Pro
 3. Preview / Auto Repair / Online Hybrid
 
