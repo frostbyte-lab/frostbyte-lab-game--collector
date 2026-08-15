@@ -337,59 +337,52 @@
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ url })
         });
-        const data = await res.json();
 
-        if (res.status === 429 || data.error === 'LIMIT_BROWSER') {
-          statusEl.className = 'warn';
-          statusEl.textContent = '⚠ LIMIT BROWSER TERCAPAI\n\n' +
-            (data.message || 'Limit 10 menit/hari Cloudflare Free sudah habis.') +
-            '\n\nSolusi: pakai GitHub Actions (gratis tanpa limit)\n→ repo → tab Actions → Run workflow';
-          addHistory({ url, status: 'limit', message: data.message });
-          return;
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+
+        // Error JSON (limit / gagal)
+        if (!res.ok || ct.includes('application/json')) {
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 429 || data.error === 'LIMIT_BROWSER') {
+            statusEl.className = 'warn';
+            statusEl.textContent = '⚠ LIMIT BROWSER TERCAPAI\n\n' +
+              (data.message || 'Limit 10 menit/hari Cloudflare Free sudah habis.') +
+              '\n\nSolusi: klik **Collect via GitHub** (tanpa limit itu).';
+            addHistory({ url, status: 'limit', message: data.message });
+            return;
+          }
+          throw new Error(data.error || data.message || 'Gagal capture');
         }
-        if (!res.ok) throw new Error(data.error || data.message || 'Gagal');
+
+        // Sukses: response = file ZIP binary (mendukung file besar, tanpa base64/R2)
+        const blob = await res.blob();
+        const id = res.headers.get('X-GC-Id') || String(Date.now());
+        const files = res.headers.get('X-GC-Files') || '?';
+        const zipSize = parseInt(res.headers.get('X-GC-Zip-Size') || blob.size, 10);
+        const msg = res.headers.get('X-GC-Message') || 'Capture berhasil';
+        const sizeKB = Math.round(zipSize / 1024);
+        const name = `game-package-${id}.zip`;
+
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+
+        window.__gc_lastZipBlob = blob;
+        window.__gc_lastZipName = name;
 
         statusEl.className = 'ok';
-        const sizeKB = Math.round((data.zipSize || 0) / 1024);
-        let extra = '';
+        statusEl.textContent = `✓ BERHASIL\n\nID: ${id}\nFile: ${files}\nZIP: ${sizeKB} KB\n\n${msg}\n\n✓ ZIP otomatis di-download (binary, mendukung file besar).\nKlik tombol di bawah untuk Preview offline.`;
 
-        // Auto-download ZIP jika server mengirim base64
-        if (data.zipBase64) {
-          try {
-            const bin = atob(data.zipBase64);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-            const blob = new Blob([bytes], { type: 'application/zip' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `game-package-${data.id || Date.now()}.zip`;
-            a.click();
-            // Simpan untuk Workspace (tanpa upload ulang)
-            window.__gc_lastZipBlob = blob;
-            window.__gc_lastZipName = a.download;
-            extra = '\n\n✓ ZIP otomatis di-download.\nKlik "Buka di Workspace" untuk preview offline.';
-          } catch (e) {
-            extra = '\n\nZIP tersedia tapi gagal auto-download: ' + e.message;
-          }
-        } else {
-          extra = '\n\nZIP terlalu besar untuk inline. Pakai GitHub Actions artifact atau R2.';
-        }
+        const btn = document.createElement('button');
+        btn.className = 'btn-success';
+        btn.style.marginTop = '12px';
+        btn.textContent = '▶ Buka di Workspace (Offline)';
+        btn.onclick = () => openLastZipInWorkspace();
+        statusEl.appendChild(document.createElement('br'));
+        statusEl.appendChild(btn);
 
-        statusEl.innerHTML = '';
-        statusEl.textContent = `✓ BERHASIL\n\nID: ${data.id}\nFile: ${data.files}\nZIP: ${sizeKB} KB\n\n${data.message || ''}${extra}`;
-
-        // Tombol buka Workspace
-        if (window.__gc_lastZipBlob) {
-          const btn = document.createElement('button');
-          btn.className = 'btn-success';
-          btn.style.marginTop = '12px';
-          btn.textContent = '▶ Buka di Workspace (Offline)';
-          btn.onclick = () => openLastZipInWorkspace();
-          statusEl.appendChild(document.createElement('br'));
-          statusEl.appendChild(btn);
-        }
-
-        addHistory({ url, status: 'ok', id: data.id, files: data.files, zipSize: data.zipSize });
+        addHistory({ url, status: 'ok', id, files, zipSize });
       } catch (err) {
         statusEl.className = 'error';
         statusEl.textContent = 'Error: ' + err.message;

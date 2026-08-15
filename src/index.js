@@ -423,39 +423,33 @@ Smart rewrite: ${smart.rewritten} file · frame-buster dinetralisir: ${smart.neu
 
       // Buat ZIP
       const zipData = zipSync(zipFiles, { level: 6 });
-      const zipKey = `${id}/game-resources.zip`;
+      const zipKey = `${id}/game-package.zip`;
 
+      // Simpan ke R2 jika bucket sudah di-bind (opsional)
       if (env.COLLECTOR_BUCKET) {
         await env.COLLECTOR_BUCKET.put(zipKey, zipData, {
           httpMetadata: {
             contentType: "application/zip",
-            contentDisposition: `attachment; filename="game-package.zip"`
+            contentDisposition: `attachment; filename="game-package-${id}.zip"`
           }
         });
       }
 
-      // Kirim ZIP ke client jika masih masuk akal (≤ 12 MB) agar bisa download langsung + buka Workspace
-      const MAX_INLINE = 12 * 1024 * 1024;
-      let zipBase64 = null;
-      if (zipData.byteLength <= MAX_INLINE) {
-        let binary = "";
-        const chunk = 0x8000;
-        for (let i = 0; i < zipData.length; i += chunk) {
-          binary += String.fromCharCode.apply(null, zipData.subarray(i, i + chunk));
+      // Selalu kirim ZIP sebagai binary (bukan base64) — mendukung file besar tanpa R2
+      // Metadata lewat header supaya frontend tetap bisa menampilkan status
+      return new Response(zipData, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="game-package-${id}.zip"`,
+          "X-GC-Ok": "1",
+          "X-GC-Id": id,
+          "X-GC-Files": String(manifest.length),
+          "X-GC-Zip-Size": String(zipData.byteLength),
+          "X-GC-Smart-Rewritten": String(smart.rewritten || 0),
+          "X-GC-Smart-Neutralized": String(smart.neutralized || 0),
+          "X-GC-Message": `Capture berhasil. ZIP ${Math.round(zipData.byteLength / 1024)} KB · ${manifest.length} file.`
         }
-        zipBase64 = btoa(binary);
-      }
-
-      return Response.json({
-        ok: true,
-        id,
-        files: manifest.length,
-        zipSize: zipData.byteLength,
-        smartRewrite: smart,
-        zipBase64,
-        message: zipBase64
-          ? `Capture berhasil. ZIP siap di-download & bisa langsung dibuka di Workspace (offline).`
-          : `Capture berhasil (ZIP besar ${Math.round(zipData.byteLength/1024/1024)} MB). Download via R2/GitHub Actions, lalu load di Workspace.`
       });
 
     } catch (e) {
