@@ -14,7 +14,168 @@ function safe(s) {
   return String(s).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "file";
 }
 
-function folderOf(type, category) {
+/**
+ * Klasifikasi sub-folder khusus slot / game asset (Poin 1).
+ * Mengembalikan nama subfolder di bawah assets/ berdasarkan
+ * path, nama file, ekstensi, dan tipe resource.
+ */
+function classifySlotSubfolder(url, type, contentType = "") {
+  const u = String(url || "").toLowerCase();
+  let pathname = "";
+  let filename = "";
+  try {
+    const parsed = new URL(url);
+    pathname = parsed.pathname.toLowerCase();
+    filename = (pathname.split("/").pop() || "").split("?")[0];
+  } catch {
+    filename = u.split("/").pop() || "";
+  }
+  const ct = (contentType || "").toLowerCase();
+
+  // --- Config / data definitions ---
+  if (
+    /paytable|pay[_-]?table|payout/i.test(u) ||
+    /paytable|pay[_-]?table/.test(filename)
+  ) {
+    return { sub: "config/paytable", reason: "paytable" };
+  }
+  if (
+    /\/(config|configs|settings|data)\//i.test(pathname) &&
+    (/\.json($|\?)/i.test(pathname) || ct.includes("json"))
+  ) {
+    if (/symbol/i.test(u)) return { sub: "config/symbols", reason: "symbol-config" };
+    if (/feature|bonus|freespin|free[_-]?spin|scatter|wild/i.test(u)) {
+      return { sub: "config/features", reason: "feature-config" };
+    }
+    return { sub: "config", reason: "config-json" };
+  }
+  if (/\.(json|xml)($|\?)/i.test(pathname) && /symbol|reel|pay|feature|bet|line|ways/i.test(filename)) {
+    if (/symbol/i.test(filename)) return { sub: "config/symbols", reason: "symbol-json" };
+    if (/pay/i.test(filename)) return { sub: "config/paytable", reason: "pay-json" };
+    if (/feature|bonus|free/i.test(filename)) return { sub: "config/features", reason: "feature-json" };
+    return { sub: "config", reason: "game-data-json" };
+  }
+
+  // --- Atlas / Spine / skeletal ---
+  if (/\.(atlas|skel|spine)($|\?)/i.test(pathname) || /spine|skeleton|skeletal/i.test(u)) {
+    return { sub: "atlases", reason: "spine-atlas" };
+  }
+  if (/atlas|spritesheet|sprite[_-]?sheet|textureatlas|texture[_-]?atlas/i.test(u)) {
+    return { sub: "atlases", reason: "spritesheet-atlas" };
+  }
+
+  // --- Symbols ---
+  if (
+    /\/symbols?\//i.test(pathname) ||
+    /\b(symbol|symbols|symb)[_-]?\d*/i.test(filename) ||
+    /\b(wild|scatter|bonus|jackpot|mystery)[_-]?(symbol|sym|icon)?/i.test(filename) ||
+    /\b(high|low|mid)[_-]?(symbol|sym|icon)/i.test(filename)
+  ) {
+    return { sub: "symbols", reason: "symbol-path-or-name" };
+  }
+
+  // --- Reels ---
+  if (
+    /\/reels?\//i.test(pathname) ||
+    /\b(reel|reels|strip|reelstrip|reel[_-]?strip)[_-]?\d*/i.test(filename) ||
+    /\breel[_-]?(bg|background|frame|mask)/i.test(filename)
+  ) {
+    return { sub: "reels", reason: "reel-path-or-name" };
+  }
+
+  // --- Backgrounds ---
+  if (
+    /\/(bg|backgrounds?|backdrops?)\//i.test(pathname) ||
+    /\b(bg|background|backdrop|scene[_-]?bg)[_-]?\w*/i.test(filename)
+  ) {
+    return { sub: "backgrounds", reason: "background" };
+  }
+
+  // --- UI ---
+  if (
+    /\/(ui|hud|interface|buttons?|controls?)\//i.test(pathname) ||
+    /\b(btn|button|ui|hud|panel|popup|modal|spinner|loader|progress|meter|bar)[_-]?\w*/i.test(filename) ||
+    /\b(spin[_-]?btn|auto[_-]?spin|max[_-]?bet|paytable[_-]?btn)/i.test(filename)
+  ) {
+    return { sub: "ui", reason: "ui-element" };
+  }
+
+  // --- Particles / effects ---
+  if (
+    /\/(particles?|effects?|fx|vfx)\//i.test(pathname) ||
+    /\b(particle|emitter|spark|glow|flash|burst|fx|vfx)[_-]?\w*/i.test(filename)
+  ) {
+    return { sub: "particles", reason: "particle-fx" };
+  }
+
+  // --- Animations ---
+  if (
+    /\/(anims?|animations?|anim)\//i.test(pathname) ||
+    /\b(anim|animation|win[_-]?anim|land(ing)?|transition|intro|outro)[_-]?\w*/i.test(filename) ||
+    /\.(mp4|webm)($|\?)/i.test(pathname)
+  ) {
+    return { sub: "animations", reason: "animation" };
+  }
+
+  // --- Audio (lebih spesifik) ---
+  if (type === "media" || /\.(mp3|ogg|wav|m4a|aac)($|\?)/i.test(pathname) || ct.startsWith("audio/")) {
+    if (/\b(bgm|music|theme|ambient|loop)[_-]?\w*/i.test(filename)) {
+      return { sub: "audio/bgm", reason: "bgm" };
+    }
+    if (/\b(spin|reel[_-]?stop|stop|click|ui[_-]?click|button)[_-]?\w*/i.test(filename)) {
+      return { sub: "audio/sfx", reason: "sfx-ui-or-spin" };
+    }
+    if (/\b(win|big[_-]?win|mega|bonus|free[_-]?spin|scatter|feature)[_-]?\w*/i.test(filename)) {
+      return { sub: "audio/win", reason: "win-or-feature" };
+    }
+    return { sub: "audio", reason: "audio-general" };
+  }
+
+  // --- Fonts ---
+  if (type === "font" || /\.(woff2?|ttf|otf|eot)($|\?)/i.test(pathname) || ct.includes("font")) {
+    return { sub: "fonts", reason: "font" };
+  }
+
+  // --- Scripts ---
+  if (type === "script" || /\.(js|mjs)($|\?)/i.test(pathname)) {
+    if (/engine|phaser|pixi|unity|main|bundle|app|game/i.test(filename)) {
+      return { sub: "js/engine", reason: "engine-or-main" };
+    }
+    if (/reel|symbol|paytable|feature|bonus|spin|slot/i.test(filename)) {
+      return { sub: "js/logic", reason: "game-logic" };
+    }
+    return { sub: "js", reason: "script" };
+  }
+
+  // --- Styles ---
+  if (type === "stylesheet" || /\.css($|\?)/i.test(pathname)) {
+    return { sub: "css", reason: "stylesheet" };
+  }
+
+  // --- HTML ---
+  if (type === "document" || /\.html?($|\?)/i.test(pathname)) {
+    return { sub: "html", reason: "document" };
+  }
+
+  // --- Images fallback ---
+  if (type === "image" || /\.(png|jpe?g|gif|webp|svg|ico)($|\?)/i.test(pathname)) {
+    return { sub: "images", reason: "image-general" };
+  }
+
+  // --- Data / XHR body yang dianggap game data ---
+  if (type === "xhr" || type === "fetch") {
+    return { sub: "data", reason: "data-xhr" };
+  }
+
+  return { sub: "other", reason: "unclassified" };
+}
+
+/**
+ * Tentukan folder ZIP final.
+ * category: game | api | server
+ * sub: hasil classifySlotSubfolder (hanya dipakai untuk game)
+ */
+function folderOf(type, category, sub = null) {
   if (category === "api" || category === "server") {
     return ({
       document: "server/html",
@@ -27,6 +188,13 @@ function folderOf(type, category) {
       fetch: "server/api"
     })[type] || "server/other";
   }
+
+  // Game assets — pakai sub-folder slot jika ada
+  if (sub && typeof sub === "string" && sub.length > 0) {
+    return "assets/" + sub;
+  }
+
+  // Fallback lama (kompatibel)
   return ({
     document: "assets/html",
     script: "assets/js",
@@ -115,6 +283,14 @@ function buildKeterangan(target, manifest, smart) {
   const api = manifest.filter(r => r.category === "api");
   const server = manifest.filter(r => r.category === "server");
 
+  // Hitung sub-kategori slot (Poin 1)
+  const subCounts = {};
+  for (const r of game) {
+    const sub = r.subCategory || "other";
+    subCounts[sub] = (subCounts[sub] || 0) + 1;
+  }
+  const subSorted = Object.entries(subCounts).sort((a, b) => b[1] - a[1]);
+
   const hosts = new Map();
   for (const r of manifest) {
     try {
@@ -152,6 +328,18 @@ function buildKeterangan(target, manifest, smart) {
   lines.push(`| API (response XHR/fetch) | ${api.length} | \`server/api/\` |`);
   lines.push(`| Server / config | ${server.length} | \`server/\` |`);
   lines.push("");
+  lines.push("## Sub-klasifikasi asset slot (Poin 1)");
+  lines.push("");
+  if (subSorted.length) {
+    lines.push("| Sub-folder | Jumlah |");
+    lines.push("|------------|--------|");
+    for (const [sub, n] of subSorted) {
+      lines.push(`| \`assets/${sub}/\` | ${n} |`);
+    }
+  } else {
+    lines.push("_Tidak ada sub-klasifikasi (belum ada asset game)._");
+  }
+  lines.push("");
   lines.push("## Host / server yang terdeteksi");
   lines.push("");
   for (const [host, info] of [...hosts.entries()].sort((a, b) => b[1].count - a[1].count)) {
@@ -179,14 +367,24 @@ function buildKeterangan(target, manifest, smart) {
   lines.push("## Struktur ZIP");
   lines.push("");
   lines.push("```");
-  lines.push("index.html          # HTML utama game");
-  lines.push("assets/             # Asset game (js, css, gambar, audio, font)");
+  lines.push("index.html");
+  lines.push("assets/");
+  lines.push("  symbols/          # Symbol / icon slot");
+  lines.push("  reels/            # Reel graphics");
+  lines.push("  ui/               # Tombol, panel, HUD");
+  lines.push("  backgrounds/      # Background scene");
+  lines.push("  animations/       # Win anim, transition, video");
+  lines.push("  particles/        # FX / particle");
+  lines.push("  atlases/          # Sprite atlas / Spine");
+  lines.push("  audio/            # BGM, SFX, win sounds");
+  lines.push("  config/           # Paytable, symbol def, features");
+  lines.push("  js/               # Engine + game logic");
+  lines.push("  css/ fonts/ images/ html/ data/ other/");
   lines.push("server/");
-  lines.push("  api/              # Snapshot response API (terpisah dari game)");
-  lines.push("  ...               # Config / script server-related");
-  lines.push("manifest.json       # Daftar resource + kategori");
-  lines.push("keterangan.json     # Ringkasan machine-readable");
-  lines.push("KETERANGAN.md       # File ini");
+  lines.push("  api/              # Snapshot response API");
+  lines.push("manifest.json");
+  lines.push("keterangan.json");
+  lines.push("KETERANGAN.md");
   lines.push("README.md");
   lines.push("```");
   lines.push("");
@@ -207,6 +405,7 @@ function buildKeterangan(target, manifest, smart) {
       api: api.length,
       server: server.length
     },
+    slotSubCategories: subCounts,
     hosts: [...hosts.entries()].map(([host, info]) => ({
       host,
       count: info.count,
@@ -216,11 +415,17 @@ function buildKeterangan(target, manifest, smart) {
     apiEndpoints,
     folders: {
       game: "assets/",
+      slotSub: [
+        "assets/symbols/", "assets/reels/", "assets/ui/", "assets/backgrounds/",
+        "assets/animations/", "assets/particles/", "assets/atlases/",
+        "assets/audio/", "assets/config/", "assets/js/", "assets/css/",
+        "assets/fonts/", "assets/images/", "assets/html/", "assets/data/", "assets/other/"
+      ],
       api: "server/api/",
       server: "server/",
       docs: ["KETERANGAN.md", "keterangan.json", "manifest.json", "README.md"]
     },
-    note: "API/server dipisah otomatis dari asset game. Snapshot saja, bukan backend live."
+    note: "Asset game diklasifikasi ke sub-folder slot (symbols, reels, ui, dll). API/server = snapshot saja."
   };
 
   return { md: lines.join("\n"), json: keteranganJson };
@@ -442,7 +647,10 @@ async function fillMissingAssets(zipFiles, manifest, seen, targetHref, id, env) 
         else if (ct.includes("json")) name += ".json";
       }
       const classified = classifyResource(u, type, ct, "");
-      const folder = folderOf(type, classified.category);
+      const slot = classified.category === "game"
+        ? classifySlotSubfolder(u, type, ct)
+        : { sub: null, reason: "" };
+      const folder = folderOf(type, classified.category, slot.sub);
       const localPath = `${folder}/${String(manifest.length + 1).padStart(4, "0")}-fill-${name}`;
       zipFiles[localPath] = buffer;
       seen.add(u);
@@ -454,7 +662,8 @@ async function fillMissingAssets(zipFiles, manifest, seen, targetHref, id, env) 
         size: buffer.byteLength,
         contentType: ct,
         category: classified.category,
-        classifyReason: classified.reason + "+auto-fill",
+        subCategory: slot.sub || null,
+        classifyReason: classified.reason + (slot.reason ? "+" + slot.reason : "") + "+auto-fill",
         autoFilled: true
       });
       report.fetched++;
@@ -806,7 +1015,10 @@ export default {
           } catch {}
 
           const classified = classifyResource(u, type, ct, bodyPeek);
-          const folder = folderOf(type, classified.category);
+          const slot = classified.category === "game"
+            ? classifySlotSubfolder(u, type, ct)
+            : { sub: null, reason: "" };
+          const folder = folderOf(type, classified.category, slot.sub);
           const localPath = `${folder}/${String(manifest.length + 1).padStart(4, "0")}-${name}`;
           const r2Key = `${id}/${localPath}`;
 
@@ -825,7 +1037,8 @@ export default {
             size: buffer.byteLength,
             contentType: ct,
             category: classified.category,
-            classifyReason: classified.reason
+            subCategory: slot.sub || null,
+            classifyReason: classified.reason + (slot.reason ? "+" + slot.reason : "")
           });
         } catch {}
       });
