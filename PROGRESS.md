@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-15 (P3+P4 fitur + paytable)
+Update terakhir: 2026-08-15 (auto-failover GitHub tanpa R2)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -27,6 +27,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | P2 | Dependency Analyzer + Path Resolver | ✅ | `dependency.json` + skor dependencies + missing graph |
 | P3 | Deteksi fitur game lebih dalam | ✅ | FreeSpin, Bonus, Cascade, Wild, Scatter, Multiplier, Jackpot, Respin, Gamble, BuyFeature |
 | P4 | Paytable lebih akurat | ✅ | structured map/array + symbol refs + skor kualitas |
+| P9alt | ZIP besar tanpa R2 → GitHub | ✅ | Auto-failover TOO_LARGE / LIMIT_BROWSER → Actions artifact |
 | KV | Namespace `gc-history` | ✅ | ID `3869a97c9eaf49129a666476fcb672e8` |
 | Deploy | Worker live + binding | ✅ | MYBROWSER, GC_HISTORY, GITHUB_TOKEN |
 
@@ -104,4 +105,12 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - Scan JSON keys + JS text references
 - Paytable: detect symbol→pays map, array of {symbol,pay}, structured score
 - UI: tampil type counts + paytable key/kind/symbols
+
+
+
+## Catatan teknis Auto-failover GitHub (tanpa R2)
+
+- Capture Worker gagal `TOO_LARGE` (413) atau `LIMIT_BROWSER` (429) → UI auto panggil `runGitHubCollect({ auto: true })`
+- Tidak perlu R2; artifact Actions jadi jalur paket besar
+- User tetap bisa klik manual **Collect via GitHub**
 
