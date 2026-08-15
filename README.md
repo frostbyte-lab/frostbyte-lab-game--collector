@@ -22,7 +22,7 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 | 2.1 | **Service Worker asset di Preview** | ⚠️ PWA SW dasar ada | Perluas `sw.js` untuk cache blob/asset map saat preview, bukan hanya shell app. |
 | 2.2 | **Proxy asset same-origin** | ❌ Belum | Endpoint Worker `/api/asset-proxy` atau serve dari R2 agar path/cookie lebih stabil daripada murni `blob:`. |
 | 2.3 | **Auto-fill lebih dalam** | ⚠️ Max 40 file | Naikkan limit bertahap, multi-pass (scan lagi setelah fill), ikut URL dari source map / CSS nested. Kode: `fillMissingAssets()` di `src/index.js`. |
-| 2.4 | **Engine-specific repair** | ❌ Belum | Deteksi Phaser / Unity WebGL / Pixi / Construct → template path + loader fix khusus di Auto Repair Deep. |
+| 2.4 | **Engine-specific repair** | ⚠️ Deteksi engine ada; auto-repair khusus belum | Deteksi Phaser / Unity WebGL / Pixi / Construct → template path + loader fix khusus di Auto Repair Deep. |
 
 ### Prioritas 3 — Polish & skala
 | No | Item | Status | Catatan untuk langkah berikutnya |
@@ -51,6 +51,12 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 - [x] **Auto-lengkapi** referensi yang belum terunduh (`fillMissingAssets`, max 40) + `kelengkapan.json`
 - [x] Header meta: `X-GC-Game-Files`, `X-GC-Api-Files`, `X-GC-Fill-Ok`, dll.
 - [x] ZIP binary langsung (tanpa R2); R2 opsional jika bucket di-bind
+
+### Analisis slot (A.1–A.3)
+- [x] **Skor kelengkapan per kategori** di `kelengkapan.json` + panel UI: Symbols, Paytable, Audio events, Atlas/Spine, Features, Engine (0–100 + overall)
+- [x] **Mapping audio event** heuristik: BGM / Spin / ReelStop / Win / Bonus / UI / Other (dari nama file + path)
+- [x] **Deteksi atlas/Spine lebih dalam**: parse region LibGDX atlas, Spine JSON (animations, skins, attachments, bones)
+- [x] Output `analisis.json` + ringkasan di `kelengkapan.json` categories
 
 ### Workspace / Preview
 - [x] Load ZIP (JSZip), file list, terminal log
