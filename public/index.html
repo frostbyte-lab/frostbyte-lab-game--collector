@@ -376,7 +376,7 @@
           <li>Halaman di-load, di-scroll, resource yang muncul dicatat (HTML, JS, CSS, gambar, audio, font, data).</li>
           <li>Path diubah ke lokal, frame-buster dinetralisir, bootstrap offline disisipkan.</li>
           <li>Semua dikemas jadi <code>ZIP</code> siap offline.</li>
-          <li><b>Workspace</b> — load ZIP, lalu <b>Preview</b> (Sandbox / Protected / Isolated Window).</li>
+          <li><b>Workspace</b> — load ZIP, lalu <b>Preview</b> (Sandbox / Protected / Hybrid / <b>SW Proxy</b> / Window).</li>
           <li>Game jalan di browser kamu <b>tanpa server</b> dan <b>tanpa API game asli</b>.</li>
         </ol>
         <p style="margin-top:10px"><b>Dua jalur Collect (tanpa R2):</b></p>
@@ -463,6 +463,7 @@
           <button class="btn-secondary" onclick="startPreview('protected')">🛡 Protected</button>
           <button class="btn-primary" onclick="startPreview('online')">🌐 Hybrid</button>
           <button class="btn-secondary" onclick="startPreview('window')">⧉ Window</button>
+          <button class="btn-primary" onclick="startPreview('sw')">⚡ SW Proxy</button>
           <button class="btn-secondary" onclick="stopPreview()">Stop</button>
           <span id="preview-status" class="badge badge-ok">Ready</span>
         </div>
@@ -1172,6 +1173,9 @@ async function downloadGitHubArtifact(artifactId, runId) {
         const hasIndex = paths.some(p => /index\.html?$/i.test(p.split('/').pop()));
         document.getElementById('file-list').innerHTML = paths.map(p => `<div>${esc(p)}</div>`).join('') || '<div>—</div>';
         document.getElementById('preview-toolbar').classList.add('active');
+
+        // Cache ZIP ke SW (background) untuk mode SW Proxy
+        pushZipToSW(true).catch(() => {});
         document.getElementById('btn-repair').disabled = false;
         document.getElementById('btn-repack').disabled = false;
         document.getElementById('btn-ai').disabled = false;
@@ -1390,6 +1394,143 @@ async function downloadGitHubArtifact(artifactId, runId) {
       return map[ext] || 'application/octet-stream';
     }
 
+    let swReady = false;
+    let swZipPushed = false;
+
+    function postToSW(msg) {
+      return new Promise((resolve) => {
+        if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+          resolve({ ok: false, error: 'no-controller' });
+          return;
+        }
+        const ch = new MessageChannel();
+        ch.port1.onmessage = (ev) => resolve(ev.data || { ok: false });
+        navigator.serviceWorker.controller.postMessage(msg, [ch.port2]);
+        setTimeout(() => resolve({ ok: false, error: 'timeout' }), 60000);
+      });
+    }
+
+    async function pushZipToSW(clear = true) {
+      if (!zipFS || !navigator.serviceWorker) return { ok: false, error: 'no-sw' };
+      // Wait for controller
+      if (!navigator.serviceWorker.controller) {
+        await navigator.serviceWorker.ready;
+        if (!navigator.serviceWorker.controller) {
+          // force claim by reload once is too heavy; just fail soft
+          return { ok: false, error: 'no-controller' };
+        }
+      }
+      const assets = [];
+      const entries = Object.entries(zipFS);
+      // Cap payload size batches
+      const BATCH = 40;
+      let total = 0;
+      if (clear) {
+        await postToSW({ type: 'CLEAR_ZIP' });
+      }
+      for (let i = 0; i < entries.length; i += BATCH) {
+        const slice = entries.slice(i, i + BATCH);
+        const batch = [];
+        for (const [path, data] of slice) {
+          try {
+            const buf = data.buffer ? data.slice(0) : new Uint8Array(data);
+            batch.push({
+              path,
+              mime: mimeOf(path),
+              buffer: buf
+            });
+          } catch {}
+        }
+        // Transferable
+        const transfer = batch.map(b => b.buffer.buffer ? b.buffer.buffer : b.buffer);
+        const res = await new Promise((resolve) => {
+          const ch = new MessageChannel();
+          ch.port1.onmessage = (ev) => resolve(ev.data || {});
+          navigator.serviceWorker.controller.postMessage(
+            { type: 'PUT_ZIP_ASSETS', clear: false, assets: batch },
+            [ch.port2].concat(transfer.filter(x => x instanceof ArrayBuffer))
+          );
+          setTimeout(() => resolve({ ok: false, error: 'timeout' }), 60000);
+        });
+        if (res && res.count) total += res.count;
+        else if (res && res.ok === false) log('SW put batch fail: ' + (res.error || ''));
+      }
+      swZipPushed = total > 0;
+      log('SW ZIP cache: ' + total + ' assets');
+      return { ok: total > 0, count: total };
+    }
+
+    async function prepareSwHtml(mode) {
+      const idx = findIndexHtml();
+      if (!idx) throw new Error('index.html tidak ditemukan di ZIP');
+      const pushed = await pushZipToSW(true);
+      if (!pushed.ok) throw new Error('Gagal push asset ke Service Worker (' + (pushed.error || 'empty') + ')');
+
+      let raw = new TextDecoder().decode(zipFS[idx]);
+      // base href to /__gc__/ folder of index
+      const baseDir = idx.includes('/') ? idx.replace(/\/[^/]+$/, '/') : '';
+      const baseHref = '/__gc__/' + baseDir;
+      if (!/<base\s/i.test(raw)) {
+        if (/<head[\s>]/i.test(raw)) {
+          raw = raw.replace(/<head([^>]*)>/i, '<head$1><base href="' + baseHref + '">');
+        } else {
+          raw = '<base href="' + baseHref + '">' + raw;
+        }
+      } else {
+        raw = raw.replace(/<base[^>]*>/i, '<base href="' + baseHref + '">');
+      }
+
+      // Rewrite absolute same-host and relative to /__gc__/
+      raw = raw.replace(/\b(src|href|data-src)\s*=\s*(['"])(?!https?:|\/\/|data:|blob:|javascript:|#)([^'"]+)\2/gi, (m, attr, q, val) => {
+        if (val.startsWith('/__gc__/')) return m;
+        const clean = val.replace(/^\.\//, '');
+        return attr + '=' + q + '/__gc__/' + (baseDir + clean).replace(/\/+/g, '/').replace(/^\//, '') + q;
+      });
+
+      // Inject offline + path helper
+      const boot = `<script data-gc-sw="1">
+(function(){
+  window.__gc_sw_proxy = 1;
+  window.__gc_offline = 1;
+  try{Object.defineProperty(window,'top',{get:function(){return window}});}catch(e){}
+  try{Object.defineProperty(window,'parent',{get:function(){return window}});}catch(e){}
+  var BASE = ${JSON.stringify('/__gc__/' + baseDir)};
+  var _f = window.fetch;
+  window.fetch = function(u, i) {
+    try {
+      var s = typeof u === 'string' ? u : (u && u.url) || '';
+      if (/^https?:\\/\\//i.test(s) && s.indexOf(location.origin) !== 0) {
+        console.warn('[GC-SW] blocked external', s);
+        return Promise.reject(new Error('offline'));
+      }
+      if (typeof u === 'string' && u && !/^https?:|data:|blob:|\\/__gc__/i.test(u)) {
+        u = BASE + u.replace(/^\\.\\//,'');
+      }
+    } catch(e){}
+    return _f.call(this, u, i);
+  };
+})();
+<\/script>`;
+      if (/<head[\s>]/i.test(raw)) raw = raw.replace(/<head([^>]*)>/i, '<head$1>' + boot);
+      else raw = boot + raw;
+
+      // Put rewritten index into SW cache as well
+      const indexPath = idx;
+      const enc = new TextEncoder().encode(raw);
+      await new Promise((resolve) => {
+        const ch = new MessageChannel();
+        ch.port1.onmessage = () => resolve();
+        navigator.serviceWorker.controller.postMessage({
+          type: 'PUT_ZIP_ASSETS',
+          clear: false,
+          assets: [{ path: indexPath, mime: 'text/html', buffer: enc }]
+        }, [ch.port2, enc.buffer]);
+        setTimeout(resolve, 5000);
+      });
+
+      return '/__gc__/' + indexPath;
+    }
+
     function buildVirtualFS() {
       const urls = {};
       for (const [path, data] of Object.entries(zipFS)) {
@@ -1546,8 +1687,14 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
         statusBadge.textContent = 'Loading...';
         statusBadge.className = 'badge badge-warn';
 
-        const blobUrl = await prepareHtml(mode);
-        currentBlobUrl = blobUrl;
+        let blobUrl;
+        if (mode === 'sw') {
+          blobUrl = await prepareSwHtml(mode);
+          currentBlobUrl = blobUrl;
+        } else {
+          blobUrl = await prepareHtml(mode);
+          currentBlobUrl = blobUrl;
+        }
 
         if (mode === 'window') {
           isolatedWin = window.open(blobUrl, 'gc-preview', 'noopener,noreferrer,width=1024,height=720');
@@ -1576,7 +1723,7 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
 
         frame.onload = () => {
           log('Iframe loaded (' + mode + ')');
-          const labels = { sandbox: 'Sandbox', protected: 'Protected', online: 'Hybrid', hybrid: 'Hybrid' };
+          const labels = { sandbox: 'Sandbox', protected: 'Protected', online: 'Hybrid', hybrid: 'Hybrid', sw: 'SW Proxy' };
           statusBadge.textContent = labels[mode] || 'OK';
           statusBadge.className = 'badge badge-ok';
         };
@@ -2282,7 +2429,22 @@ Format jawaban:
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').then((reg) => {
           console.log('[GC] SW registered', reg.scope);
+          swReady = true;
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          reg.addEventListener('updatefound', () => {
+            const w = reg.installing;
+            if (w) w.addEventListener('statechange', () => {
+              if (w.state === 'installed' && navigator.serviceWorker.controller) {
+                w.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
         }).catch((err) => console.warn('[GC] SW failed', err));
+        navigator.serviceWorker.ready.then(() => { swReady = true; });
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          swReady = true;
+          console.log('[GC] SW controller ready');
+        });
       });
     }
 
