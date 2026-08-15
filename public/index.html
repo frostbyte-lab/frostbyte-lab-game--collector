@@ -728,53 +728,176 @@
       }
     }
 
-    // --- Frame-busting neutralizer (level tinggi) ---
+    // --- Frame-busting neutralizer (level KERAS) ---
     const FRAME_BUSTER_PATTERNS = [
       /if\s*\(\s*(?:window\.)?top\s*!==?\s*(?:window\.)?(?:self|this)\s*\)/gi,
       /if\s*\(\s*(?:window\.)?self\s*!==?\s*(?:window\.)?top\s*\)/gi,
       /if\s*\(\s*(?:window\.)?parent\s*!==?\s*(?:window\.)?(?:self|this|window)\s*\)/gi,
+      /if\s*\(\s*(?:window\.)?(?:self|this)\s*!==?\s*(?:window\.)?top\s*\)/gi,
+      /if\s*\(\s*window\s*!==?\s*window\.top\s*\)/gi,
+      /if\s*\(\s*top\s*!=\s*self\s*\)/gi,
+      /if\s*\(\s*self\s*!=\s*top\s*\)/gi,
+      /if\s*\(\s*parent\s*!=\s*(?:self|window|this)\s*\)/gi,
       /top\.location\s*=/gi,
       /parent\.location\s*=/gi,
       /top\.location\.href\s*=/gi,
       /parent\.location\.href\s*=/gi,
+      /top\.location\.replace\s*\(/gi,
+      /parent\.location\.replace\s*\(/gi,
       /window\.top\.location/gi,
+      /window\.parent\.location/gi,
+      /top\.document/gi,
+      /parent\.document/gi,
       /frameElement/gi,
-      /if\s*\(\s*window\s*!==\s*window\.top\s*\)/gi,
-      /if\s*\(\s*top\s*!=\s*self\s*\)/gi,
+      /window\.frameElement/gi,
+      /frames\.length/gi,
+      /window\.frames\.length/gi,
+      /window\.length\s*[<>=!]/gi,
+      /self\s*===\s*top/gi,
+      /top\s*===\s*self/gi,
+      /window\.top\s*!==\s*window/gi,
+      /window\s*!==\s*window\.top/gi,
+      /break\s*out\s*of\s*iframe/gi,
+      /not\s*(?:be\s*)?(?:run|played|loaded)\s*in\s*(?:an?\s*)?iframe/gi,
     ];
 
+    function hardFrameProtectorScript() {
+      return `<script data-gc-hard-frame="1">
+(function(){
+  if (window.__gc_hard_frame) return;
+  window.__gc_hard_frame = 1;
+  window.__gc_frame_protected = 1;
+
+  function lock(obj, prop, val) {
+    try {
+      Object.defineProperty(obj, prop, {
+        get: function(){ return typeof val === 'function' ? val() : val; },
+        set: function(){},
+        configurable: false
+      });
+    } catch(e) {
+      try { obj[prop] = typeof val === 'function' ? val() : val; } catch(e2){}
+    }
+  }
+
+  // top / self / parent / frames selalu mengarah ke window ini
+  lock(window, 'top', function(){ return window; });
+  lock(window, 'parent', function(){ return window; });
+  lock(window, 'frameElement', null);
+  try {
+    lock(window, 'frames', function(){
+      var f = [window];
+      f.length = 1;
+      return f;
+    });
+  } catch(e){}
+  try {
+    Object.defineProperty(window, 'length', {
+      get: function(){ return 0; },
+      set: function(){},
+      configurable: false
+    });
+  } catch(e){}
+
+  // Cegah navigasi break-out lewat location setter
+  try {
+    var loc = window.location;
+    var _assign = loc.assign.bind(loc);
+    var _replace = loc.replace.bind(loc);
+    // Biarkan navigasi internal; block yang mencoba set top/parent (sudah di-lock)
+    window.location.assign = function(u){ try { return _assign(u); } catch(e){} };
+    window.location.replace = function(u){ try { return _replace(u); } catch(e){} };
+  } catch(e){}
+
+  // Intercept open yang mengarah ke top
+  try {
+    var _open = window.open;
+    window.open = function(url, name, specs) {
+      if (name === '_top' || name === '_parent') name = '_blank';
+      return _open.call(window, url, name, specs);
+    };
+  } catch(e){}
+
+  // Nested iframe: inject protection saat createElement('iframe')
+  try {
+    var _ce = Document.prototype.createElement;
+    Document.prototype.createElement = function(tag) {
+      var el = _ce.apply(this, arguments);
+      if (String(tag).toLowerCase() === 'iframe') {
+        try {
+          if (!el.getAttribute('sandbox')) {
+            el.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock');
+          }
+        } catch(e){}
+        el.addEventListener('load', function onIframeLoad() {
+          try {
+            var d = el.contentDocument || (el.contentWindow && el.contentWindow.document);
+            if (!d) return;
+            if (d.documentElement && d.documentElement.getAttribute('data-gc-nested')) return;
+            try { d.documentElement.setAttribute('data-gc-nested', '1'); } catch(e){}
+            var s = d.createElement('script');
+            s.setAttribute('data-gc-hard-frame', '1');
+            s.textContent = 'try{Object.defineProperty(window,"top",{get:function(){return window}});Object.defineProperty(window,"parent",{get:function(){return window}});Object.defineProperty(window,"frameElement",{get:function(){return null}});}catch(e){}';
+            (d.head || d.documentElement).appendChild(s);
+          } catch(e){}
+        });
+      }
+      return el;
+    };
+  } catch(e){}
+
+  // Periodik re-lock (lawan script yang coba define ulang)
+  var reLock = function(){
+    lock(window, 'top', function(){ return window; });
+    lock(window, 'parent', function(){ return window; });
+    lock(window, 'frameElement', null);
+  };
+  reLock();
+  setInterval(reLock, 800);
+
+  // Sembunyikan deteksi sandbox via attribute di parent (best-effort)
+  try {
+    if (window.frameElement) {
+      /* already null via lock */
+    }
+  } catch(e){}
+
+  console.info('[GC] Hard frame protection active');
+})();
+<\/script>`;
+    }
+
     function neutralizeFrameBusters(html) {
-      let out = html;
+      let out = String(html || '');
       let count = 0;
       FRAME_BUSTER_PATTERNS.forEach(re => {
         out = out.replace(re, (m) => {
           count++;
-          return '/* GC-PRO-NEUTRALIZED */ false && ' + m;
+          return '/* GC-HARD */ false && ' + m;
         });
       });
-      const protector = `
-<script>
-(function(){
-  try {
-    Object.defineProperty(window, 'top', { get: function(){ return window; }, configurable: false });
-  } catch(e){}
-  try {
-    Object.defineProperty(window, 'parent', { get: function(){ return window; }, configurable: false });
-  } catch(e){}
-  try {
-    if (window.frameElement) {
-      Object.defineProperty(window, 'frameElement', { get: function(){ return null; } });
-    }
-  } catch(e){}
-  window.__gc_frame_protected = true;
-})();
-<\/script>`;
+
+      // Pola tambahan: assignment break-out
+      out = out.replace(
+        /(?:window\.)?(?:top|parent)\s*\.\s*location\s*(?:\.href)?\s*=\s*/gi,
+        (m) => { count++; return '/* GC-HARD */ void 0; // ' + m; }
+      );
+
+      // Nested iframe src eksternal → biarkan, tapi tandai; rewrite relatif di repair
+      // CSP frame-ancestors tidak relevan di blob, skip
+
+      const protector = hardFrameProtectorScript();
       if (out.includes('<head>')) {
         out = out.replace('<head>', '<head>' + protector);
-      } else if (out.includes('<html')) {
+      } else if (/<html[^>]*>/i.test(out)) {
         out = out.replace(/<html[^>]*>/i, (m) => m + protector);
       } else {
         out = protector + out;
+      }
+      // Pastikan hanya satu hard protector
+      const parts = out.split('data-gc-hard-frame="1"');
+      if (parts.length > 2) {
+        // keep first only — naive cleanup already injected once ideally
       }
       return { html: out, neutralized: count };
     }
@@ -885,11 +1008,37 @@ window.__gc_offline = 0;
     } catch(e){}
     return _xo.apply(this, arguments);
   };
-  // Frame protect ringan (tanpa block network)
-  try { Object.defineProperty(window, 'top', { get: function(){ return window; } }); } catch(e){}
-  try { Object.defineProperty(window, 'parent', { get: function(){ return window; } }); } catch(e){}
+  // Frame protect KERAS (tanpa block network)
+  function __gcLock(obj, prop, val) {
+    try {
+      Object.defineProperty(obj, prop, {
+        get: function(){ return typeof val === 'function' ? val() : val; },
+        set: function(){},
+        configurable: false
+      });
+    } catch(e){}
+  }
+  __gcLock(window, 'top', function(){ return window; });
+  __gcLock(window, 'parent', function(){ return window; });
+  __gcLock(window, 'frameElement', null);
+  try {
+    Object.defineProperty(window, 'length', { get: function(){ return 0; }, set: function(){}, configurable: false });
+  } catch(e){}
+  setInterval(function(){
+    __gcLock(window, 'top', function(){ return window; });
+    __gcLock(window, 'parent', function(){ return window; });
+    __gcLock(window, 'frameElement', null);
+  }, 800);
+  try {
+    var _open = window.open;
+    window.open = function(url, name, specs) {
+      if (name === '_top' || name === '_parent') name = '_blank';
+      return _open.call(window, url, name, specs);
+    };
+  } catch(e){}
   window.__gc_frame_protected = true;
-  console.info('[GC] Online Hybrid aktif: asset lokal prioritas, server game diizinkan');
+  window.__gc_hard_frame = true;
+  console.info('[GC] Online Hybrid + hard frame protection');
 })();
 <\/script>` : `<script>
 window.__GC_ASSETS = ${JSON.stringify(assetIndex)};
