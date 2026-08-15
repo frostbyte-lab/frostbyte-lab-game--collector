@@ -12,9 +12,11 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
     atlases: [],
     spine: [],
     audioMaps: [],
+    audioEvents: [],
     apiSnapshots: [],
     hints: [],
     engine: null,
+    scores: null,
     summary: {}
   };
 
@@ -27,6 +29,92 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
 
   const symbolSet = new Set();
   const featureSet = new Set();
+
+
+  function classifyAudioEvent(path, filename) {
+    const f = String(filename || path || "").toLowerCase();
+    const p = String(path || "").toLowerCase();
+    const s = f + " " + p;
+    if (/\b(bgm|music|theme|ambient|loop[_-]?bgm|soundtrack)\b/.test(s)) return "BGM";
+    if (/\b(reel[_-]?stop|stop[_-]?reel|land|thunk|clack)\b/.test(s)) return "ReelStop";
+    if (/\b(spin|reel[_-]?spin|start[_-]?spin|roll)\b/.test(s)) return "Spin";
+    if (/\b(big[_-]?win|mega[_-]?win|super[_-]?win|total[_-]?win|you[_-]?win)\b/.test(s)) return "Win";
+    if (/\b(win|payout|prize|coin|credit)\b/.test(s)) return "Win";
+    if (/\b(bonus|feature|free[_-]?spin|freespin|scatter|jackpot|trigger)\b/.test(s)) return "Bonus";
+    if (/\b(click|button|ui|menu|hover|select|nav|tick|beep)\b/.test(s)) return "UI";
+    if (/audio\/(bgm|music)/.test(p)) return "BGM";
+    if (/audio\/(win|bonus)/.test(p)) return "Win";
+    if (/audio\/(sfx|ui)/.test(p)) return "UI";
+    return "Other";
+  }
+
+  function parseLibgdxAtlas(text, path) {
+    const lines = String(text || "").split(/\r?\n/);
+    const regions = [];
+    let page = null;
+    let current = null;
+    for (const raw of lines) {
+      const line = raw.replace(/\t/g, "  ");
+      if (!line.trim()) continue;
+      if (!line.startsWith(" ") && !line.startsWith("\t")) {
+        // page texture or region name
+        if (/\.png|\.jpg|\.webp|\.ktx/i.test(line.trim())) {
+          page = line.trim();
+          current = null;
+        } else {
+          current = { name: line.trim(), page };
+          regions.push(current);
+        }
+      } else if (current) {
+        const m = line.trim().match(/^(\w+):\s*(.+)$/);
+        if (m) {
+          const k = m[1].toLowerCase();
+          const v = m[2].trim();
+          if (k === "xy" || k === "size" || k === "orig" || k === "offset") current[k] = v;
+          else if (k === "rotate") current.rotate = v;
+          else if (k === "index") current.index = v;
+        }
+      }
+    }
+    return {
+      path,
+      format: "libgdx-atlas",
+      pageCount: new Set(regions.map(r => r.page).filter(Boolean)).size || (page ? 1 : 0),
+      regionCount: regions.length,
+      regions: regions.slice(0, 80).map(r => r.name),
+      regionDetails: regions.slice(0, 20)
+    };
+  }
+
+  function parseSpineSkeletonHints(text, path) {
+    // JSON spine skeleton or text hints
+    const out = { path, animations: [], skins: [], attachments: [], bones: 0 };
+    try {
+      const j = JSON.parse(text);
+      if (j.animations && typeof j.animations === "object") {
+        out.animations = Object.keys(j.animations).slice(0, 40);
+      }
+      if (j.skins) {
+        if (Array.isArray(j.skins)) {
+          out.skins = j.skins.map(s => s.name || s).filter(Boolean).slice(0, 20);
+          for (const skin of j.skins.slice(0, 5)) {
+            const atts = skin.attachments || {};
+            for (const slot of Object.keys(atts)) {
+              for (const an of Object.keys(atts[slot] || {})) out.attachments.push(an);
+            }
+          }
+        } else if (typeof j.skins === "object") {
+          out.skins = Object.keys(j.skins).slice(0, 20);
+        }
+      }
+      if (j.bones && Array.isArray(j.bones)) out.bones = j.bones.length;
+      if (j.slots && Array.isArray(j.slots)) out.slotCount = j.slots.length;
+    } catch {
+      // binary skel — only size known
+    }
+    out.attachments = [...new Set(out.attachments)].slice(0, 40);
+    return out;
+  }
 
   function tryParseJson(text) {
     try {
@@ -130,17 +218,20 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
     }
     result.scannedFiles++;
 
-    // Spine / atlas file names
+        // Spine / atlas file names (deep)
     if (isSkel) {
-      result.spine.push({ path, size: data.byteLength });
-      continue;
+      const spineInfo = { path, size: data.byteLength };
+      if (text && (text.trim().startsWith("{") || path.toLowerCase().endsWith(".json"))) {
+        Object.assign(spineInfo, parseSpineSkeletonHints(text, path));
+      } else {
+        spineInfo.format = "binary-or-unknown";
+      }
+      result.spine.push(spineInfo);
     }
     if (isAtlas) {
-      result.atlases.push({ path, size: data.byteLength, format: "libgdx-atlas" });
-      // Atlas text often lists texture names
-      const pages = text.split("\n").filter(l => /\.(png|jpg|webp)/i.test(l)).slice(0, 20);
-      if (pages.length) result.atlases[result.atlases.length - 1].textures = pages.map(l => l.trim());
-      continue;
+      const atlasInfo = parseLibgdxAtlas(text, path);
+      atlasInfo.size = data.byteLength;
+      result.atlases.push(atlasInfo);
     }
 
     // JSON parse
@@ -220,6 +311,77 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
     }
   }
 
+
+  // Map standalone audio files to events (BGM/Spin/ReelStop/Win/Bonus/UI)
+  const audioEventSet = new Map();
+  for (const [path, data] of Object.entries(zipFiles || {})) {
+    if (!/\.(mp3|ogg|wav|m4a|aac|flac)($|\?)/i.test(path) && !path.toLowerCase().includes("/audio/")) continue;
+    if (!/\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(path.split("?")[0])) continue;
+    const filename = path.split("/").pop();
+    const ev = classifyAudioEvent(path, filename);
+    const key = ev + "::" + filename;
+    if (!audioEventSet.has(key)) {
+      audioEventSet.set(key, {
+        event: ev,
+        path,
+        filename,
+        size: data?.byteLength || 0
+      });
+    }
+  }
+  result.audioEvents = [...audioEventSet.values()].slice(0, 120);
+  const audioByEvent = {};
+  for (const a of result.audioEvents) {
+    audioByEvent[a.event] = (audioByEvent[a.event] || 0) + 1;
+  }
+
+  // Completeness scores (heuristic 0-100 per category)
+  function scoreCat(found, good, excellent) {
+    if (found <= 0) return 0;
+    if (found >= excellent) return 100;
+    if (found >= good) return 60 + Math.round(40 * (found - good) / Math.max(1, excellent - good));
+    return Math.round(60 * found / good);
+  }
+  const symN = result.symbols.length;
+  const payN = result.paytables.length;
+  const featN = result.features.length;
+  const atlasN = result.atlases.length + result.spine.length;
+  const audioN = result.audioEvents.length;
+  const audioMapped = result.audioEvents.filter(a => a.event !== "Other").length;
+  const engineOk = result.engine && result.engine.engine && result.engine.engine !== "unknown";
+
+  result.scores = {
+    symbols: { score: scoreCat(symN, 5, 15), found: symN, label: "Symbols", ok: symN >= 3 },
+    paytable: { score: payN > 0 ? 100 : (result.hints.some(h => h.hint === "paytable-reference-in-js") ? 40 : 0), found: payN, label: "Paytable", ok: payN > 0 },
+    audio: {
+      score: audioN === 0 ? 0 : Math.min(100, Math.round(40 + 60 * (audioMapped / Math.max(audioN, 1)))),
+      found: audioN,
+      mapped: audioMapped,
+      byEvent: audioByEvent,
+      label: "Audio events",
+      ok: audioMapped >= 2
+    },
+    atlasSpine: {
+      score: scoreCat(atlasN, 1, 3),
+      found: atlasN,
+      atlas: result.atlases.length,
+      spine: result.spine.length,
+      label: "Atlas / Spine",
+      ok: atlasN > 0
+    },
+    features: { score: scoreCat(featN, 1, 4), found: featN, label: "Game features", ok: featN > 0 },
+    engine: {
+      score: engineOk ? (result.engine.confidence === "high" ? 100 : result.engine.confidence === "medium" ? 70 : 40) : 0,
+      found: engineOk ? 1 : 0,
+      name: result.engine?.engine || "unknown",
+      confidence: result.engine?.confidence || "none",
+      label: "Engine",
+      ok: engineOk
+    }
+  };
+  const scoreVals = Object.values(result.scores).map(s => s.score);
+  result.scores.overall = Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length);
+
   result.symbols = [...symbolSet].slice(0, 200);
   // dedupe features by key
   const featKeys = new Set();
@@ -253,8 +415,11 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
     atlasCount: result.atlases.length,
     spineCount: result.spine.length,
     audioMapCount: result.audioMaps.length,
+    audioEventCount: result.audioEvents.length,
+    audioByEvent: audioByEvent,
     apiSnapshotCount: result.apiSnapshots.length,
     apiKinds: apiKindCounts,
+    scores: result.scores,
     note: "Hasil heuristik dari isi file yang ter-collect. Bukan reverse-engineer server."
   };
 
