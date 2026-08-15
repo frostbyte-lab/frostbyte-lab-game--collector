@@ -508,7 +508,12 @@
     <section id="panel-history" class="panel">
       <div class="card">
         <h2>Riwayat Collect</h2>
-        <p class="sub">Disimpan di browser (localStorage)</p>
+        <p class="sub" id="history-source-label">localStorage · server KV jika tersedia</p>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <button class="btn-ghost" type="button" onclick="renderHistory(true)">Refresh</button>
+          <button class="btn-ghost" type="button" onclick="clearLocalHistory()">Hapus lokal</button>
+          <button class="btn-ghost" type="button" onclick="clearServerHistory()">Hapus server (KV)</button>
+        </div>
         <div id="history-list"><div class="empty">Belum ada riwayat</div></div>
       </div>
     </section>
@@ -538,10 +543,49 @@
     }
 
     function addHistory(entry) {
-      const list = JSON.parse(localStorage.getItem('gc_history') || '[]');
-      list.unshift({ ...entry, ts: Date.now() });
-      localStorage.setItem('gc_history', JSON.stringify(list.slice(0, 30)));
-      renderHistory();
+      const row = { ...entry, ts: entry.ts || Date.now() };
+      try {
+        const list = JSON.parse(localStorage.getItem('gc_history') || '[]');
+        list.unshift(row);
+        localStorage.setItem('gc_history', JSON.stringify(list.slice(0, 30)));
+      } catch {}
+      try {
+        fetch('/api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...row,
+            ts: typeof row.ts === 'number' ? new Date(row.ts).toISOString() : row.ts
+          })
+        }).catch(() => {});
+      } catch {}
+      if (entry.sessionId) {
+        try {
+          localStorage.setItem('gc_last_session', JSON.stringify({
+            sessionId: entry.sessionId,
+            url: entry.url,
+            stillMissing: entry.stillMissing || null,
+            ts: row.ts
+          }));
+        } catch {}
+      }
+      try { renderHistory(false); } catch {}
+    }
+
+    function clearLocalHistory() {
+      localStorage.removeItem('gc_history');
+      renderHistory(false);
+    }
+
+    async function clearServerHistory() {
+      try {
+        const res = await fetch('/api/history?id=all', { method: 'DELETE' });
+        const data = await res.json();
+        if (!data.ok) alert(data.reason === 'no-kv' ? 'KV belum di-bind di Worker.' : (data.error || 'Gagal hapus'));
+      } catch (e) {
+        alert('Gagal: ' + e.message);
+      }
+      renderHistory(true);
     }
 
     // ========== Progress + ETA ==========
@@ -687,6 +731,8 @@
         const fillFound = res.headers.get('X-GC-Fill-Found') || '0';
         const fillOk = res.headers.get('X-GC-Fill-Ok') || '0';
         const fillFail = res.headers.get('X-GC-Fill-Fail') || '0';
+        const sessionHdr = res.headers.get('X-GC-Session-Id') || '';
+        const stillMissingHdr = res.headers.get('X-GC-Still-Missing') || '0';
         const msg = res.headers.get('X-GC-Message') || 'Capture berhasil';
         const sizeKB = Math.round(zipSize / 1024);
         const name = `game-package-${id}.zip`;
@@ -712,7 +758,7 @@
         statusEl.appendChild(document.createElement('br'));
         statusEl.appendChild(btn);
 
-        addHistory({ url, status: 'ok', id, files, zipSize, elapsed });
+        addHistory({ url, status: Number(stillMissingHdr||0) > 0 ? 'ok_partial' : 'ok', id, files, zipSize, elapsed, sessionId: sessionHdr || id });
         notifyDone('Collect selesai', `${files} file · ${sizeKB} KB · ${elapsed}s`);
       } catch (err) {
         stopProgress(false);
@@ -896,35 +942,118 @@ async function downloadGitHubArtifact(artifactId, runId) {
     }
 
     // ========== HISTORY ==========
-    function renderHistory() {
-      const list = JSON.parse(localStorage.getItem('gc_history') || '[]');
+    async function renderHistory(preferServer) {
       const el = document.getElementById('history-list');
+      const label = document.getElementById('history-source-label');
+      let list = [];
+      let source = 'localStorage';
+      if (preferServer !== false) {
+        try {
+          const res = await fetch('/api/history?limit=30');
+          const data = await res.json();
+          if (data.kv && Array.isArray(data.items) && data.items.length) {
+            list = data.items;
+            source = 'server KV';
+          } else if (data.kv) {
+            source = 'server KV (kosong) + localStorage';
+          } else {
+            source = 'localStorage (KV belum bind)';
+          }
+        } catch {
+          source = 'localStorage (API error)';
+        }
+      }
+      if (!list.length) {
+        try { list = JSON.parse(localStorage.getItem('gc_history') || '[]'); } catch { list = []; }
+      }
+      if (label) label.textContent = 'Sumber: ' + source;
+      if (!el) return;
       if (!list.length) {
         el.innerHTML = '<div class="empty">Belum ada riwayat</div>';
         return;
       }
-      el.innerHTML = list.map(item => `
-        <div class="history-item">
+      el.innerHTML = list.map((item) => {
+        const canResume = !!(item.sessionId || (item.stillMissing && item.stillMissing.length) ||
+          item.status === 'ok_partial' || item.status === 'resume_partial');
+        const resumeBtn = canResume
+          ? `<button class="btn-ghost" style="font-size:11px;padding:4px 8px" type="button" data-resume-url="${esc(item.url||'')}" data-resume-sid="${esc(item.sessionId||item.id||'')}" onclick="resumeFromHistory(this)">Resume</button>`
+          : '';
+        const ts = item.ts ? new Date(item.ts).toLocaleString('id-ID') : '';
+        return `<div class="history-item">
           <div>
-            <div style="font-size:13px;word-break:break-all">${esc(item.url || '-')}</div>
-            <div class="history-meta">${new Date(item.ts).toLocaleString('id-ID')} · ${item.status}${item.files ? ' · ' + item.files + ' files' : ''}</div>
+            <div style="font-weight:500;word-break:break-all">${esc(item.url || '')}</div>
+            <div class="history-meta">${ts} · ${esc(item.status||'')}${item.files ? ' · ' + item.files + ' files' : ''}${item.overallScore!=null ? ' · skor ' + item.overallScore : ''}</div>
           </div>
-          <button class="btn-secondary" style="padding:6px 10px;font-size:12px" onclick="document.querySelector('[data-panel=workspace]').click()">Workspace</button>
-        </div>
-      `).join('');
+          <div>${resumeBtn}</div>
+        </div>`;
+      }).join('');
     }
-    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-    // ========== WORKSPACE / ADVANCED PREVIEW ==========
-    let zipFS = null;
-    let currentBlobUrl = null;
-    let isolatedWin = null;
+    function resumeFromHistory(btn) {
+      const url = btn.getAttribute('data-resume-url') || '';
+      const sessionId = btn.getAttribute('data-resume-sid') || '';
+      let stillMissing = null;
+      try {
+        const last = JSON.parse(localStorage.getItem('gc_last_session') || 'null');
+        if (last && (String(last.sessionId) === String(sessionId) || last.url === url)) stillMissing = last.stillMissing;
+      } catch {}
+      try {
+        const list = JSON.parse(localStorage.getItem('gc_history') || '[]');
+        const hit = list.find(x => String(x.sessionId||'') === String(sessionId) || String(x.id||'') === String(sessionId) || x.url === url);
+        if (hit && hit.stillMissing) stillMissing = hit.stillMissing;
+      } catch {}
+      runResume({ url, sessionId, stillMissing });
+    }
 
-    const terminal = document.getElementById('terminal');
-    function log(msg, type = '') {
-      const time = new Date().toLocaleTimeString('id-ID');
-      terminal.textContent += `[${time}] ${msg}\n`;
-      terminal.scrollTop = terminal.scrollHeight;
+    async function runResume(opts) {
+      opts = opts || {};
+      const urlInput = document.getElementById('url');
+      const url = opts.url || (urlInput && urlInput.value.trim()) || '';
+      if (!url && !(opts.stillMissing && opts.stillMissing.length) && !opts.sessionId) {
+        alert('Isi URL game, atau pilih Resume dari riwayat yang partial.');
+        return;
+      }
+      statusEl.textContent = 'Resume collect — fetch missing tanpa browser...';
+      statusEl.className = '';
+      try {
+        const res = await fetch('/api/resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            sessionId: opts.sessionId || undefined,
+            stillMissing: opts.stillMissing || undefined,
+            maxFetch: 40
+          })
+        });
+        if (!res.ok) {
+          let err = 'HTTP ' + res.status;
+          try { const j = await res.json(); err = j.message || j.error || err; } catch {}
+          throw new Error(err);
+        }
+        const fetched = res.headers.get('X-GC-Resume-Fetched') || '?';
+        const still = res.headers.get('X-GC-Resume-Still') || '?';
+        const sid = res.headers.get('X-GC-Session-Id') || '';
+        const blob = await res.blob();
+        statusEl.textContent = '✓ Resume selesai\n+' + fetched + ' file · masih missing: ' + still + '\nZIP: ' + Math.round(blob.size/1024) + ' KB\nSession: ' + (sid || '-') + '\nLoad di Workspace untuk inspect.';
+        statusEl.className = 'ok';
+        addHistory({
+          url,
+          status: Number(still) > 0 ? 'resume_partial' : 'resume_ok',
+          files: Number(fetched) || 0,
+          zipSize: blob.size,
+          sessionId: sid || opts.sessionId
+        });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'resume-partial.zip';
+        a.click();
+        if (typeof notifyDone === 'function') notifyDone();
+      } catch (err) {
+        statusEl.textContent = 'Resume gagal: ' + err.message;
+        statusEl.className = 'err';
+        addHistory({ url, status: 'resume_error', message: err.message });
+      }
     }
 
     async function loadZipFromBuffer(buf, label) {
@@ -1455,7 +1584,6 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
       }
       if (!zipFS) { box.innerHTML = ''; return; }
 
-      // Prefer kelengkapan.json + analisis.json from collect
       let fill = null;
       let analysis = null;
       if (zipFS['kelengkapan.json']) {
@@ -1471,7 +1599,6 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
         } catch {}
       }
 
-      // Client-side scan for still-missing refs relative to zipFS
       const bare = new Set();
       const paths = Object.keys(zipFS);
       paths.forEach(p => { const b = p.split('/').pop(); if (b) bare.add(b); });
@@ -1501,7 +1628,6 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
       const apiN = paths.filter(p => p.startsWith('server/api')).length;
       const serverN = paths.filter(p => p.startsWith('server/') && !p.startsWith('server/api')).length;
 
-      // Scores from collect (or lightweight client fallback)
       const scores = (fill && fill.scores) || (analysis && analysis.scores) || null;
       const cats = (fill && fill.categories) || null;
       const overall = (fill && fill.overallScore != null) ? fill.overallScore : (scores && scores.overall);
@@ -1549,7 +1675,6 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
           if (key === 'engine') extra = ` · ${sc.name || cats?.engine?.name || 'unknown'} (${sc.confidence || cats?.engine?.confidence || '?'})`;
           scoreHtml += `<div style="font-size:12px;margin-top:6px"><b>${label}</b><span style="color:var(--muted)">${extra}</span>${bar(s, ok)}</div>`;
         }
-        // samples
         const symSamples = (cats && cats.symbols && cats.symbols.samples) || (analysis && analysis.symbols) || [];
         if (symSamples.length) {
           scoreHtml += `<div style="margin-top:8px;font-size:11px;color:var(--muted)"><b>Sample symbols:</b> ${symSamples.slice(0,15).map(esc).join(', ')}</div>`;
@@ -1561,7 +1686,7 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
         }
         scoreHtml += `</div>`;
       } else {
-        scoreHtml = `<div style="margin-top:10px;font-size:12px;color:var(--muted)">Skor kategori belum ada di paket (collect lama / tanpa analisis). Collect ulang untuk skor Symbols / Paytable / Audio / Atlas.</div>`;
+        scoreHtml = `<div style="margin-top:10px;font-size:12px;color:var(--muted)">Skor kategori belum ada di paket (collect lama). Collect ulang untuk skor Symbols / Paytable / Audio / Atlas.</div>`;
       }
 
       box.innerHTML = `
@@ -1574,7 +1699,7 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
         ${scoreHtml}
         ${missArr.length ? `<div style="margin-top:8px;font-size:12px;color:var(--warn)"><b>Referensi di kode yang belum ada di ZIP:</b> ${missArr.map(esc).join(', ')}</div>` : `<div style="margin-top:8px;font-size:12px;color:var(--success)">Tidak ada referensi asset mencolok yang hilang (scan nama file).</div>`}
         ${stillFromFill.length ? `<div style="margin-top:8px;font-size:11px;color:var(--muted)"><b>Gagal di-fetch saat collect:</b> ${stillFromFill.map(x => esc(x.url || x)).slice(0,10).join('<br>')}</div>` : ''}
-        <div style="margin-top:8px;font-size:12px;color:var(--muted)">File kurang yang berhasil di-fetch otomatis sudah masuk ZIP (folder assets/ atau server/). Sisanya biasanya butuh server live / auth.</div>
+        <div style="margin-top:8px;font-size:12px;color:var(--muted)">File kurang yang berhasil di-fetch otomatis sudah masuk ZIP. Sisanya biasanya butuh server live / auth.</div>
       `;
       box.classList.add('active');
       log(`Kelengkapan: ${paths.length} file · ref kurang (scan): ${missArr.length}` + (overall != null ? ` · skor overall: ${overall}` : '') + (fill ? ` · auto-fill OK: ${fill.autoFill?.fetched ?? '?'}` : ''));
