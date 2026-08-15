@@ -494,6 +494,9 @@
         const gameFiles = res.headers.get('X-GC-Game-Files') || '?';
         const apiFiles = res.headers.get('X-GC-Api-Files') || '?';
         const serverFiles = res.headers.get('X-GC-Server-Files') || '?';
+        const fillFound = res.headers.get('X-GC-Fill-Found') || '0';
+        const fillOk = res.headers.get('X-GC-Fill-Ok') || '0';
+        const fillFail = res.headers.get('X-GC-Fill-Fail') || '0';
         const msg = res.headers.get('X-GC-Message') || 'Capture berhasil';
         const sizeKB = Math.round(zipSize / 1024);
         const name = `game-package-${id}.zip`;
@@ -509,7 +512,7 @@
 
         stopProgress(true);
         statusEl.className = 'ok';
-        statusEl.textContent = `✓ BERHASIL (${elapsed}s)\n\nID: ${id}\nTotal: ${files}\n  · Game assets/: ${gameFiles}\n  · API server/api/: ${apiFiles}\n  · Server/config: ${serverFiles}\nZIP: ${sizeKB} KB\nPath rewrite: ${rewritten} · Frame-buster: ${neutralized}\n\n${msg}\n\n✓ ZIP otomatis (game & API dipisah + KETERANGAN.md).\nKlik tombol di bawah untuk Preview.`;
+        statusEl.textContent = `✓ BERHASIL (${elapsed}s)\n\nID: ${id}\nTotal: ${files}\n  · Game assets/: ${gameFiles}\n  · API server/api/: ${apiFiles}\n  · Server/config: ${serverFiles}\n  · Auto-lengkapi: ketemu ${fillFound}, sukses ${fillOk}, gagal ${fillFail}\nZIP: ${sizeKB} KB\nPath rewrite: ${rewritten} · Frame-buster: ${neutralized}\n\n${msg}\n\n✓ ZIP otomatis (game & API dipisah + KETERANGAN.md).\nKlik tombol di bawah untuk Preview.`;
 
         const btn = document.createElement('button');
         btn.className = 'btn-success';
@@ -717,6 +720,8 @@
         document.getElementById('btn-ai').disabled = false;
         document.getElementById('btn-ai-fix').disabled = false;
         log(`ZIP loaded · ${paths.length} file`);
+        analyzeCompleteness();
+
         document.getElementById('preview-status').textContent = 'ZIP Ready';
         document.getElementById('preview-status').className = 'badge badge-ok';
         // Restore saved AI key if any
@@ -1144,6 +1149,87 @@ window.__GC_MODE = 'offline';
       document.getElementById('preview-status').className = 'badge badge-warn';
       log('Preview stopped');
     }
+
+
+    function analyzeCompleteness() {
+      let box = document.getElementById('completeness-box');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'completeness-box';
+        box.className = 'diff-box active';
+        const fl = document.getElementById('file-list');
+        if (fl && fl.parentNode) fl.parentNode.insertBefore(box, fl);
+        else {
+          const toolbar = document.getElementById('preview-toolbar');
+          if (toolbar) toolbar.parentNode.insertBefore(box, toolbar.nextSibling);
+        }
+      }
+      if (!zipFS) { box.innerHTML = ''; return; }
+
+      // Prefer kelengkapan.json from collect
+      let fill = null;
+      if (zipFS['kelengkapan.json']) {
+        try { fill = JSON.parse(new TextDecoder().decode(zipFS['kelengkapan.json'])); } catch {}
+      }
+      if (zipFS['keterangan.json']) {
+        try {
+          const ket = JSON.parse(new TextDecoder().decode(zipFS['keterangan.json']));
+          window.__gc_keterangan = ket;
+        } catch {}
+      }
+
+      // Client-side scan for still-missing refs relative to zipFS
+      const bare = new Set();
+      const paths = Object.keys(zipFS);
+      paths.forEach(p => { const b = p.split('/').pop(); if (b) bare.add(b); });
+      const missing = new Set();
+      const assetRe = /\.(js|mjs|css|json|png|jpe?g|gif|webp|svg|woff2?|mp3|ogg|wav|mp4|webm|wasm|data)(\?|$)/i;
+      const scanText = (text) => {
+        const re = /["']([^"']+\.(?:js|mjs|css|json|png|jpe?g|gif|webp|svg|woff2?|mp3|ogg|wav|mp4|webm|wasm|data))["']/gi;
+        let m;
+        while ((m = re.exec(text))) {
+          const name = m[1].split('/').pop().split('?')[0];
+          if (name && assetRe.test(name) && !bare.has(name)) missing.add(name);
+        }
+        const re2 = /(?:src|href)=["']([^"']+)["']/gi;
+        while ((m = re2.exec(text))) {
+          const name = m[1].split('/').pop().split('?')[0];
+          if (name && assetRe.test(name) && !bare.has(name)) missing.add(name);
+        }
+      };
+      for (const [path, data] of Object.entries(zipFS)) {
+        if (!/\.(html?|js|mjs|css)$/i.test(path) && path !== 'index.html') continue;
+        try { scanText(new TextDecoder().decode(data)); } catch {}
+      }
+      const missArr = [...missing].slice(0, 30);
+      const stillFromFill = (fill && fill.stillMissing) ? fill.stillMissing.slice(0, 20) : [];
+
+      const gameN = paths.filter(p => p.startsWith('assets/')).length;
+      const apiN = paths.filter(p => p.startsWith('server/api')).length;
+      const serverN = paths.filter(p => p.startsWith('server/') && !p.startsWith('server/api')).length;
+
+      box.innerHTML = `
+        <div style="font-weight:600;margin-bottom:8px">View kelengkapan paket</div>
+        <div class="diff-row">
+          <div class="diff-item"><div class="num">${paths.length}</div><div class="label">Total file</div></div>
+          <div class="diff-item"><div class="num" style="color:var(--success)">${gameN}</div><div class="label">Game assets</div></div>
+          <div class="diff-item"><div class="num" style="color:var(--accent)">${apiN}</div><div class="label">API snapshot</div></div>
+          <div class="diff-item"><div class="num">${serverN}</div><div class="label">Server/config</div></div>
+          <div class="diff-item"><div class="num" style="color:${missArr.length ? 'var(--warn)' : 'var(--success)'}">${missArr.length}</div><div class="label">Ref masih kurang</div></div>
+        </div>
+        ${fill ? `<div style="margin-top:10px;font-size:12px;color:var(--muted)">
+          Auto-lengkapi saat collect: ketemu <b>${fill.autoFill?.missingFound ?? fill.summary?.referencedMissing ?? '?'}</b>,
+          sukses unduh <b style="color:var(--success)">${fill.autoFill?.fetched ?? fill.summary?.autoDownloaded ?? '?'}</b>,
+          gagal/skip <b>${fill.autoFill?.failed ?? fill.summary?.failedOrSkipped ?? '?'}</b>
+        </div>` : '<div style="margin-top:10px;font-size:12px;color:var(--muted)">Paket tanpa kelengkapan.json (collect lama / GitHub). Scan lokal tetap dijalankan.</div>'}
+        ${missArr.length ? `<div style="margin-top:8px;font-size:12px;color:var(--warn)"><b>Referensi di kode yang belum ada di ZIP:</b> ${missArr.map(esc).join(', ')}</div>` : `<div style="margin-top:8px;font-size:12px;color:var(--success)">Tidak ada referensi asset mencolok yang hilang (scan nama file).</div>`}
+        ${stillFromFill.length ? `<div style="margin-top:8px;font-size:11px;color:var(--muted)"><b>Gagal di-fetch saat collect:</b> ${stillFromFill.map(x => esc(x.url || x)).slice(0,10).join('<br>')}</div>` : ''}
+        <div style="margin-top:8px;font-size:12px;color:var(--muted)">File kurang yang berhasil di-fetch otomatis sudah masuk ZIP (folder assets/ atau server/). Sisanya biasanya butuh server live / auth.</div>
+      `;
+      box.classList.add('active');
+      log(`Kelengkapan: ${paths.length} file · ref kurang (scan): ${missArr.length}` + (fill ? ` · auto-fill OK: ${fill.autoFill?.fetched ?? '?'}` : ''));
+    }
+
 
     let zipFSOriginal = null; // snapshot sebelum repair
 

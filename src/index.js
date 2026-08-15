@@ -357,6 +357,118 @@ function rewriteContent(text, urlMap, isHtml) {
   return out;
 }
 
+function extractReferencedUrls(text, baseUrl) {
+  const found = new Set();
+  if (!text) return found;
+  const patterns = [
+    /(?:src|href|data-src|data-href|poster)\s*=\s*["']([^"']+)["']/gi,
+    /url\(\s*['"]?([^'")]+)['"]?\s*\)/gi,
+    /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /\bfrom\s*['"]([^'"]+)['"]/g,
+    /\bimport\s*['"]([^'"]+)['"]/g,
+    /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /["']((?:https?:)?\/\/[^"']+\.(?:js|mjs|css|json|png|jpe?g|gif|webp|svg|woff2?|mp3|ogg|wav|mp4|webm|wasm|data))["']/gi,
+    /["'](\.?\.?\/[^"']+\.(?:js|mjs|css|json|png|jpe?g|gif|webp|svg|woff2?|mp3|ogg|wav|mp4|webm|wasm|data))["']/gi,
+  ];
+  for (const re of patterns) {
+    let m;
+    const r = new RegExp(re.source, re.flags);
+    while ((m = r.exec(text)) !== null) {
+      const raw = (m[1] || "").trim();
+      if (!raw || raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("#") || raw.startsWith("javascript:")) continue;
+      try {
+        const abs = new URL(raw, baseUrl).href;
+        if (abs.startsWith("http://") || abs.startsWith("https://")) found.add(abs);
+      } catch {}
+    }
+  }
+  return found;
+}
+
+function guessTypeFromUrl(u, ct) {
+  const p = u.toLowerCase();
+  if (ct.includes("javascript") || /\.m?js(\?|$)/.test(p)) return "script";
+  if (ct.includes("css") || /\.css(\?|$)/.test(p)) return "stylesheet";
+  if (ct.includes("image") || /\.(png|jpe?g|gif|webp|svg|ico)(\?|$)/.test(p)) return "image";
+  if (ct.includes("font") || /\.(woff2?|ttf|otf)(\?|$)/.test(p)) return "font";
+  if (ct.includes("audio") || ct.includes("video") || /\.(mp3|ogg|wav|mp4|webm)(\?|$)/.test(p)) return "media";
+  if (ct.includes("json") || /\.json(\?|$)/.test(p)) return "fetch";
+  return "fetch";
+}
+
+async function fillMissingAssets(zipFiles, manifest, seen, targetHref, id, env) {
+  const report = { scanned: 0, missingFound: 0, fetched: 0, failed: 0, stillMissing: [] };
+  const texts = [];
+  for (const [key, data] of Object.entries(zipFiles)) {
+    if (!/\.(html?|js|mjs|css)$/i.test(key) && key !== "index.html") continue;
+    try {
+      texts.push(new TextDecoder().decode(data));
+      report.scanned++;
+    } catch {}
+  }
+  const needed = new Set();
+  for (const t of texts) {
+    for (const u of extractReferencedUrls(t, targetHref)) needed.add(u);
+  }
+  const missing = [...needed].filter(u => !seen.has(u) && !isExcluded(u));
+  report.missingFound = missing.length;
+
+  // Cap secondary fetches to stay within worker limits
+  const MAX_FILL = 40;
+  for (const u of missing.slice(0, MAX_FILL)) {
+    try {
+      const res = await fetch(u, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; GameCollectorPro/1.0)", "Accept": "*/*" },
+        redirect: "follow"
+      });
+      if (!res.ok) {
+        report.failed++;
+        report.stillMissing.push({ url: u, error: "status " + res.status });
+        continue;
+      }
+      const buffer = new Uint8Array(await res.arrayBuffer());
+      if (!buffer.byteLength) {
+        report.failed++;
+        report.stillMissing.push({ url: u, error: "empty" });
+        continue;
+      }
+      const ct = res.headers.get("content-type") || "";
+      const type = guessTypeFromUrl(u, ct);
+      let name = safe(new URL(u).pathname.split("/").pop() || "file");
+      if (!/\.[a-z0-9]{1,8}$/i.test(name)) {
+        if (type === "script") name += ".js";
+        else if (type === "stylesheet") name += ".css";
+        else if (type === "image") name += ".bin";
+        else if (ct.includes("json")) name += ".json";
+      }
+      const classified = classifyResource(u, type, ct, "");
+      const folder = folderOf(type, classified.category);
+      const localPath = `${folder}/${String(manifest.length + 1).padStart(4, "0")}-fill-${name}`;
+      zipFiles[localPath] = buffer;
+      seen.add(u);
+      manifest.push({
+        url: u,
+        type,
+        status: res.status,
+        localPath,
+        size: buffer.byteLength,
+        contentType: ct,
+        category: classified.category,
+        classifyReason: classified.reason + "+auto-fill",
+        autoFilled: true
+      });
+      report.fetched++;
+    } catch (e) {
+      report.failed++;
+      report.stillMissing.push({ url: u, error: String(e.message || e).slice(0, 120) });
+    }
+  }
+  for (const u of missing.slice(MAX_FILL)) {
+    report.stillMissing.push({ url: u, error: "skipped-limit" });
+  }
+  return report;
+}
+
 function smartPackage(zipFiles, manifest) {
   const urlMap = buildUrlToLocalMap(manifest);
   const result = { rewritten: 0, neutralized: 0 };
@@ -748,6 +860,14 @@ export default {
       let html = await page.content();
       zipFiles["index.html"] = strToU8(html);
 
+      // Pass 2: scan referensi yang belum ter-download → auto-fetch yang kurang
+      let fillReport = { scanned: 0, missingFound: 0, fetched: 0, failed: 0, stillMissing: [] };
+      try {
+        fillReport = await fillMissingAssets(zipFiles, manifest, seen, target.href, id, env);
+      } catch (e) {
+        fillReport.error = String(e.message || e);
+      }
+
       // Smart offline packaging: path rewrite + frame-buster neutralize
       const smart = smartPackage(zipFiles, manifest);
 
@@ -763,12 +883,25 @@ export default {
         totalFiles: manifest.length,
         totals: { game: gameCount, api: apiCount, server: serverCount },
         smartRewrite: smart,
+        autoFill: fillReport,
         note: "Asset game di assets/. API/server di server/ (terpisah). Lihat KETERANGAN.md.",
         resources: manifest
       };
       zipFiles["manifest.json"] = strToU8(JSON.stringify(manifestData, null, 2));
       zipFiles["keterangan.json"] = strToU8(JSON.stringify(ket.json, null, 2));
       zipFiles["KETERANGAN.md"] = strToU8(ket.md);
+      zipFiles["kelengkapan.json"] = strToU8(JSON.stringify({
+        autoFill: fillReport,
+        summary: {
+          referencedMissing: fillReport.missingFound,
+          autoDownloaded: fillReport.fetched,
+          failedOrSkipped: (fillReport.stillMissing || []).length,
+          note: fillReport.fetched
+            ? "Beberapa file yang kurang berhasil dilengkapi otomatis sebelum ZIP dibuat."
+            : "Tidak ada file tambahan yang berhasil di-fetch, atau semua referensi sudah lengkap."
+        },
+        stillMissing: fillReport.stillMissing || []
+      }, null, 2));
 
       zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
 Target: ${target.href}
@@ -823,6 +956,9 @@ Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
           "X-GC-Game-Files": String(gameCount),
           "X-GC-Api-Files": String(apiCount),
           "X-GC-Server-Files": String(serverCount),
+          "X-GC-Fill-Found": String(fillReport.missingFound || 0),
+          "X-GC-Fill-Ok": String(fillReport.fetched || 0),
+          "X-GC-Fill-Fail": String(fillReport.failed || 0),
           "X-GC-Message": `Capture berhasil. ZIP ${Math.round(zipData.byteLength / 1024)} KB · game ${gameCount} · api ${apiCount} · server ${serverCount}.`
         }
       });
