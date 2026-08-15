@@ -11,6 +11,7 @@ import { classifyApiSemantics } from "./classify/api-semantics.js";
 import { buildKeterangan } from "./package/keterangan.js";
 import { smartPackage } from "./package/smart-rewrite.js";
 import { analyzeGameContent } from "./analyze/content.js";
+import { analyzeDependencies } from "./analyze/dependency.js";
 import { fillMissingAssets } from "./collect/fill-missing.js";
 import { ghFetch } from "./collect/github.js";
 import {
@@ -629,6 +630,39 @@ export default {
         analysis = { error: String(e.message || e), summary: {} };
       }
 
+      // Dependency Analyzer + Path Resolver
+      let deps = null;
+      try {
+        deps = analyzeDependencies(zipFiles, manifest);
+        if (analysis && typeof analysis === "object") {
+          analysis.dependencies = deps;
+          if (analysis.summary) {
+            analysis.summary.depScore = deps.score;
+            analysis.summary.depResolved = deps.resolved;
+            analysis.summary.depMissing = deps.missing;
+            analysis.summary.depExternal = deps.external;
+          }
+          if (analysis.scores) {
+            analysis.scores.dependencies = {
+              score: deps.score,
+              found: deps.resolved,
+              missing: deps.missing,
+              label: "Dependencies resolved",
+              ok: deps.score >= 70
+            };
+            // recompute overall lightly
+            const vals = Object.values(analysis.scores)
+              .filter((s) => s && typeof s.score === "number")
+              .map((s) => s.score);
+            if (vals.length) {
+              analysis.scores.overall = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+            }
+          }
+        }
+      } catch (e) {
+        deps = { error: String(e.message || e) };
+      }
+
       // Keterangan + pemisahan game vs API/server
       const ket = buildKeterangan(target.href, manifest, smart, analysis);
       const gameCount = manifest.filter(r => r.category === "game").length;
@@ -650,6 +684,7 @@ export default {
       zipFiles["keterangan.json"] = strToU8(JSON.stringify(ket.json, null, 2));
       zipFiles["KETERANGAN.md"] = strToU8(ket.md);
       zipFiles["analisis.json"] = strToU8(JSON.stringify(analysis, null, 2));
+      if (deps) zipFiles["dependency.json"] = strToU8(JSON.stringify(deps, null, 2));
       zipFiles["kelengkapan.json"] = strToU8(JSON.stringify({
         autoFill: fillReport,
         summary: {
@@ -694,7 +729,15 @@ export default {
             confidence: analysis?.summary?.engineConfidence || "none"
           }
         },
-        overallScore: analysis?.scores?.overall ?? null
+        overallScore: analysis?.scores?.overall ?? null,
+        dependencies: deps && !deps.error ? {
+          score: deps.score,
+          resolved: deps.resolved,
+          missing: deps.missing,
+          external: deps.external,
+          missingUnique: deps.missingUnique,
+          topMissingFiles: deps.topMissingFiles
+        } : (deps || null)
       }, null, 2));
 
       zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
