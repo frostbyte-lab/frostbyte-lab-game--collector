@@ -133,16 +133,139 @@ function smartPackage(zipFiles, manifest) {
   return result;
 }
 
+const GH_OWNER = "frostbyte-lab";
+const GH_REPO = "frostbyte-lab-game--collector";
+const GH_WORKFLOW = "collect.yml";
+
+async function ghFetch(env, path, opts = {}) {
+  const token = env.GITHUB_TOKEN;
+  if (!token) {
+    return { ok: false, status: 500, data: { error: "GITHUB_TOKEN belum di-set di Worker secrets" } };
+  }
+  const res = await fetch(`https://api.github.com${path}`, {
+    ...opts,
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "game-collector-pro",
+      ...(opts.headers || {})
+    }
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+  return { ok: res.ok, status: res.status, data, headers: res.headers };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     // Health
     if (request.method === "GET" && url.pathname === "/api/health") {
-      return Response.json({ ok: true, service: "game-collector-pro", version: "4.0" });
+      return Response.json({
+        ok: true,
+        service: "game-collector-pro",
+        version: "4.1",
+        github: Boolean(env.GITHUB_TOKEN)
+      });
     }
 
-    // Serve frontend
+    // --- Trigger GitHub Actions collect from web ---
+    if (request.method === "POST" && url.pathname === "/api/github/collect") {
+      let body;
+      try { body = await request.json(); } catch {
+        return Response.json({ error: "JSON tidak valid" }, { status: 400 });
+      }
+      const gameUrl = String(body.url || "").trim();
+      const waitSeconds = String(body.wait_seconds || "8");
+      try {
+        const u = new URL(gameUrl);
+        if (!["http:", "https:"].includes(u.protocol)) throw 0;
+      } catch {
+        return Response.json({ error: "URL http/https tidak valid" }, { status: 400 });
+      }
+
+      const dispatch = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${GH_WORKFLOW}/dispatches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ref: "main",
+          inputs: { url: gameUrl, wait_seconds: waitSeconds }
+        })
+      });
+
+      if (dispatch.status === 204 || dispatch.ok) {
+        // Ambil run terbaru (sedikit delay di client; di sini coba list)
+        await new Promise(r => setTimeout(r, 1500));
+        const runs = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${GH_WORKFLOW}/runs?per_page=5&event=workflow_dispatch`);
+        const run = runs.data?.workflow_runs?.[0] || null;
+        return Response.json({
+          ok: true,
+          message: "GitHub Actions dimulai. Tunggu 1–3 menit, lalu cek status.",
+          run_id: run?.id || null,
+          run_url: run?.html_url || `https://github.com/${GH_OWNER}/${GH_REPO}/actions`,
+          status: run?.status || "queued",
+          conclusion: run?.conclusion || null
+        });
+      }
+      return Response.json({
+        error: "Gagal trigger GitHub Actions",
+        detail: dispatch.data
+      }, { status: dispatch.status || 500 });
+    }
+
+    // --- Cek status run ---
+    if (request.method === "GET" && url.pathname === "/api/github/status") {
+      const runId = url.searchParams.get("run_id");
+      if (!runId) return Response.json({ error: "run_id wajib" }, { status: 400 });
+      const run = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${runId}`);
+      if (!run.ok) return Response.json({ error: "Gagal ambil status", detail: run.data }, { status: run.status });
+      const r = run.data;
+      let artifact = null;
+      if (r.status === "completed" && r.conclusion === "success") {
+        const arts = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${runId}/artifacts`);
+        artifact = arts.data?.artifacts?.[0] || null;
+      }
+      return Response.json({
+        ok: true,
+        run_id: r.id,
+        status: r.status,
+        conclusion: r.conclusion,
+        html_url: r.html_url,
+        artifact: artifact ? { id: artifact.id, name: artifact.name, size: artifact.size_in_bytes } : null
+      });
+    }
+
+    // --- Download artifact ZIP (proxy) ---
+    if (request.method === "GET" && url.pathname === "/api/github/artifact") {
+      const artifactId = url.searchParams.get("artifact_id");
+      if (!artifactId) return Response.json({ error: "artifact_id wajib" }, { status: 400 });
+      const token = env.GITHUB_TOKEN;
+      if (!token) return Response.json({ error: "GITHUB_TOKEN belum di-set" }, { status: 500 });
+      const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/actions/artifacts/${artifactId}/zip`, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "game-collector-pro"
+        },
+        redirect: "follow"
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        return Response.json({ error: "Gagal download artifact", detail: t.slice(0, 300) }, { status: res.status });
+      }
+      return new Response(res.body, {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": 'attachment; filename="game-resources.zip"'
+        }
+      });
+    }
+
+    // Cloudflare browser collect
     if (request.method !== "POST" || url.pathname !== "/api/collect") {
       return env.ASSETS ? env.ASSETS.fetch(request) : new Response("Not found", { status: 404 });
     }
