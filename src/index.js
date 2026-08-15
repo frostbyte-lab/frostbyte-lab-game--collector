@@ -663,6 +663,36 @@ export default {
         deps = { error: String(e.message || e) };
       }
 
+      // Mapping relasi asset (symbol ↔ atlas ↔ audio)
+      let relations = null;
+      try {
+        relations = mapAssetRelations(analysis, zipFiles, deps);
+        if (analysis && typeof analysis === "object") {
+          analysis.relations = relations;
+          if (analysis.summary) {
+            analysis.summary.relationScore = relations.stats?.score;
+            analysis.summary.symbolsLinked = relations.stats?.linked;
+          }
+          if (analysis.scores) {
+            analysis.scores.relations = {
+              score: relations.stats?.score || 0,
+              found: relations.stats?.linked || 0,
+              unmatched: relations.stats?.unmatched || 0,
+              label: "Asset relations",
+              ok: (relations.stats?.linked || 0) > 0
+            };
+            const vals = Object.values(analysis.scores)
+              .filter((s) => s && typeof s.score === "number")
+              .map((s) => s.score);
+            if (vals.length) {
+              analysis.scores.overall = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+            }
+          }
+        }
+      } catch (e) {
+        relations = { error: String(e.message || e) };
+      }
+
       // Keterangan + pemisahan game vs API/server
       const ket = buildKeterangan(target.href, manifest, smart, analysis);
       const gameCount = manifest.filter(r => r.category === "game").length;
@@ -685,6 +715,7 @@ export default {
       zipFiles["KETERANGAN.md"] = strToU8(ket.md);
       zipFiles["analisis.json"] = strToU8(JSON.stringify(analysis, null, 2));
       if (deps) zipFiles["dependency.json"] = strToU8(JSON.stringify(deps, null, 2));
+      if (relations) zipFiles["relations.json"] = strToU8(JSON.stringify(relations, null, 2));
       zipFiles["kelengkapan.json"] = strToU8(JSON.stringify({
         autoFill: fillReport,
         summary: {
@@ -737,7 +768,14 @@ export default {
           external: deps.external,
           missingUnique: deps.missingUnique,
           topMissingFiles: deps.topMissingFiles
-        } : (deps || null)
+        } : (deps || null),
+        relations: relations && !relations.error ? {
+          score: relations.stats?.score,
+          linked: relations.stats?.linked,
+          unmatched: relations.stats?.unmatched,
+          featureAudio: relations.featureAudio,
+          sample: (relations.symbolRelations || []).slice(0, 15)
+        } : (relations || null)
       }, null, 2));
 
       zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
