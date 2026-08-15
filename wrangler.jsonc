@@ -10,17 +10,7 @@
   "assets": {
     "directory": "./public"
   },
-  // History + resume session (A.5 / A.6)
-  // 1) Dashboard CF → Workers & Pages → KV → Create namespace "gc-history"
-  // 2) Isi id namespace di bawah, lalu deploy
-  // "kv_namespaces": [
-  //   { "binding": "GC_HISTORY", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
-  // ],
-  // Custom domain (A.7): Dashboard CF → Workers → game-resource-collector →
-  // Settings → Domains & Routes → Add Custom Domain (mis. collector.domain-kamu.com)
-  // Tidak perlu ubah file ini untuk custom domain.
-  // R2 opsional (ZIP besar):
-  // "r2_buckets": [
-  //   { "binding": "COLLECTOR_BUCKET", "bucket_name": "game-collector-packages" }
-  // ]
+  "kv_namespaces": [
+    { "binding": "GC_HISTORY", "id": "3869a97c9eaf49129a666476fcb672e8" }
+  ]
 }
