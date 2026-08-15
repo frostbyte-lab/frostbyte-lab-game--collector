@@ -13,6 +13,13 @@ import { smartPackage } from "./package/smart-rewrite.js";
 import { analyzeGameContent } from "./analyze/content.js";
 import { fillMissingAssets } from "./collect/fill-missing.js";
 import { ghFetch } from "./collect/github.js";
+import {
+  MAX_SINGLE_FILE,
+  MAX_RAW_TOTAL,
+  MAX_ZIP_RESPONSE,
+  tooLargeResponse,
+  sumZipFilesBytes
+} from "./collect/limits.js";
 
 const GH_OWNER = "frostbyte-lab";
 const GH_REPO = "frostbyte-lab-game--collector";
@@ -27,8 +34,15 @@ export default {
       return Response.json({
         ok: true,
         service: "game-collector-pro",
-        version: "4.1",
-        github: Boolean(env.GITHUB_TOKEN)
+        version: "4.2-no-r2-guard",
+        github: Boolean(env.GITHUB_TOKEN),
+        limits: {
+          mode: "worker-small + github-actions-large",
+          maxSingleFileMB: Math.round(MAX_SINGLE_FILE / 1024 / 1024),
+          maxRawTotalMB: Math.round(MAX_RAW_TOTAL / 1024 / 1024),
+          maxZipResponseMB: Math.round(MAX_ZIP_RESPONSE / 1024 / 1024),
+          r2: Boolean(env.COLLECTOR_BUCKET)
+        }
       });
     }
 
@@ -197,6 +211,8 @@ export default {
     const manifest = [];
     const seen = new Set();
     const zipFiles = {};
+    // Tracker ukuran untuk guard tanpa R2
+    const sizeState = { rawBytes: 0, skippedLarge: 0, stoppedForSize: false };
 
     let browser;
     try {
@@ -233,6 +249,17 @@ export default {
 
           const buffer = await response.body();
           if (!buffer || buffer.byteLength === 0) return;
+
+          // Guard: skip file terlalu besar (tanpa R2)
+          if (buffer.byteLength > MAX_SINGLE_FILE) {
+            sizeState.skippedLarge++;
+            return;
+          }
+          // Guard: stop menampung jika total raw sudah melewati batas
+          if (sizeState.rawBytes + buffer.byteLength > MAX_RAW_TOTAL) {
+            sizeState.stoppedForSize = true;
+            return;
+          }
 
           const ct = response.headers()["content-type"] || "";
           let name = safe(new URL(u).pathname.split("/").pop() || "index");
@@ -281,6 +308,7 @@ export default {
           }
 
           zipFiles[localPath] = new Uint8Array(buffer);
+          sizeState.rawBytes += buffer.byteLength;
           const entry = {
             url: u,
             type,
@@ -465,11 +493,35 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
       await browser.close();
       browser = null;
 
-      // Buat ZIP
-      const zipData = zipSync(zipFiles, { level: 6 });
+      // Guard raw total (tanpa R2) — jika masih jauh di atas batas, minta GitHub Actions
+      const rawTotal = sumZipFilesBytes(zipFiles);
+      if (rawTotal > MAX_RAW_TOTAL * 1.15) {
+        return tooLargeResponse({
+          id,
+          totalFiles: manifest.length,
+          rawBytes: rawTotal,
+          skippedLargeFiles: sizeState.skippedLarge,
+          stoppedForSize: sizeState.stoppedForSize
+        });
+      }
+
+      // Buat ZIP (level 7: lebih kecil, sedikit lebih CPU)
+      const zipData = zipSync(zipFiles, { level: 7 });
       const zipKey = `${id}/game-package.zip`;
 
-      // Simpan ke R2 jika bucket sudah di-bind (opsional)
+      // Guard ukuran ZIP response
+      if (zipData.byteLength > MAX_ZIP_RESPONSE) {
+        return tooLargeResponse({
+          id,
+          totalFiles: manifest.length,
+          rawBytes: rawTotal,
+          zipBytes: zipData.byteLength,
+          skippedLargeFiles: sizeState.skippedLarge,
+          stoppedForSize: sizeState.stoppedForSize
+        });
+      }
+
+      // Simpan ke R2 jika bucket sudah di-bind (opsional — bukan syarat)
       if (env.COLLECTOR_BUCKET) {
         await env.COLLECTOR_BUCKET.put(zipKey, zipData, {
           httpMetadata: {
@@ -479,8 +531,7 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
         });
       }
 
-      // Selalu kirim ZIP sebagai binary (bukan base64) — mendukung file besar tanpa R2
-      // Metadata lewat header supaya frontend tetap bisa menampilkan status
+      // ZIP binary langsung (jalur Worker untuk paket kecil/sedang)
       return new Response(zipData, {
         status: 200,
         headers: {
@@ -490,6 +541,7 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
           "X-GC-Id": id,
           "X-GC-Files": String(manifest.length),
           "X-GC-Zip-Size": String(zipData.byteLength),
+          "X-GC-Raw-Bytes": String(rawTotal),
           "X-GC-Smart-Rewritten": String(smart.rewritten || 0),
           "X-GC-Smart-Neutralized": String(smart.neutralized || 0),
           "X-GC-Game-Files": String(gameCount),
@@ -500,6 +552,8 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
           "X-GC-Fill-Fail": String(fillReport.failed || 0),
           "X-GC-Engine": String(analysis?.engine?.engine || "unknown"),
           "X-GC-Engine-Confidence": String(analysis?.engine?.confidence || "none"),
+          "X-GC-Skipped-Large": String(sizeState.skippedLarge || 0),
+          "X-GC-Size-Capped": sizeState.stoppedForSize ? "1" : "0",
           "X-GC-Message": `Capture berhasil. ZIP ${Math.round(zipData.byteLength / 1024)} KB · game ${gameCount} · api ${apiCount} · engine ${analysis?.engine?.engine || "unknown"}.`
         }
       });

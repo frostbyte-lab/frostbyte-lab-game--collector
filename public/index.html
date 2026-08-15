@@ -379,10 +379,10 @@
           <li><b>Workspace</b> — load ZIP, lalu <b>Preview</b> (Sandbox / Protected / Isolated Window).</li>
           <li>Game jalan di browser kamu <b>tanpa server</b> dan <b>tanpa API game asli</b>.</li>
         </ol>
-        <p style="margin-top:10px"><b>Dua jalur Collect:</b></p>
+        <p style="margin-top:10px"><b>Dua jalur Collect (tanpa R2):</b></p>
         <ul style="margin:6px 0 0 18px;color:var(--text)">
-          <li><b>Capture di web ini</b> — cepat, tapi limit Cloudflare ~10 menit browser/hari.</li>
-          <li><b>GitHub Actions</b> — gratis tanpa limit itu, cocok dipakai sering (lihat tutorial di bawah).</li>
+          <li><b>Capture (Cloudflare)</b> — cepat untuk paket kecil/sedang (aman ~20–25 MB ZIP). Ada limit browser Free ~10 menit/hari.</li>
+          <li><b>Collect via GitHub</b> — untuk game besar / limit browser / error TOO_LARGE. Tanpa R2, hasil lewat artifact Actions.</li>
         </ul>
         <p style="margin-top:10px;font-size:0.85rem">Tidak mengambil backend, database, atau DRM server-side. Hanya resource yang dikirim ke browser.</p>
       </div>
@@ -659,6 +659,17 @@
               (data.message || 'Limit 10 menit/hari Cloudflare Free sudah habis.') +
               '\n\nSolusi: klik **Collect via GitHub** (tanpa limit itu).';
             addHistory({ url, status: 'limit', message: data.message });
+            return;
+          }
+          if (res.status === 413 || data.error === 'TOO_LARGE' || data.code === 'TOO_LARGE') {
+            statusEl.className = 'warn';
+            const rawMB = data.rawBytes ? (data.rawBytes / 1024 / 1024).toFixed(1) + ' MB raw' : '';
+            const zipMB = data.zipBytes ? (data.zipBytes / 1024 / 1024).toFixed(1) + ' MB zip' : '';
+            statusEl.textContent = '⚠ PAKET TERLALU BESAR UNTUK WORKER\n\n' +
+              (data.message || 'Melewati batas aman tanpa R2 (~20–25 MB ZIP).') +
+              (rawMB || zipMB ? '\nUkuran: ' + [rawMB, zipMB].filter(Boolean).join(' / ') : '') +
+              '\n\nSolusi: klik **Collect via GitHub** — cocok untuk game besar, tanpa R2.';
+            addHistory({ url, status: 'too_large', message: data.message });
             return;
           }
           throw new Error(data.error || data.message || 'Gagal capture');

@@ -2,6 +2,7 @@ import { safe } from "../lib/safe.js";
 import { isExcluded, classifyResource } from "../classify/resource.js";
 import { classifySlotSubfolder, folderOf } from "../classify/slot-folder.js";
 import { extractReferencedUrls, guessTypeFromUrl } from "./urls.js";
+import { MAX_SINGLE_FILE, MAX_RAW_TOTAL, sumZipFilesBytes } from "./limits.js";
 
 export async function fillMissingAssets(zipFiles, manifest, seen, targetHref, id, env) {
   const report = { scanned: 0, missingFound: 0, fetched: 0, failed: 0, stillMissing: [] };
@@ -38,6 +39,15 @@ export async function fillMissingAssets(zipFiles, manifest, seen, targetHref, id
         report.failed++;
         report.stillMissing.push({ url: u, error: "empty" });
         continue;
+      }
+      if (buffer.byteLength > MAX_SINGLE_FILE) {
+        report.failed++;
+        report.stillMissing.push({ url: u, error: "too-large-file" });
+        continue;
+      }
+      if (sumZipFilesBytes(zipFiles) + buffer.byteLength > MAX_RAW_TOTAL) {
+        report.stillMissing.push({ url: u, error: "raw-total-limit" });
+        break;
       }
       const ct = res.headers.get("content-type") || "";
       const type = guessTypeFromUrl(u, ct);
