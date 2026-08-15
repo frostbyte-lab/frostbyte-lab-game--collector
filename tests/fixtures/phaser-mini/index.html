@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fixture: Phaser Mini</title>
+  <style>body{margin:0;background:#222;color:#fff;font-family:sans-serif;padding:12px}#game{display:block;margin:12px 0}</style>
+</head>
+<body>
+  <h1>Fixture: Phaser Mini</h1>
+  <p>Phaser 3 minimal scene (uses CDN). This is for engine detection tests.</p>
+  <div id="game"></div>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+  <script>
+    const config = {
+      type: Phaser.AUTO,
+      width: 640,
+      height: 360,
+      parent: 'game',
+      scene: {
+        preload() {},
+        create() {
+          const g = this.add.graphics();
+          g.fillStyle(0xff2200, 1);
+          g.fillRect(100, 60, 120, 120);
+          const txt = this.add.text(12, 12, 'Phaser mini fixture', { font: '18px Arial', fill: '#fff' });
+        }
+      }
+    };
+    const game = new Phaser.Game(config);
+  </script>
+</body>
+</html>

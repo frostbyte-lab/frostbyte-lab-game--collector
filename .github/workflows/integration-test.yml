@@ -1,0 +1,45 @@
+name: CI Integration Tests
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  integration-collect:
+    name: Integration: collect fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install deps
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+      - name: Run collect against simple fixture
+        env:
+          TARGET_URL: https://raw.githubusercontent.com/frostbyte-lab/frostbyte-lab-game--collector/${{ github.ref_name }}/tests/fixtures/simple-game/index.html
+        run: |
+          mkdir -p output
+          TARGET_URL="$TARGET_URL" npm run collect
+      - name: Assert artifact exists for simple
+        run: |
+          ls -la output || exit 1
+          test -n "$(ls output/*.zip 2>/dev/null)" || (echo "No zip produced for simple fixture" && exit 1)
+      - name: Run collect against phaser fixture
+        env:
+          TARGET_URL: https://raw.githubusercontent.com/frostbyte-lab/frostbyte-lab-game--collector/${{ github.ref_name }}/tests/fixtures/phaser-mini/index.html
+        run: |
+          mkdir -p output
+          TARGET_URL="$TARGET_URL" npm run collect
+      - name: Assert artifact exists for phaser
+        run: |
+          ls -la output || exit 1
+          test -n "$(ls output/*.zip 2>/dev/null)" || (echo "No zip produced for phaser fixture" && exit 1)
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-output
+          path: output/*.zip
