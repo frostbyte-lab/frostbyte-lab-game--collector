@@ -1647,6 +1647,14 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
       } else if (analysis && analysis.dependencies) {
         deps = analysis.dependencies;
       }
+      let relations = null;
+      if (zipFS['relations.json']) {
+        try { relations = JSON.parse(new TextDecoder().decode(zipFS['relations.json'])); } catch {}
+      } else if (fill && fill.relations) {
+        relations = fill.relations;
+      } else if (analysis && analysis.relations) {
+        relations = analysis.relations;
+      }
       if (zipFS['keterangan.json']) {
         try {
           const ket = JSON.parse(new TextDecoder().decode(zipFS['keterangan.json']));
@@ -1708,7 +1716,8 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
           ['atlasSpine', 'Atlas / Spine?'],
           ['features', 'Fitur game (FS/Bonus/...)?'],
           ['engine', 'Engine terdeteksi?'],
-          ['dependencies', 'Dependencies resolved?']
+          ['dependencies', 'Dependencies resolved?'],
+          ['relations', 'Asset relations linked?']
         ];
         scoreHtml = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid #333">
           <div style="font-weight:600;margin-bottom:6px">Skor kelengkapan per kategori
@@ -1730,6 +1739,7 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
           if (key === 'features') extra = ` · ${sc.found ?? cats?.features?.count ?? 0} fitur` + (sc.types && sc.types.length ? ` (${sc.types.join(', ')})` : '');
           if (key === 'engine') extra = ` · ${sc.name || cats?.engine?.name || 'unknown'} (${sc.confidence || cats?.engine?.confidence || '?'})`;
           if (key === 'dependencies') extra = ` · ok ${sc.found ?? deps?.resolved ?? 0} · missing ${sc.missing ?? deps?.missing ?? 0} · external ${deps?.external ?? 0}`;
+          if (key === 'relations') extra = ` · linked ${sc.found ?? 0}` + (sc.unmatched != null ? ` · unmatched ${sc.unmatched}` : '');
           scoreHtml += `<div style="font-size:12px;margin-top:6px"><b>${label}</b><span style="color:var(--muted)">${extra}</span>${bar(s, ok)}</div>`;
         }
         const symSamples = (cats && cats.symbols && cats.symbols.samples) || (analysis && analysis.symbols) || [];
@@ -1746,6 +1756,17 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
             return esc(p.key || '') + (p.kind ? '[' + esc(p.kind) + ']' : '') + (sym ? '{' + esc(sym) + '}' : '');
           }).join(' · ');
           scoreHtml += `<div style="margin-top:6px;font-size:11px;color:var(--muted)"><b>Paytable:</b> ${pts}</div>`;
+        if (relations && relations.symbolRelations && relations.symbolRelations.length) {
+          const show = relations.symbolRelations.slice(0, 8).map(r => {
+            const bits = [esc(r.symbol)];
+            if (r.images && r.images[0]) bits.push('img');
+            if (r.regions && r.regions[0]) bits.push('atlas');
+            if (r.audio && r.audio[0]) bits.push('sfx');
+            return bits.join(':');
+          }).join(' · ');
+          scoreHtml += `<div style="margin-top:6px;font-size:11px;color:var(--muted)"><b>Relations:</b> ${show}</div>`;
+        }
+
         }
 
         }
