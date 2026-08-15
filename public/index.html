@@ -1440,7 +1440,7 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
     }
 
 
-    function analyzeCompleteness() {
+        function analyzeCompleteness() {
       let box = document.getElementById('completeness-box');
       if (!box) {
         box = document.createElement('div');
@@ -1455,10 +1455,14 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
       }
       if (!zipFS) { box.innerHTML = ''; return; }
 
-      // Prefer kelengkapan.json from collect
+      // Prefer kelengkapan.json + analisis.json from collect
       let fill = null;
+      let analysis = null;
       if (zipFS['kelengkapan.json']) {
         try { fill = JSON.parse(new TextDecoder().decode(zipFS['kelengkapan.json'])); } catch {}
+      }
+      if (zipFS['analisis.json']) {
+        try { analysis = JSON.parse(new TextDecoder().decode(zipFS['analisis.json'])); } catch {}
       }
       if (zipFS['keterangan.json']) {
         try {
@@ -1497,30 +1501,87 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
       const apiN = paths.filter(p => p.startsWith('server/api')).length;
       const serverN = paths.filter(p => p.startsWith('server/') && !p.startsWith('server/api')).length;
 
+      // Scores from collect (or lightweight client fallback)
+      const scores = (fill && fill.scores) || (analysis && analysis.scores) || null;
+      const cats = (fill && fill.categories) || null;
+      const overall = (fill && fill.overallScore != null) ? fill.overallScore : (scores && scores.overall);
+
+      function bar(score, ok) {
+        const s = Math.max(0, Math.min(100, score|0));
+        const col = s >= 70 ? 'var(--success)' : s >= 40 ? 'var(--warn)' : 'var(--danger, #f66)';
+        return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+          <div style="flex:1;background:#222;border-radius:4px;height:8px;overflow:hidden">
+            <div style="width:${s}%;height:100%;background:${col}"></div>
+          </div>
+          <span style="min-width:36px;text-align:right;font-size:12px;color:${col}">${s}</span>
+          <span style="font-size:11px">${ok ? '✓' : '·'}</span>
+        </div>`;
+      }
+
+      let scoreHtml = '';
+      if (scores) {
+        const rows = [
+          ['symbols', 'Symbols lengkap?'],
+          ['paytable', 'Paytable ada?'],
+          ['audio', 'Audio event terpetakan?'],
+          ['atlasSpine', 'Atlas / Spine?'],
+          ['features', 'Fitur game (FS/Bonus/...)?'],
+          ['engine', 'Engine terdeteksi?']
+        ];
+        scoreHtml = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid #333">
+          <div style="font-weight:600;margin-bottom:6px">Skor kelengkapan per kategori
+            ${overall != null ? `<span style="float:right;font-size:13px">Overall: <b>${overall}</b>/100</span>` : ''}
+          </div>`;
+        for (const [key, label] of rows) {
+          const sc = scores[key] || {};
+          const s = sc.score|0;
+          const ok = !!sc.ok;
+          let extra = '';
+          if (key === 'symbols') extra = ` · ${sc.found ?? cats?.symbols?.count ?? 0} symbol`;
+          if (key === 'paytable') extra = ` · ${sc.found ?? cats?.paytable?.count ?? 0} hit`;
+          if (key === 'audio') {
+            const by = sc.byEvent || cats?.audioEvents?.byEvent || {};
+            const parts = Object.keys(by).map(k => k + ':' + by[k]);
+            extra = ` · ${sc.mapped ?? cats?.audioEvents?.mapped ?? 0}/${sc.found ?? 0} mapped` + (parts.length ? ` (${parts.join(', ')})` : '');
+          }
+          if (key === 'atlasSpine') extra = ` · atlas ${sc.atlas ?? cats?.atlasSpine?.atlas ?? 0} · spine ${sc.spine ?? cats?.atlasSpine?.spine ?? 0}`;
+          if (key === 'features') extra = ` · ${sc.found ?? cats?.features?.count ?? 0} fitur`;
+          if (key === 'engine') extra = ` · ${sc.name || cats?.engine?.name || 'unknown'} (${sc.confidence || cats?.engine?.confidence || '?'})`;
+          scoreHtml += `<div style="font-size:12px;margin-top:6px"><b>${label}</b><span style="color:var(--muted)">${extra}</span>${bar(s, ok)}</div>`;
+        }
+        // samples
+        const symSamples = (cats && cats.symbols && cats.symbols.samples) || (analysis && analysis.symbols) || [];
+        if (symSamples.length) {
+          scoreHtml += `<div style="margin-top:8px;font-size:11px;color:var(--muted)"><b>Sample symbols:</b> ${symSamples.slice(0,15).map(esc).join(', ')}</div>`;
+        }
+        const audioEv = (analysis && analysis.audioEvents) || [];
+        if (audioEv.length) {
+          const show = audioEv.slice(0, 12).map(a => `${esc(a.event)}:${esc(a.filename || a.path)}`).join(' · ');
+          scoreHtml += `<div style="margin-top:6px;font-size:11px;color:var(--muted)"><b>Audio events:</b> ${show}</div>`;
+        }
+        scoreHtml += `</div>`;
+      } else {
+        scoreHtml = `<div style="margin-top:10px;font-size:12px;color:var(--muted)">Skor kategori belum ada di paket (collect lama / tanpa analisis). Collect ulang untuk skor Symbols / Paytable / Audio / Atlas.</div>`;
+      }
+
       box.innerHTML = `
         <div style="font-weight:600;margin-bottom:8px">View kelengkapan paket</div>
-        <div class="diff-row">
-          <div class="diff-item"><div class="num">${paths.length}</div><div class="label">Total file</div></div>
-          <div class="diff-item"><div class="num" style="color:var(--success)">${gameN}</div><div class="label">Game assets</div></div>
-          <div class="diff-item"><div class="num" style="color:var(--accent)">${apiN}</div><div class="label">API snapshot</div></div>
-          <div class="diff-item"><div class="num">${serverN}</div><div class="label">Server/config</div></div>
-          <div class="diff-item"><div class="num" style="color:${missArr.length ? 'var(--warn)' : 'var(--success)'}">${missArr.length}</div><div class="label">Ref masih kurang</div></div>
+        <div style="font-size:12px;line-height:1.6">
+          Total file di ZIP: <b>${paths.length}</b><br>
+          assets/ (game): <b>${gameN}</b> · server/api: <b>${apiN}</b> · server lain: <b>${serverN}</b>
+          ${fill ? `<br>Auto-fill: scanned ${fill.autoFill?.scanned ?? '?'} · missing ${fill.autoFill?.missingFound ?? '?'} · fetched ${fill.autoFill?.fetched ?? '?'} · gagal ${(fill.stillMissing||[]).length}` : ''}
         </div>
-        ${fill ? `<div style="margin-top:10px;font-size:12px;color:var(--muted)">
-          Auto-lengkapi saat collect: ketemu <b>${fill.autoFill?.missingFound ?? fill.summary?.referencedMissing ?? '?'}</b>,
-          sukses unduh <b style="color:var(--success)">${fill.autoFill?.fetched ?? fill.summary?.autoDownloaded ?? '?'}</b>,
-          gagal/skip <b>${fill.autoFill?.failed ?? fill.summary?.failedOrSkipped ?? '?'}</b>
-        </div>` : '<div style="margin-top:10px;font-size:12px;color:var(--muted)">Paket tanpa kelengkapan.json (collect lama / GitHub). Scan lokal tetap dijalankan.</div>'}
+        ${scoreHtml}
         ${missArr.length ? `<div style="margin-top:8px;font-size:12px;color:var(--warn)"><b>Referensi di kode yang belum ada di ZIP:</b> ${missArr.map(esc).join(', ')}</div>` : `<div style="margin-top:8px;font-size:12px;color:var(--success)">Tidak ada referensi asset mencolok yang hilang (scan nama file).</div>`}
         ${stillFromFill.length ? `<div style="margin-top:8px;font-size:11px;color:var(--muted)"><b>Gagal di-fetch saat collect:</b> ${stillFromFill.map(x => esc(x.url || x)).slice(0,10).join('<br>')}</div>` : ''}
         <div style="margin-top:8px;font-size:12px;color:var(--muted)">File kurang yang berhasil di-fetch otomatis sudah masuk ZIP (folder assets/ atau server/). Sisanya biasanya butuh server live / auth.</div>
       `;
       box.classList.add('active');
-      log(`Kelengkapan: ${paths.length} file · ref kurang (scan): ${missArr.length}` + (fill ? ` · auto-fill OK: ${fill.autoFill?.fetched ?? '?'}` : ''));
+      log(`Kelengkapan: ${paths.length} file · ref kurang (scan): ${missArr.length}` + (overall != null ? ` · skor overall: ${overall}` : '') + (fill ? ` · auto-fill OK: ${fill.autoFill?.fetched ?? '?'}` : ''));
     }
 
 
-    let zipFSOriginal = null; // snapshot sebelum repair
+let zipFSOriginal = null; // snapshot sebelum repair
 
     function buildPathIndex() {
       const byBare = new Map();
