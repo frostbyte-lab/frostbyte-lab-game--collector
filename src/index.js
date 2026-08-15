@@ -693,6 +693,27 @@ export default {
         relations = { error: String(e.message || e) };
       }
 
+      // Engine-specific path patches (server-side, setelah deteksi engine)
+      try {
+        const engInfo = detectEngineFromAnalysis(analysis, zipFiles);
+        let engFixCount = 0;
+        for (const [path, data] of Object.entries(zipFiles)) {
+          if (!/\.(html?|js|mjs)$/i.test(path) && path !== "index.html") continue;
+          if (!data || data.byteLength > 1_500_000) continue;
+          let t;
+          try { t = new TextDecoder().decode(data); } catch { continue; }
+          const er = applyEngineRepairs(t, engInfo.engine, path);
+          if (er.fixes.length) {
+            zipFiles[path] = strToU8(er.text);
+            engFixCount += er.fixes.length;
+          }
+        }
+        if (smart) {
+          smart.engine = engInfo.engine;
+          smart.engineFixes = engFixCount;
+        }
+      } catch {}
+
       // Keterangan + pemisahan game vs API/server
       const ket = buildKeterangan(target.href, manifest, smart, analysis);
       const gameCount = manifest.filter(r => r.category === "game").length;
