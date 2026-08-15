@@ -166,15 +166,62 @@ function rewriteContent(text, urlMap, isHtml) {
 function smartPackage(zipFiles, manifest) {
   const urlMap = buildUrlToLocalMap(manifest);
   const result = { rewritten: 0, neutralized: 0 };
+  const bareMap = new Map();
+  for (const [k, v] of urlMap) {
+    if (!String(k).includes("/") && String(k).length > 3) bareMap.set(k, v);
+  }
   for (const key of Object.keys(zipFiles)) {
     const isHtml = /\.html?$/i.test(key) || key === "index.html";
-    const isJs = /\.js$/i.test(key);
+    const isJs = /\.(js|mjs)$/i.test(key);
     const isCss = /\.css$/i.test(key);
-    if (!isHtml && !isJs && !isCss) continue;
+    const isJson = /\.json$/i.test(key);
+    if (!isHtml && !isJs && !isCss && !isJson) continue;
     try {
       let text = new TextDecoder().decode(zipFiles[key]);
       const before = text;
-      text = rewriteContent(text, urlMap, isHtml);
+      if (!isJson) {
+        text = rewriteContent(text, urlMap, isHtml);
+      }
+      // JS import / dynamic import / require
+      if (isJs || isHtml) {
+        text = text.replace(/\b(import|from|require)\s*\(?\s*['"]([^'"]+)['"]/g, (m, kw, p) => {
+          if (urlMap.has(p)) return m.replace(p, urlMap.get(p));
+          const bare = p.split("/").pop();
+          if (bare && bareMap.has(bare)) return m.replace(p, bareMap.get(bare));
+          return m;
+        });
+        text = text.replace(/import\s*\(\s*['"]([^'"]+)['"]\s*\)/g, (m, p) => {
+          if (urlMap.has(p)) return `import('${urlMap.get(p)}')`;
+          const bare = p.split("/").pop();
+          if (bare && bareMap.has(bare)) return `import('${bareMap.get(bare)}')`;
+          return m;
+        });
+      }
+      // JSON walk for URL strings
+      if (isJson) {
+        try {
+          let j = JSON.parse(text);
+          let touched = false;
+          const walk = (obj) => {
+            if (typeof obj === "string") {
+              if (urlMap.has(obj)) { touched = true; return urlMap.get(obj); }
+              try {
+                const u = new URL(obj);
+                const bare = u.pathname.split("/").pop();
+                if (bare && bareMap.has(bare)) { touched = true; return bareMap.get(bare); }
+              } catch {}
+              return obj;
+            }
+            if (Array.isArray(obj)) return obj.map(walk);
+            if (obj && typeof obj === "object") {
+              for (const k of Object.keys(obj)) obj[k] = walk(obj[k]);
+            }
+            return obj;
+          };
+          j = walk(j);
+          if (touched) text = JSON.stringify(j);
+        } catch {}
+      }
       if (isJs || isHtml) {
         const res = neutralizeFrameBusters(text);
         text = res.text;

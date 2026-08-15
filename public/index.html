@@ -300,7 +300,7 @@
               <div class="file-list" id="file-list"><div class="empty" style="padding:12px">—</div></div>
             </div>
             <div class="row" style="margin-top:12px">
-              <button class="btn-secondary" onclick="runAutoRepair()" id="btn-repair" disabled>Auto Repair</button>
+              <button class="btn-secondary" onclick="runAutoRepair()" id="btn-repair" disabled>Auto Repair (Deep)</button>
               <button class="btn-secondary" onclick="repackage()" id="btn-repack" disabled>Packaging Ulang</button>
             </div>
             <div class="card" style="padding:14px;margin-top:12px" id="ai-card">
@@ -919,10 +919,102 @@ window.__GC_ASSETS = ${JSON.stringify(urls)};
 
     let zipFSOriginal = null; // snapshot sebelum repair
 
+    function buildPathIndex() {
+      const byBare = new Map();
+      const byPath = new Map();
+      const allPaths = Object.keys(zipFS);
+      for (const p of allPaths) {
+        byPath.set(p, p);
+        byPath.set('/' + p, p);
+        const bare = p.split('/').pop();
+        if (bare) {
+          if (!byBare.has(bare)) byBare.set(bare, p);
+          if (!byBare.has(bare.toLowerCase())) byBare.set(bare.toLowerCase(), p);
+        }
+      }
+      return { byBare, byPath, allPaths };
+    }
+
+    function resolveLocal(ref, index) {
+      if (!ref || ref.startsWith('data:') || ref.startsWith('blob:') || ref.startsWith('#')) return null;
+      let clean = ref.trim().split('#')[0];
+      clean = clean.split('?')[0];
+      try {
+        if (/^https?:\/\//i.test(ref.trim()) || ref.trim().startsWith('//')) {
+          const raw = ref.trim().startsWith('//') ? 'https:' + ref.trim() : ref.trim();
+          const u = new URL(raw);
+          const bare = u.pathname.split('/').pop();
+          if (bare && index.byBare.has(bare)) return index.byBare.get(bare);
+          if (index.byPath.has(u.pathname)) return index.byPath.get(u.pathname);
+          return null;
+        }
+      } catch {}
+      const bare = clean.split('/').pop();
+      if (bare && index.byBare.has(bare)) return index.byBare.get(bare);
+      if (index.byPath.has(clean)) return index.byPath.get(clean);
+      const noDot = clean.replace(/^\.\//, '');
+      if (index.byPath.has(noDot)) return index.byPath.get(noDot);
+      const parts = clean.split('/').filter(Boolean);
+      if (parts.length >= 2) {
+        const tail = parts.slice(-2).join('/');
+        const hit = index.allPaths.find(p => p.endsWith('/' + tail) || p.endsWith(tail));
+        if (hit) return hit;
+      }
+      return null;
+    }
+
+    function deepOfflineBootstrap() {
+      return `<script>
+(function(){
+  if (window.__gc_deep_offline) return;
+  window.__gc_deep_offline = 1;
+  window.__gc_offline = 1;
+  window.__gc_protected = 1;
+  try { Object.defineProperty(window, 'top', { get: function(){ return window; } }); } catch(e){}
+  try { Object.defineProperty(window, 'parent', { get: function(){ return window; } }); } catch(e){}
+  try { Object.defineProperty(window, 'frameElement', { get: function(){ return null; } }); } catch(e){}
+  function isExt(u) {
+    try {
+      var s = typeof u === 'string' ? u : (u && u.url) || '';
+      return /^https?:\\/\\//i.test(s) && !/^(blob:|data:)/i.test(s);
+    } catch(e) { return false; }
+  }
+  var _f = window.fetch;
+  window.fetch = function(u, i) {
+    if (isExt(u)) { console.warn('[GC-Offline] blocked fetch:', u); return Promise.reject(new Error('offline')); }
+    return _f.apply(this, arguments);
+  };
+  var _xo = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(m, u) {
+    if (typeof u === 'string' && isExt(u)) { console.warn('[GC-Offline] blocked XHR:', u); arguments[1] = 'data:,'; }
+    return _xo.apply(this, arguments);
+  };
+  var _WS = window.WebSocket;
+  if (_WS) {
+    window.WebSocket = function(url) {
+      if (isExt(url)) { console.warn('[GC-Offline] blocked WebSocket:', url); throw new Error('offline'); }
+      return new _WS(url);
+    };
+    window.WebSocket.prototype = _WS.prototype;
+  }
+  var _ES = window.EventSource;
+  if (_ES) {
+    window.EventSource = function(url) {
+      if (isExt(url)) { console.warn('[GC-Offline] blocked EventSource:', url); throw new Error('offline'); }
+      return new _ES(url);
+    };
+  }
+  window.gtag = window.gtag || function(){};
+  window.dataLayer = window.dataLayer || [];
+  window.ga = window.ga || function(){};
+  window.fbq = window.fbq || function(){};
+})();
+<\/script>`;
+    }
+
     function runAutoRepair() {
       if (!zipFS) return;
-      log('Auto Repair dimulai...');
-      // Simpan snapshot sebelum (untuk perbandingan)
+      log('Auto Repair dalam dimulai...');
       if (!zipFSOriginal) {
         zipFSOriginal = {};
         for (const [p, d] of Object.entries(zipFS)) {
@@ -930,76 +1022,143 @@ window.__GC_ASSETS = ${JSON.stringify(urls)};
         }
       }
 
-      let fixed = 0;
+      const index = buildPathIndex();
       let filesChanged = 0;
       let frameBusters = 0;
       let pathFixes = 0;
-      const bareNames = new Set();
-      for (const p of Object.keys(zipFS)) {
-        const bare = p.split('/').pop();
-        if (bare) bareNames.add(bare);
-      }
+      let importFixes = 0;
+      let attrFixes = 0;
+      let jsonFixes = 0;
+      const missing = new Set();
+      const ASSET_EXT = /\.(js|mjs|css|json|png|jpe?g|gif|webp|svg|woff2?|ttf|otf|mp3|ogg|wav|mp4|webm|wasm|data|unityweb|bundle)$/i;
 
       for (const [path, data] of Object.entries(zipFS)) {
-        if (!/\.(html?|js|css)$/i.test(path)) continue;
-        let text = new TextDecoder().decode(data);
-        const before = text;
-        let localFixed = 0;
+        const isHtml = /\.(html?)$/i.test(path) || path === 'index.html';
+        const isJs = /\.(js|mjs)$/i.test(path);
+        const isCss = /\.css$/i.test(path);
+        const isJson = /\.json$/i.test(path);
+        if (!isHtml && !isJs && !isCss && !isJson) continue;
 
-        // Frame-buster
-        if (/\.(html?|js)$/i.test(path)) {
+        let text;
+        try { text = new TextDecoder().decode(data); } catch { continue; }
+        const before = text;
+
+        if (isHtml || isJs) {
           const res = neutralizeFrameBusters(text);
           text = res.html;
           frameBusters += res.neutralized;
-          localFixed += res.neutralized;
+        }
+        if (isHtml && !text.includes('__gc_deep_offline')) {
+          const boot = deepOfflineBootstrap();
+          if (text.includes('<head>')) text = text.replace('<head>', '<head>' + boot);
+          else if (text.includes('<html')) text = text.replace(/<html[^>]*>/i, (m) => m + boot);
+          else text = boot + text;
         }
 
-        // Absolute URL → local path (lebih pintar)
-        text = text.replace(/https?:\/\/[^"'\s)\\]+/g, (url) => {
+        text = text.replace(/(https?:)?\/\/[^\s"'\\)\\]>]+/g, (url) => {
+          const resolved = resolveLocal(url, index);
+          if (resolved) { pathFixes++; return resolved; }
           try {
-            const u = new URL(url);
-            const name = u.pathname.split('/').pop();
-            if (name && bareNames.has(name)) {
-              pathFixes++;
-              localFixed++;
-              // Cari path lengkap di zip
-              const full = Object.keys(zipFS).find(p => p.endsWith('/' + name) || p === name);
-              return full || name;
-            }
+            const raw = url.startsWith('//') ? 'https:' + url : url;
+            const bare = new URL(raw).pathname.split('/').pop();
+            if (bare && ASSET_EXT.test(bare)) missing.add(bare);
           } catch {}
           return url;
         });
 
-        // CSS url()
-        if (/\.css$/i.test(path)) {
-          text = text.replace(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi, (m, p) => {
-            const name = p.trim().split('?')[0].split('#')[0].split('/').pop();
-            if (name && bareNames.has(name)) {
-              pathFixes++;
-              localFixed++;
-              const full = Object.keys(zipFS).find(x => x.endsWith('/' + name) || x === name);
-              return `url(${full || name})`;
+        if (isHtml) {
+          text = text.replace(/\b(src|href|data-src|data-href|poster|data-background|xlink:href)=["']([^"']+)["']/gi, (m, attr, val) => {
+            const resolved = resolveLocal(val, index);
+            if (resolved && resolved !== val) { attrFixes++; return attr + '="' + resolved + '"'; }
+            if (!/^https?:|data:|blob:|#|mailto:|javascript:/i.test(val) && ASSET_EXT.test(val)) {
+              const bare = val.split('/').pop().split('?')[0];
+              if (bare && !index.byBare.has(bare)) missing.add(bare);
             }
             return m;
           });
+          text = text.replace(/\bsrcset=["']([^"']+)["']/gi, (m, val) => {
+            let changed = false;
+            const next = val.split(',').map(part => {
+              const bits = part.trim().split(/\s+/);
+              if (!bits[0]) return part;
+              const resolved = resolveLocal(bits[0], index);
+              if (resolved) { changed = true; bits[0] = resolved; }
+              return bits.join(' ');
+            }).join(', ');
+            if (changed) { attrFixes++; return 'srcset="' + next + '"'; }
+            return m;
+          });
+          if (!/<base\s/i.test(text) && text.includes('<head>')) {
+            text = text.replace('<head>', '<head>\n<base href="./">');
+          }
+        }
+
+        if (isCss || isHtml) {
+          text = text.replace(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi, (m, p) => {
+            const resolved = resolveLocal(p, index);
+            if (resolved) { pathFixes++; return 'url(' + resolved + ')'; }
+            const bare = p.trim().split('?')[0].split('#')[0].split('/').pop();
+            if (bare && ASSET_EXT.test(bare) && !index.byBare.has(bare)) missing.add(bare);
+            return m;
+          });
+        }
+
+        if (isJs || isHtml) {
+          text = text.replace(/\b(import|from|require)\s*\(?\s*['"]([^'"]+)['"]/g, (m, kw, p) => {
+            const resolved = resolveLocal(p, index);
+            if (resolved && resolved !== p) { importFixes++; return m.replace(p, resolved); }
+            return m;
+          });
+          text = text.replace(/import\s*\(\s*['"]([^'"]+)['"]\s*\)/g, (m, p) => {
+            const resolved = resolveLocal(p, index);
+            if (resolved && resolved !== p) { importFixes++; return "import('" + resolved + "')"; }
+            return m;
+          });
+          text = text.replace(/(['"])(\.?\.?\/[\w./@-]+\.(?:js|mjs|css|json|png|jpe?g|gif|webp|svg|woff2?|mp3|ogg|wav|mp4|webm|wasm|data|unityweb))\1/gi, (m, q, p) => {
+            const resolved = resolveLocal(p, index);
+            if (resolved && resolved !== p) { pathFixes++; return q + resolved + q; }
+            const bare = p.split('/').pop();
+            if (bare && !index.byBare.has(bare)) missing.add(bare);
+            return m;
+          });
+        }
+
+        if (isJson) {
+          try {
+            let j = JSON.parse(text);
+            let touched = false;
+            const walk = (obj) => {
+              if (typeof obj === 'string') {
+                const resolved = resolveLocal(obj, index);
+                if (resolved && resolved !== obj) { touched = true; jsonFixes++; return resolved; }
+                return obj;
+              }
+              if (Array.isArray(obj)) return obj.map(walk);
+              if (obj && typeof obj === 'object') {
+                for (const k of Object.keys(obj)) obj[k] = walk(obj[k]);
+              }
+              return obj;
+            };
+            j = walk(j);
+            if (touched) text = JSON.stringify(j);
+          } catch {}
         }
 
         if (text !== before) {
           zipFS[path] = new TextEncoder().encode(text);
           filesChanged++;
-          fixed += localFixed;
         }
       }
 
-      log(`Auto Repair selesai · ${filesChanged} file diubah · frame-buster: ${frameBusters} · path: ${pathFixes}`);
-      document.getElementById('preview-status').textContent = 'Repaired';
+      const missArr = [...missing].slice(0, 40);
+      log(`Auto Repair dalam selesai · file diubah: ${filesChanged} · frame-buster: ${frameBusters} · path: ${pathFixes} · attr: ${attrFixes} · import: ${importFixes} · json: ${jsonFixes}`);
+      if (missArr.length) log('⚠ Referensi mungkin hilang (' + missArr.length + '): ' + missArr.join(', '));
+      document.getElementById('preview-status').textContent = 'Repaired (deep)';
       document.getElementById('preview-status').className = 'badge badge-ok';
-
-      // Tampilkan perbandingan sebelum / sesudah
-      showRepairDiff(filesChanged, frameBusters, pathFixes);
+      showRepairDiff(filesChanged, frameBusters, pathFixes, attrFixes, importFixes, jsonFixes, missArr);
     }
 
-    function showRepairDiff(filesChanged, frameBusters, pathFixes) {
+    function showRepairDiff(filesChanged, frameBusters, pathFixes, attrFixes, importFixes, jsonFixes, missing) {
       let box = document.getElementById('repair-diff');
       if (!box) {
         box = document.createElement('div');
@@ -1010,16 +1169,21 @@ window.__GC_ASSETS = ${JSON.stringify(urls)};
       }
       const beforeFiles = zipFSOriginal ? Object.keys(zipFSOriginal).length : 0;
       const afterFiles = Object.keys(zipFS).length;
+      const missHtml = (missing && missing.length)
+        ? `<div style="margin-top:10px;font-size:12px;color:var(--warn)"><b>Referensi mungkin hilang:</b> ${missing.map(esc).join(', ')}${missing.length >= 40 ? '…' : ''}</div>`
+        : `<div style="margin-top:10px;font-size:12px;color:var(--muted)">Tidak ada referensi hilang yang terdeteksi (berdasarkan nama file).</div>`;
       box.innerHTML = `
-        <div style="font-weight:600;margin-bottom:8px">Perbandingan sebelum & sesudah Repair</div>
+        <div style="font-weight:600;margin-bottom:8px">Perbandingan sebelum & sesudah Repair (deep)</div>
         <div class="diff-row">
           <div class="diff-item"><div class="num">${beforeFiles}</div><div class="label">File sebelum</div></div>
           <div class="diff-item"><div class="num">${afterFiles}</div><div class="label">File sesudah</div></div>
           <div class="diff-item"><div class="num" style="color:var(--success)">${filesChanged}</div><div class="label">File diubah</div></div>
           <div class="diff-item"><div class="num" style="color:var(--accent)">${frameBusters}</div><div class="label">Frame-buster</div></div>
-          <div class="diff-item"><div class="num" style="color:var(--warn)">${pathFixes}</div><div class="label">Path diperbaiki</div></div>
+          <div class="diff-item"><div class="num" style="color:var(--warn)">${pathFixes + attrFixes}</div><div class="label">Path / attr</div></div>
+          <div class="diff-item"><div class="num" style="color:#a78bfa">${importFixes + jsonFixes}</div><div class="label">Import / JSON</div></div>
         </div>
-        <div style="margin-top:10px;font-size:12px;color:var(--muted)">Snapshot original disimpan. Kamu bisa Preview ulang untuk melihat hasil repair.</div>
+        ${missHtml}
+        <div style="margin-top:8px;font-size:12px;color:var(--muted)">Snapshot original disimpan. Preview ulang untuk melihat hasil. Logic server-side tetap tidak bisa diperbaiki otomatis.</div>
       `;
       box.classList.add('active');
     }

@@ -100,7 +100,7 @@ Endpoint default sudah diisi untuk Groq. Bisa diganti OpenRouter / OpenAI / prov
 
 - [x] Collect + GitHub fallback
 - [x] Workspace + Preview anti-iframe
-- [x] Auto Repair + Packaging ulang
+- [x] Auto Repair dalam (path, import, JSON, attr, missing deps, offline bootstrap) + Packaging ulang
 - [x] Smart path rewrite saat collect (v2 — relative, CSS url, protocol-relative)
 - [x] AI Assistant (analisis + saran)
 - [x] Estimasi waktu & progress real-time Collect
