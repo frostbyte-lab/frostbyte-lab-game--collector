@@ -278,10 +278,15 @@
         <div class="preview-toolbar" id="preview-toolbar" style="display:none">
           <button class="btn-success" onclick="startPreview('sandbox')">▶ Preview (Sandbox)</button>
           <button class="btn-secondary" onclick="startPreview('protected')">🛡 Protected Mode</button>
+          <button class="btn-primary" onclick="startPreview('online')" title="Asset lokal + izinkan koneksi ke server game">🌐 Online Hybrid</button>
           <button class="btn-secondary" onclick="startPreview('window')">⧉ Open Isolated Window</button>
           <button class="btn-secondary" onclick="stopPreview()">Stop</button>
           <span id="preview-status" class="badge badge-ok">Ready</span>
         </div>
+        <p class="sub" id="online-tip" style="margin-top:-4px;margin-bottom:10px;font-size:12px">
+          <b>Online Hybrid:</b> asset dari ZIP dipakai dulu, request ke server game tetap diizinkan.
+          Login/cookie first-party bisa terbatas di blob URL — kalau gagal auth, pakai Isolated Window atau main di situs asli.
+        </p>
 
         <div class="workspace-grid">
           <div>
@@ -806,19 +811,89 @@
     async function prepareHtml(mode) {
       const idx = findIndexHtml();
       if (!idx) throw new Error('Tidak menemukan index.html di dalam ZIP');
-      let raw = new TextDecoder().decode(zipFS[idx]);
+
+      // Online hybrid: prefer original snapshot agar offline-block dari Auto Repair tidak ikut
+      let source = zipFS[idx];
+      if ((mode === 'online' || mode === 'hybrid') && zipFSOriginal && zipFSOriginal[idx]) {
+        source = zipFSOriginal[idx];
+        log('Online Hybrid: pakai snapshot original (tanpa offline-block)');
+      }
+      let raw = new TextDecoder().decode(source);
       let neutralized = 0;
 
-      if (mode === 'protected' || mode === 'sandbox') {
+      // Frame-buster: tetap netralisir untuk mode iframe (termasuk online)
+      if (mode === 'protected' || mode === 'sandbox' || mode === 'online' || mode === 'hybrid') {
         const res = neutralizeFrameBusters(raw);
         raw = res.html;
         neutralized = res.neutralized;
-        log(`Frame-buster neutralization: ${neutralized} pola dinetralisir`);
+        if (neutralized) log(`Frame-buster neutralization: ${neutralized} pola`);
+      }
+
+      // Hapus offline bootstrap lama jika ada (supaya online mode tidak ke-block)
+      if (mode === 'online' || mode === 'hybrid') {
+        raw = raw.replace(/<script>\s*\(function\(\)\{\s*if\s*\(window\.__gc_deep_offline\)[\s\S]*?<\/script>/i, '');
+        raw = raw.replace(/<script>\s*\(function\(\)\{\s*try\{Object\.defineProperty\(window,"top"[\s\S]*?<\/script>/i, '');
       }
 
       const urls = buildVirtualFS();
-      const mapScript = `<script>
-window.__GC_ASSETS = ${JSON.stringify(urls)};
+      // Index path → blob juga by pathname variants
+      const assetIndex = {};
+      for (const [p, u] of Object.entries(urls)) {
+        assetIndex[p] = u;
+        assetIndex[p.split('/').pop()] = u;
+        try { assetIndex['/' + p] = u; } catch {}
+      }
+
+      const isOnline = (mode === 'online' || mode === 'hybrid');
+      const mapScript = isOnline ? `<script>
+window.__GC_ASSETS = ${JSON.stringify(assetIndex)};
+window.__GC_MODE = 'online';
+window.__gc_offline = 0;
+(function(){
+  function resolveAsset(u) {
+    if (!u) return null;
+    try {
+      if (window.__GC_ASSETS[u]) return window.__GC_ASSETS[u];
+      var bare = String(u).split('?')[0].split('#')[0].split('/').pop();
+      if (bare && window.__GC_ASSETS[bare]) return window.__GC_ASSETS[bare];
+      // path only
+      try {
+        var path = new URL(u, location.href).pathname;
+        if (window.__GC_ASSETS[path]) return window.__GC_ASSETS[path];
+        var b2 = path.split('/').pop();
+        if (b2 && window.__GC_ASSETS[b2]) return window.__GC_ASSETS[b2];
+      } catch(e){}
+    } catch(e){}
+    return null;
+  }
+  // fetch: lokal dulu, lalu network (hybrid)
+  var _f = window.fetch;
+  window.fetch = function(input, init) {
+    try {
+      var u = typeof input === 'string' ? input : (input && input.url);
+      var local = resolveAsset(u);
+      if (local) return _f(local, init);
+    } catch(e){}
+    return _f.apply(this, arguments);
+  };
+  // XHR: coba rewrite ke lokal jika ada
+  var _xo = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(m, u) {
+    try {
+      var local = resolveAsset(u);
+      if (local) arguments[1] = local;
+    } catch(e){}
+    return _xo.apply(this, arguments);
+  };
+  // Frame protect ringan (tanpa block network)
+  try { Object.defineProperty(window, 'top', { get: function(){ return window; } }); } catch(e){}
+  try { Object.defineProperty(window, 'parent', { get: function(){ return window; } }); } catch(e){}
+  window.__gc_frame_protected = true;
+  console.info('[GC] Online Hybrid aktif: asset lokal prioritas, server game diizinkan');
+})();
+<\/script>` : `<script>
+window.__GC_ASSETS = ${JSON.stringify(assetIndex)};
+window.__GC_MODE = 'offline';
 (function(){
   const origFetch = window.fetch;
   window.fetch = function(input, init) {
@@ -832,6 +907,7 @@ window.__GC_ASSETS = ${JSON.stringify(urls)};
   };
 })();
 <\/script>`;
+
       if (raw.includes('<head>')) raw = raw.replace('<head>', '<head>' + mapScript);
       else raw = mapScript + raw;
 
@@ -871,7 +947,7 @@ window.__GC_ASSETS = ${JSON.stringify(urls)};
         placeholder.style.display = 'none';
         frame.style.display = 'block';
 
-        if (mode === 'protected') {
+        if (mode === 'protected' || mode === 'online' || mode === 'hybrid') {
           frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock allow-orientation-lock');
         } else {
           frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock');
@@ -882,7 +958,7 @@ window.__GC_ASSETS = ${JSON.stringify(urls)};
 
         frame.onload = () => {
           log('Iframe loaded');
-          statusBadge.textContent = mode === 'protected' ? 'Protected Active' : 'Sandbox Active';
+          statusBadge.textContent = mode === 'online' || mode === 'hybrid' ? 'Online Hybrid' : (mode === 'protected' ? 'Protected Active' : 'Sandbox Active');
           statusBadge.className = 'badge badge-ok';
           try {
             const w = frame.contentWindow;
