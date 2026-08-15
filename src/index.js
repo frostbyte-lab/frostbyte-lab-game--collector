@@ -20,6 +20,17 @@ import {
   tooLargeResponse,
   sumZipFilesBytes
 } from "./collect/limits.js";
+import { resumeFetchMissing } from "./collect/resume.js";
+import {
+  hasKV,
+  listHistory,
+  putHistory,
+  deleteHistory,
+  clearHistory,
+  saveSession,
+  getSession,
+  deleteSession
+} from "./history/kv.js";
 
 const GH_OWNER = "frostbyte-lab";
 const GH_REPO = "frostbyte-lab-game--collector";
@@ -41,7 +52,8 @@ export default {
           maxSingleFileMB: Math.round(MAX_SINGLE_FILE / 1024 / 1024),
           maxRawTotalMB: Math.round(MAX_RAW_TOTAL / 1024 / 1024),
           maxZipResponseMB: Math.round(MAX_ZIP_RESPONSE / 1024 / 1024),
-          r2: Boolean(env.COLLECTOR_BUCKET)
+          r2: Boolean(env.COLLECTOR_BUCKET),
+          historyKV: hasKV(env)
         }
       });
     }
@@ -183,6 +195,138 @@ export default {
         headers: {
           "Content-Type": "application/zip",
           "Content-Disposition": 'attachment; filename="game-resources.zip"'
+        }
+      });
+    }
+
+    // --- History (KV) ---
+    if (url.pathname === "/api/history") {
+      if (request.method === "GET") {
+        const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 30)));
+        const data = await listHistory(env, limit);
+        return Response.json({
+          ok: true,
+          kv: hasKV(env),
+          ...data
+        });
+      }
+      if (request.method === "POST") {
+        let body;
+        try { body = await request.json(); } catch {
+          return Response.json({ error: "JSON tidak valid" }, { status: 400 });
+        }
+        const result = await putHistory(env, body || {});
+        if (!result.ok && result.reason === "no-kv") {
+          return Response.json({
+            ok: false,
+            error: "NO_KV",
+            message: "KV GC_HISTORY belum di-bind. Riwayat tetap bisa di localStorage. Lihat README untuk setup."
+          }, { status: 503 });
+        }
+        return Response.json(result);
+      }
+      if (request.method === "DELETE") {
+        const id = url.searchParams.get("id");
+        if (id === "all") {
+          const r = await clearHistory(env);
+          return Response.json(r);
+        }
+        if (!id) return Response.json({ error: "id required" }, { status: 400 });
+        const r = await deleteHistory(env, id);
+        return Response.json(r);
+      }
+    }
+
+    // --- Resume / partial collect (tanpa browser) ---
+    if (request.method === "POST" && url.pathname === "/api/resume") {
+      let body;
+      try { body = await request.json(); } catch {
+        return Response.json({ error: "JSON tidak valid" }, { status: 400 });
+      }
+      const sessionId = body.sessionId || body.id || null;
+      let stillMissing = body.stillMissing || [];
+      let targetUrl = String(body.url || "").trim();
+      let seenList = Array.isArray(body.seen) ? body.seen : [];
+
+      if (sessionId) {
+        const sess = await getSession(env, sessionId);
+        if (sess) {
+          if (!targetUrl) targetUrl = sess.url || "";
+          if (!stillMissing.length) stillMissing = sess.stillMissing || [];
+          if (!seenList.length) seenList = sess.seen || [];
+        } else if (!stillMissing.length) {
+          return Response.json({
+            error: "SESSION_NOT_FOUND",
+            message: "Session resume tidak ditemukan / expired. Kirim stillMissing[] manual atau collect ulang."
+          }, { status: 404 });
+        }
+      }
+
+      if (!targetUrl && !stillMissing.length) {
+        return Response.json({ error: "url atau stillMissing wajib" }, { status: 400 });
+      }
+
+      const seen = new Set(seenList);
+      const zipFiles = {};
+      const manifest = [];
+      // Optional: seed existing tiny files not practical without R2 — resume hanya fetch missing
+      const report = await resumeFetchMissing(
+        stillMissing,
+        seen,
+        zipFiles,
+        manifest,
+        targetUrl || (stillMissing[0] && (stillMissing[0].url || stillMissing[0])),
+        Math.min(80, Number(body.maxFetch) || 40)
+      );
+
+      // Pack partial ZIP of newly fetched only (fflate sudah di-import di top-level)
+      zipFiles["_resume-report.json"] = strToU8(JSON.stringify({
+        target: targetUrl,
+        sessionId,
+        report,
+        resumedAt: new Date().toISOString()
+      }, null, 2));
+
+      const zipData = zipSync(zipFiles, { level: 6 });
+
+      // Update session if KV
+      let newSessionId = null;
+      if (hasKV(env) && report.stillMissing.length) {
+        const saved = await saveSession(env, {
+          id: sessionId || crypto.randomUUID(),
+          url: targetUrl,
+          phase: "partial",
+          seen: [...seen],
+          stillMissing: report.stillMissing,
+          note: "resume-partial"
+        });
+        newSessionId = saved.id;
+      } else if (sessionId && !report.stillMissing.length) {
+        await deleteSession(env, sessionId);
+      }
+
+      // History entry
+      if (hasKV(env)) {
+        await putHistory(env, {
+          id: crypto.randomUUID(),
+          url: targetUrl,
+          status: report.stillMissing.length ? "resume_partial" : "resume_ok",
+          files: report.fetched,
+          message: `Resume: +${report.fetched} file, still ${report.stillMissing.length}`,
+          stillMissing: report.stillMissing.slice(0, 50)
+        });
+      }
+
+      return new Response(zipData, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="resume-${(sessionId || "partial").slice(0, 8)}.zip"`,
+          "X-GC-Resume-Fetched": String(report.fetched),
+          "X-GC-Resume-Failed": String(report.failed),
+          "X-GC-Resume-Still": String(report.stillMissing.length),
+          "X-GC-Session-Id": newSessionId || sessionId || "",
+          "X-GC-Mode": "resume"
         }
       });
     }
@@ -417,6 +561,23 @@ export default {
         fillReport.error = String(e.message || e);
       }
 
+      // Simpan session resume jika masih ada missing (A.6)
+      let resumeSessionId = null;
+      try {
+        if (hasKV(env) && (fillReport.stillMissing || []).length > 0) {
+          const saved = await saveSession(env, {
+            id,
+            url: target.href,
+            phase: "post-fill",
+            seen: [...seen],
+            stillMissing: fillReport.stillMissing,
+            totals: { files: manifest.length },
+            note: "auto after fillMissingAssets"
+          });
+          resumeSessionId = saved.id;
+        }
+      } catch {}
+
       // Smart offline packaging: path rewrite + frame-buster neutralize
       const smart = smartPackage(zipFiles, manifest);
 
@@ -565,6 +726,23 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
         });
       }
 
+      // History server-side (KV) jika tersedia
+      try {
+        if (hasKV(env)) {
+          await putHistory(env, {
+            id,
+            url: target.href,
+            status: (fillReport.stillMissing || []).length ? "ok_partial" : "ok",
+            files: manifest.length,
+            zipSize: zipData.byteLength,
+            totals: { game: gameCount, api: apiCount, server: serverCount },
+            overallScore: analysis?.scores?.overall ?? null,
+            stillMissing: (fillReport.stillMissing || []).slice(0, 30),
+            message: resumeSessionId ? `session ${resumeSessionId}` : null
+          });
+        }
+      } catch {}
+
       // ZIP binary langsung (jalur Worker untuk paket kecil/sedang)
       return new Response(zipData, {
         status: 200,
@@ -573,6 +751,8 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
           "Content-Disposition": `attachment; filename="game-package-${id}.zip"`,
           "X-GC-Ok": "1",
           "X-GC-Id": id,
+          "X-GC-Session-Id": resumeSessionId || "",
+          "X-GC-Still-Missing": String((fillReport.stillMissing || []).length),
           "X-GC-Files": String(manifest.length),
           "X-GC-Zip-Size": String(zipData.byteLength),
           "X-GC-Raw-Bytes": String(rawTotal),
