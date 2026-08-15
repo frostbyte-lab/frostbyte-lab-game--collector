@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-15 (P5 asset relations)
+Update terakhir: 2026-08-15 (P7 engine-specific repair)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -15,7 +15,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | A.1 | Laporan kelengkapan + skor kategori | ✅ | Symbols / Paytable / Audio / Atlas-Spine / Features / Engine + overall |
 | A.2 | Mapping audio event | ✅ | BGM / Spin / ReelStop / Win / Bonus / UI / Other |
 | A.3 | Deteksi atlas / Spine lebih dalam | ✅ | Region atlas, Spine JSON animations/skins/attachments |
-| A.4 | Engine-specific repair | ❌ | Deteksi engine ada; auto-repair khusus belum |
+| A.4 | Engine-specific repair | ✅ | Phaser/Pixi/Unity/Construct/Cocos patches di Auto Repair + collect |
 | A.5 | History server-side (KV) | ✅ | `GC_HISTORY` + `/api/history` + UI dual local/server |
 | A.6 | Retry / Resume collect | ✅ | `/api/resume` + session KV + tombol Resume |
 | A.7 | Custom domain | ⚠️ | Docs saja — pasang di CF Dashboard |
@@ -29,6 +29,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | P4 | Paytable lebih akurat | ✅ | structured map/array + symbol refs + skor kualitas |
 | P9alt | ZIP besar tanpa R2 → GitHub | ✅ | Auto-failover TOO_LARGE / LIMIT_BROWSER → Actions artifact |
 | P5 | Mapping relasi asset | ✅ | symbol ↔ image/atlas/spine ↔ audio + feature→audio |
+| P7 | Engine-specific repair | ✅ | Phaser/Pixi/Unity/Construct/Cocos di Auto Repair Deep + packaging |
 | KV | Namespace `gc-history` | ✅ | ID `3869a97c9eaf49129a666476fcb672e8` |
 | Deploy | Worker live + binding | ✅ | MYBROWSER, GC_HISTORY, GITHUB_TOKEN |
 
@@ -48,7 +49,6 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | # | Item | Status |
 |---|------|--------|
 | 6 | Smart path rewrite lebih agresif | ⚠️ v2 ada |
-| 7 | Engine-specific repair (Phaser / Pixi / Construct / Unity) | ❌ |
 | 8 | Auto-repair lebih dalam (pakai Dependency Analyzer) | ❌ |
 
 ### Tier 4 — Infrastruktur & UX
@@ -123,4 +123,13 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - Match heuristik nama: symbol → images, atlas regions, spine anim/attach, audio
 - Feature type → kategori audio (FreeSpin→Bonus/Win, Cascade→Spin/ReelStop, …)
 - UI: skor "Asset relations linked?" + sample Relations: wild:img:atlas:sfx
+
+
+
+## Catatan teknis Engine-specific repair (P7)
+
+- Modul: `src/repair/engine-fix.js`
+- UI Auto Repair Deep: deteksi engine dari analisis.json → patch setBaseURL/setPath (Phaser), PIXI basePath, Unity streaming/dataUrl, Construct data.json, Cocos server
+- Collect packaging juga apply patch ringan
+- Diff panel menampilkan engine + jumlah engine-fixes
 
