@@ -1824,28 +1824,51 @@ let zipFSOriginal = null; // snapshot sebelum repair
       return { byBare, byPath, allPaths };
     }
 
-    function resolveLocal(ref, index) {
-      if (!ref || ref.startsWith('data:') || ref.startsWith('blob:') || ref.startsWith('#')) return null;
-      let clean = ref.trim().split('#')[0];
-      clean = clean.split('?')[0];
+    function resolveLocal(ref, index, baseFile) {
+      if (!ref || ref.startsWith('data:') || ref.startsWith('blob:') || ref.startsWith('#') || ref.startsWith('javascript:')) return null;
+      let clean = ref.trim().split('#')[0].split('?')[0];
       try {
         if (/^https?:\/\//i.test(ref.trim()) || ref.trim().startsWith('//')) {
           const raw = ref.trim().startsWith('//') ? 'https:' + ref.trim() : ref.trim();
           const u = new URL(raw);
+          if (index.byPath.has(u.pathname)) return index.byPath.get(u.pathname);
           const bare = u.pathname.split('/').pop();
           if (bare && index.byBare.has(bare)) return index.byBare.get(bare);
-          if (index.byPath.has(u.pathname)) return index.byPath.get(u.pathname);
+          // tail-2 from URL path
+          const segs = u.pathname.split('/').filter(Boolean);
+          if (segs.length >= 2) {
+            const tail = segs.slice(-2).join('/');
+            const hit = index.allPaths.find(p => p.endsWith('/' + tail) || p.endsWith(tail));
+            if (hit) return hit;
+          }
           return null;
         }
       } catch {}
-      const bare = clean.split('/').pop();
-      if (bare && index.byBare.has(bare)) return index.byBare.get(bare);
       if (index.byPath.has(clean)) return index.byPath.get(clean);
       const noDot = clean.replace(/^\.\//, '');
       if (index.byPath.has(noDot)) return index.byPath.get(noDot);
+      // relative to base file
+      if (baseFile && !clean.startsWith('/')) {
+        const baseDir = baseFile.includes('/') ? baseFile.replace(/\/[^/]+$/, '/') : '';
+        const parts = (baseDir + clean).split('/');
+        const out = [];
+        for (const seg of parts) {
+          if (seg === '..') out.pop();
+          else if (seg && seg !== '.') out.push(seg);
+        }
+        const joined = out.join('/');
+        if (index.byPath.has(joined)) return index.byPath.get(joined);
+      }
+      const bare = clean.split('/').pop();
+      if (bare && index.byBare.has(bare)) return index.byBare.get(bare);
       const parts = clean.split('/').filter(Boolean);
       if (parts.length >= 2) {
         const tail = parts.slice(-2).join('/');
+        const hit = index.allPaths.find(p => p.endsWith('/' + tail) || p.endsWith(tail));
+        if (hit) return hit;
+      }
+      if (parts.length >= 3) {
+        const tail = parts.slice(-3).join('/');
         const hit = index.allPaths.find(p => p.endsWith('/' + tail) || p.endsWith(tail));
         if (hit) return hit;
       }
@@ -1922,6 +1945,15 @@ let zipFSOriginal = null; // snapshot sebelum repair
       const engineFixList = [];
       const engineInfo = detectEngineFromZip();
       log('Engine terdeteksi: ' + (engineInfo.engine || 'unknown') + ' (' + (engineInfo.confidence || '?') + ')');
+      let depMissingRefs = [];
+      try {
+        if (zipFS['dependency.json']) {
+          const dep = JSON.parse(new TextDecoder().decode(zipFS['dependency.json']));
+          depMissingRefs = (dep.missingUnique || []).map(m => m.ref).filter(Boolean);
+          log('Dependency missing refs: ' + depMissingRefs.length);
+        }
+      } catch {}
+      let depGuidedFixes = 0;
       const missing = new Set();
       const ASSET_EXT = /\.(js|mjs|css|json|png|jpe?g|gif|webp|svg|woff2?|ttf|otf|mp3|ogg|wav|mp4|webm|wasm|data|unityweb|bundle)$/i;
 
@@ -2058,6 +2090,34 @@ let zipFSOriginal = null; // snapshot sebelum repair
       if (missArr.length) log('⚠ Referensi mungkin hilang (' + missArr.length + '): ' + missArr.join(', '));
       document.getElementById('preview-status').textContent = 'Repaired (deep)';
       document.getElementById('preview-status').className = 'badge badge-ok';
+      // Pass 2: Dependency-guided rewrite (ganti ref missing yang bisa di-resolve bare/tail)
+      try {
+        const index2 = buildPathIndex();
+        for (const [path, data] of Object.entries(zipFS)) {
+          if (!/\.(html?|js|mjs|css|json)$/i.test(path) && path !== 'index.html') continue;
+          if (!data || data.byteLength > 1_500_000) continue;
+          let t;
+          try { t = new TextDecoder().decode(data); } catch { continue; }
+          const before = t;
+          for (const ref of depMissingRefs) {
+            if (!ref || ref.length < 3 || !t.includes(ref)) continue;
+            const resolved = resolveLocal(ref, index2, path);
+            if (resolved && resolved !== ref) {
+              t = t.split(ref).join(resolved);
+              depGuidedFixes++;
+            }
+          }
+          // Strip source maps
+          t = t.replace(/\/\/[#@]\s*sourceMappingURL\s*=\s*\S+/g, '/* GC: sourceMappingURL stripped */');
+          t = t.replace(/\/\*#\s*sourceMappingURL\s*=\s*[*]+\*\//g, '/* GC: sourceMappingURL stripped */');
+          if (t !== before) {
+            zipFS[path] = new TextEncoder().encode(t);
+            filesChanged++;
+          }
+        }
+        log('Dependency-guided fixes: ' + depGuidedFixes);
+      } catch (e) { log('Dep pass error: ' + e.message); }
+
       log('Engine fixes: ' + engineFixes + (engineFixList.length ? ' → ' + engineFixList.slice(0, 8).join(', ') : ''));
       showRepairDiff(filesChanged, frameBusters, pathFixes, attrFixes, importFixes, jsonFixes, missArr, engineInfo, engineFixes);
     }
