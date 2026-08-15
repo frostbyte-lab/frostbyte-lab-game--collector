@@ -916,40 +916,83 @@ async function downloadGitHubArtifact(artifactId, runId) {
       terminal.scrollTop = terminal.scrollHeight;
     }
 
+    async function loadZipFromBuffer(buf, label) {
+      let zip = await JSZip.loadAsync(buf);
+      let files = {};
+      for (const [p, entry] of Object.entries(zip.files)) {
+        if (entry.dir) continue;
+        const norm = p.replace(/\\/g, '/').replace(/^\.\//, '');
+        files[norm] = await entry.async('uint8array');
+      }
+
+      // GitHub artifact = zip berisi satu/lebih .zip di dalam
+      const onlyZips = Object.keys(files).filter(p => /\.zip$/i.test(p) && !p.includes('/'));
+      const hasHtml = Object.keys(files).some(p => /\.html?$/i.test(p));
+      if (!hasHtml && Object.keys(files).some(p => /\.zip$/i.test(p))) {
+        const innerKey = Object.keys(files).find(p => /\.zip$/i.test(p));
+        log('ZIP bersarang terdeteksi → extract: ' + innerKey);
+        zip = await JSZip.loadAsync(files[innerKey]);
+        files = {};
+        for (const [p, entry] of Object.entries(zip.files)) {
+          if (entry.dir) continue;
+          files[p.replace(/\\/g, '/').replace(/^\.\//, '')] = await entry.async('uint8array');
+        }
+      }
+
+      // Strip single root folder (output/ atau folder tunggal)
+      const keys = Object.keys(files);
+      if (keys.length) {
+        const tops = new Set(keys.map(k => k.split('/')[0]));
+        if (tops.size === 1) {
+          const root = [...tops][0];
+          const allNested = keys.every(k => k.startsWith(root + '/'));
+          const rootIsDir = allNested && !keys.some(k => k === root);
+          if (rootIsDir) {
+            const stripped = {};
+            for (const [k, v] of Object.entries(files)) {
+              stripped[k.slice(root.length + 1)] = v;
+            }
+            files = stripped;
+            log('Root folder di-strip: ' + root + '/');
+          }
+        }
+      }
+
+      zipFS = files;
+      return Object.keys(files).sort();
+    }
+
     async function loadZip() {
       const input = document.getElementById('zip-input');
       if (!input.files || !input.files[0]) {
         log('Pilih file ZIP dulu');
         return;
       }
-      terminal.textContent = '';
-      log('Membaca ZIP...');
+      const terminal = document.getElementById('terminal');
+      if (terminal) terminal.textContent = '';
+      log('Membaca ZIP: ' + input.files[0].name);
       try {
         const buf = await input.files[0].arrayBuffer();
-        const zip = await JSZip.loadAsync(buf);
-        zipFS = {};
-        zipFSOriginal = null; // reset snapshot repair
+        zipFSOriginal = null;
         const diffBox = document.getElementById('repair-diff');
         if (diffBox) { diffBox.classList.remove('active'); diffBox.innerHTML = ''; }
-        const paths = [];
-        for (const [path, entry] of Object.entries(zip.files)) {
-          if (entry.dir) continue;
-          zipFS[path] = await entry.async('uint8array');
-          paths.push(path);
-        }
-        paths.sort();
+        const cbox = document.getElementById('completeness-box');
+        if (cbox) { cbox.classList.remove('active'); cbox.innerHTML = ''; }
+
+        const paths = await loadZipFromBuffer(buf);
+        if (!paths.length) throw new Error('ZIP kosong');
+
+        const hasIndex = paths.some(p => /index\.html?$/i.test(p.split('/').pop()));
         document.getElementById('file-list').innerHTML = paths.map(p => `<div>${esc(p)}</div>`).join('') || '<div>—</div>';
         document.getElementById('preview-toolbar').classList.add('active');
         document.getElementById('btn-repair').disabled = false;
         document.getElementById('btn-repack').disabled = false;
         document.getElementById('btn-ai').disabled = false;
         document.getElementById('btn-ai-fix').disabled = false;
-        log(`ZIP loaded · ${paths.length} file`);
+        log('ZIP loaded · ' + paths.length + ' file' + (hasIndex ? '' : ' · peringatan: index.html tidak ketemu'));
         analyzeCompleteness();
-
-        document.getElementById('preview-status').textContent = 'ZIP Ready';
-        document.getElementById('preview-status').className = 'badge badge-ok';
-        // Restore saved AI key if any
+        document.getElementById('preview-status').textContent = hasIndex ? 'ZIP Ready' : 'No index';
+        document.getElementById('preview-status').className = hasIndex ? 'badge badge-ok' : 'badge badge-warn';
         try {
           const saved = JSON.parse(localStorage.getItem('gc_ai') || '{}');
           if (saved.key) document.getElementById('ai-key').value = saved.key;
@@ -958,6 +1001,11 @@ async function downloadGitHubArtifact(artifactId, runId) {
         } catch {}
       } catch (e) {
         log('Gagal load ZIP: ' + e.message);
+        const statusBadge = document.getElementById('preview-status');
+        if (statusBadge) {
+          statusBadge.textContent = 'Error';
+          statusBadge.className = 'badge badge-err';
+        }
       }
     }
 
@@ -1136,10 +1184,11 @@ async function downloadGitHubArtifact(artifactId, runId) {
     }
 
     function findIndexHtml() {
-      const candidates = Object.keys(zipFS).filter(p => /index\.html?$/i.test(p) || p === 'index.html');
-      if (candidates.length) return candidates.sort((a,b) => a.length - b.length)[0];
-      const anyHtml = Object.keys(zipFS).find(p => /\.html?$/i.test(p));
-      return anyHtml || null;
+      const keys = Object.keys(zipFS || {});
+      const candidates = keys.filter(p => /(^|\/)index\.html?$/i.test(p));
+      if (candidates.length) return candidates.sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
+      const anyHtml = keys.filter(p => /\.html?$/i.test(p)).sort((a, b) => a.length - b.length);
+      return anyHtml[0] || null;
     }
 
     function mimeOf(path) {
@@ -1148,7 +1197,8 @@ async function downloadGitHubArtifact(artifactId, runId) {
         html: 'text/html', htm: 'text/html', js: 'application/javascript', mjs: 'application/javascript',
         css: 'text/css', json: 'application/json', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
         webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', woff: 'font/woff', woff2: 'font/woff2',
-        mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', mp4: 'video/mp4', webm: 'video/webm'
+        ttf: 'font/ttf', otf: 'font/otf', mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav',
+        mp4: 'video/mp4', webm: 'video/webm', wasm: 'application/wasm'
       };
       return map[ext] || 'application/octet-stream';
     }
@@ -1157,28 +1207,77 @@ async function downloadGitHubArtifact(artifactId, runId) {
       const urls = {};
       for (const [path, data] of Object.entries(zipFS)) {
         const blob = new Blob([data], { type: mimeOf(path) });
-        urls[path] = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
+        urls[path] = url;
+        urls['./' + path] = url;
+        urls['/' + path] = url;
         const bare = path.split('/').pop();
-        if (!urls[bare]) urls[bare] = urls[path];
+        if (bare && !urls[bare]) urls[bare] = url;
+        // path relative without first folder segment duplicates
+        const parts = path.split('/');
+        if (parts.length > 1) {
+          const tail = parts.slice(1).join('/');
+          if (!urls[tail]) urls[tail] = url;
+        }
       }
       return urls;
     }
 
+    function resolveAssetUrl(ref, assetIndex, baseDir) {
+      if (!ref || /^(data:|blob:|#|javascript:|mailto:)/i.test(ref)) return null;
+      const clean = ref.split('#')[0].split('?')[0].trim();
+      if (assetIndex[ref]) return assetIndex[ref];
+      if (assetIndex[clean]) return assetIndex[clean];
+      if (assetIndex['./' + clean]) return assetIndex['./' + clean];
+      // relative to html dir
+      if (baseDir) {
+        try {
+          const joined = (baseDir + '/' + clean).replace(/\/+/g, '/').replace(/^\//, '');
+          if (assetIndex[joined]) return assetIndex[joined];
+        } catch {}
+      }
+      const bare = clean.split('/').pop();
+      if (bare && assetIndex[bare]) return assetIndex[bare];
+      return null;
+    }
+
+    function rewriteDomAssets(html, assetIndex, baseDir) {
+      let out = html;
+      out = out.replace(/\b(src|href|data-src|poster)\s*=\s*(["'])([^"']+)\2/gi, (m, attr, q, val) => {
+        const resolved = resolveAssetUrl(val, assetIndex, baseDir);
+        if (resolved) return attr + '=' + q + resolved + q;
+        return m;
+      });
+      out = out.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (m, q, val) => {
+        const resolved = resolveAssetUrl(val, assetIndex, baseDir);
+        if (resolved) return 'url(' + q + resolved + q + ')';
+        return m;
+      });
+      return out;
+    }
+
     async function prepareHtml(mode) {
       const idx = findIndexHtml();
-      if (!idx) throw new Error('index.html tidak ada di ZIP');
+      if (!idx) throw new Error('Tidak ada HTML di ZIP (index.html / *.html)');
 
       let source = zipFS[idx];
       if ((mode === 'online' || mode === 'hybrid') && zipFSOriginal && zipFSOriginal[idx]) {
         source = zipFSOriginal[idx];
       }
       let raw = new TextDecoder().decode(source);
+      const baseDir = idx.includes('/') ? idx.split('/').slice(0, -1).join('/') : '';
 
+      // Frame protect ringan saja untuk sandbox agar game tidak rusak
       try {
         if (mode === 'protected' || mode === 'sandbox' || mode === 'online' || mode === 'hybrid') {
           const res = neutralizeFrameBusters(raw);
           raw = res.html;
           if (res.neutralized) log('Frame-buster: ' + res.neutralized);
+          // Sandbox: buang re-lock interval yang sering merusak game
+          if (mode === 'sandbox') {
+            raw = raw.replace(/setInterval\(reLock,\s*800\);/g, '/* gc-no-relock */');
+            raw = raw.replace(/setInterval\(function\(\)\{[\s\S]*?__gcLock\([\s\S]*?\},\s*800\);/g, '/* gc-no-relock */');
+          }
         }
       } catch (e) {
         log('Frame protect skip: ' + e.message);
@@ -1186,51 +1285,28 @@ async function downloadGitHubArtifact(artifactId, runId) {
 
       if (mode === 'online' || mode === 'hybrid') {
         raw = raw.replace(/<script[^>]*data-gc-hard-frame[\s\S]*?<\/script>/gi, '');
-        raw = raw.replace(/window\.__gc_deep_offline[\s\S]*?<\/script>/gi, '');
       }
 
       const urls = buildVirtualFS();
-      const assetIndex = {};
-      for (const [p, u] of Object.entries(urls)) {
-        assetIndex[p] = u;
-        const bare = p.split('/').pop();
-        if (bare) assetIndex[bare] = u;
+      // Rewrite src/href di HTML ke blob agar <script src> & <img> langsung jalan
+      raw = rewriteDomAssets(raw, urls, baseDir);
+      if (baseDir && !/<base\s/i.test(raw) && /<head[\s>]/i.test(raw)) {
+        raw = raw.replace(/<head([^>]*)>/i, '<head$1><base href="./">');
       }
 
       const isOnline = (mode === 'online' || mode === 'hybrid');
-      const mapScript = isOnline
-        ? `<script>
-window.__GC_ASSETS=${JSON.stringify(assetIndex)};
-window.__GC_MODE='online';
+      const mapScript = `<script>
+window.__GC_ASSETS=${JSON.stringify(urls)};
+window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
 (function(){
   function resolve(u){
     if(!u)return null;
     try{
-      if(window.__GC_ASSETS[u])return window.__GC_ASSETS[u];
-      var b=String(u).split('?')[0].split('#')[0].split('/').pop();
-      if(b&&window.__GC_ASSETS[b])return window.__GC_ASSETS[b];
-    }catch(e){}
-    return null;
-  }
-  var _f=window.fetch;
-  window.fetch=function(input,init){
-    try{var u=typeof input==='string'?input:(input&&input.url);var l=resolve(u);if(l)return _f(l,init);}catch(e){}
-    return _f.apply(this,arguments);
-  };
-  try{Object.defineProperty(window,'top',{get:function(){return window}});}catch(e){}
-  try{Object.defineProperty(window,'parent',{get:function(){return window}});}catch(e){}
-  try{Object.defineProperty(window,'frameElement',{get:function(){return null}});}catch(e){}
-})();
-<\/script>`
-        : `<script>
-window.__GC_ASSETS=${JSON.stringify(assetIndex)};
-window.__GC_MODE='offline';
-(function(){
-  function resolve(u){
-    if(!u)return null;
-    try{
-      if(window.__GC_ASSETS[u])return window.__GC_ASSETS[u];
-      var b=String(u).split('?')[0].split('#')[0].split('/').pop();
+      var s=String(u);
+      if(window.__GC_ASSETS[s])return window.__GC_ASSETS[s];
+      var c=s.split('?')[0].split('#')[0];
+      if(window.__GC_ASSETS[c])return window.__GC_ASSETS[c];
+      var b=c.split('/').pop();
       if(b&&window.__GC_ASSETS[b])return window.__GC_ASSETS[b];
     }catch(e){}
     return null;
@@ -1241,12 +1317,17 @@ window.__GC_MODE='offline';
       var u=typeof input==='string'?input:(input&&input.url);
       var l=resolve(u);
       if(l)return _f(l,init);
-      if(typeof u==='string'&&/^https?:/i.test(u)){
+      if(!${isOnline ? 'true' : 'false'} && typeof u==='string' && /^https?:/i.test(u)){
         console.warn('[GC] blocked',u);
         return Promise.reject(new Error('offline'));
       }
     }catch(e){}
     return _f.apply(this,arguments);
+  };
+  var _xo=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(m,u){
+    try{var l=resolve(u);if(l)arguments[1]=l;}catch(e){}
+    return _xo.apply(this,arguments);
   };
   try{Object.defineProperty(window,'top',{get:function(){return window}});}catch(e){}
   try{Object.defineProperty(window,'parent',{get:function(){return window}});}catch(e){}
@@ -1257,6 +1338,7 @@ window.__GC_MODE='offline';
       if (/<head[\s>]/i.test(raw)) raw = raw.replace(/<head([^>]*)>/i, '<head$1>' + mapScript);
       else raw = mapScript + raw;
 
+      log('Preview HTML: ' + idx + ' · assets: ' + Object.keys(urls).length);
       return URL.createObjectURL(new Blob([raw], { type: 'text/html' }));
     }
 
