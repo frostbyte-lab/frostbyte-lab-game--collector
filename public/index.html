@@ -1709,14 +1709,14 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
           const ok = !!sc.ok;
           let extra = '';
           if (key === 'symbols') extra = ` · ${sc.found ?? cats?.symbols?.count ?? 0} symbol`;
-          if (key === 'paytable') extra = ` · ${sc.found ?? cats?.paytable?.count ?? 0} hit`;
+          if (key === 'paytable') extra = ` · ${sc.found ?? cats?.paytable?.count ?? 0} hit` + (sc.structured ? ` · structured ${sc.structured}` : '') + (sc.symbolRefs ? ` · ${sc.symbolRefs} sym-ref` : '');
           if (key === 'audio') {
             const by = sc.byEvent || cats?.audioEvents?.byEvent || {};
             const parts = Object.keys(by).map(k => k + ':' + by[k]);
             extra = ` · ${sc.mapped ?? cats?.audioEvents?.mapped ?? 0}/${sc.found ?? 0} mapped` + (parts.length ? ` (${parts.join(', ')})` : '');
           }
           if (key === 'atlasSpine') extra = ` · atlas ${sc.atlas ?? cats?.atlasSpine?.atlas ?? 0} · spine ${sc.spine ?? cats?.atlasSpine?.spine ?? 0}`;
-          if (key === 'features') extra = ` · ${sc.found ?? cats?.features?.count ?? 0} fitur`;
+          if (key === 'features') extra = ` · ${sc.found ?? cats?.features?.count ?? 0} fitur` + (sc.types && sc.types.length ? ` (${sc.types.join(', ')})` : '');
           if (key === 'engine') extra = ` · ${sc.name || cats?.engine?.name || 'unknown'} (${sc.confidence || cats?.engine?.confidence || '?'})`;
           if (key === 'dependencies') extra = ` · ok ${sc.found ?? deps?.resolved ?? 0} · missing ${sc.missing ?? deps?.missing ?? 0} · external ${deps?.external ?? 0}`;
           scoreHtml += `<div style="font-size:12px;margin-top:6px"><b>${label}</b><span style="color:var(--muted)">${extra}</span>${bar(s, ok)}</div>`;
@@ -1724,6 +1724,19 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
         const symSamples = (cats && cats.symbols && cats.symbols.samples) || (analysis && analysis.symbols) || [];
         if (symSamples.length) {
           scoreHtml += `<div style="margin-top:8px;font-size:11px;color:var(--muted)"><b>Sample symbols:</b> ${symSamples.slice(0,15).map(esc).join(', ')}</div>`;
+        if (analysis && analysis.featureTypes) {
+          const ft = analysis.featureTypes;
+          const parts = Object.keys(ft).map(k => k + ':' + ft[k]);
+          if (parts.length) scoreHtml += `<div style="margin-top:6px;font-size:11px;color:var(--muted)"><b>Feature types:</b> ${parts.map(esc).join(' · ')}</div>`;
+        }
+        if (analysis && analysis.paytables && analysis.paytables.length) {
+          const pts = analysis.paytables.slice(0, 5).map(p => {
+            const sym = (p.symbols && p.symbols.length) ? p.symbols.slice(0, 5).join(',') : '';
+            return esc(p.key || '') + (p.kind ? '[' + esc(p.kind) + ']' : '') + (sym ? '{' + esc(sym) + '}' : '');
+          }).join(' · ');
+          scoreHtml += `<div style="margin-top:6px;font-size:11px;color:var(--muted)"><b>Paytable:</b> ${pts}</div>`;
+        }
+
         }
         const audioEv = (analysis && analysis.audioEvents) || [];
         if (audioEv.length) {
