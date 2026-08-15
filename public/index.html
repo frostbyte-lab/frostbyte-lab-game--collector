@@ -18,156 +18,341 @@
       --text: #e8eaed;
       --muted: #8b93a7;
       --accent: #3b82f6;
-      --accent-hover: #2563eb;
       --success: #22c55e;
       --warn: #f59e0b;
       --danger: #ef4444;
       --radius: 12px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
     body {
-      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       line-height: 1.5;
+      -webkit-tap-highlight-color: transparent;
     }
-    .app { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    .app {
+      width: 100%;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 12px;
+    }
     header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0 14px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 14px;
     }
-    .logo { font-weight: 700; font-size: 1.25rem; letter-spacing: -0.02em; }
+    .logo {
+      font-weight: 700;
+      font-size: 1.1rem;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
     .logo span { color: var(--accent); }
-    nav { display: flex; gap: 6px; }
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      width: 100%;
+    }
+    @media (min-width: 520px) {
+      nav { width: auto; }
+    }
     .nav-btn {
-      background: transparent; border: 1px solid transparent; color: var(--muted);
-      padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 500;
+      flex: 1 1 auto;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      text-align: center;
     }
     .nav-btn:hover { color: var(--text); background: var(--surface); }
-    .nav-btn.active { color: var(--text); background: var(--surface2); border-color: var(--border); }
+    .nav-btn.active {
+      color: var(--text);
+      background: var(--surface2);
+      border-color: var(--border);
+    }
     .panel { display: none; }
     .panel.active { display: block; }
     .card {
-      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 20px; margin-bottom: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 12px;
     }
-    h2 { font-size: 1.1rem; margin-bottom: 12px; }
-    .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 16px; }
-    input[type="url"], input[type="text"], input[type="file"] {
-      width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
-      background: var(--surface2); color: var(--text); font-size: 0.95rem; margin-bottom: 12px;
+    h2 { font-size: 1.05rem; margin-bottom: 8px; }
+    .sub { color: var(--muted); font-size: 0.8rem; margin-bottom: 12px; }
+    input[type="url"], input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 11px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 0.95rem;
+      margin-bottom: 10px;
     }
     input:focus { outline: none; border-color: var(--accent); }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: stretch;
+    }
+    .row > * { min-width: 0; }
     button, .btn {
-      padding: 11px 18px; border: none; border-radius: 10px; font-weight: 600;
-      font-size: 0.9rem; cursor: pointer; transition: 0.15s;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      line-height: 1.2;
     }
     .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover { background: var(--accent-hover); }
-    .btn-primary:disabled { background: #1e3a5f; color: #64748b; cursor: not-allowed; }
-    .btn-secondary { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
-    .btn-secondary:hover { color: var(--text); }
-    .btn-success { background: #166534; color: #bbf7d0; }
-    .btn-danger { background: #7f1d1d; color: #fecaca; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
     #status, .log-box {
-      white-space: pre-wrap; background: var(--surface2); border-radius: 10px;
-      padding: 14px; font-size: 13px; line-height: 1.55; min-height: 70px;
-      border: 1px solid var(--border); font-family: ui-monospace, monospace;
+      white-space: pre-wrap;
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      min-height: 56px;
+      border: 1px solid var(--border);
+      font-family: ui-monospace, monospace;
+      word-break: break-word;
     }
     .error { color: var(--danger); }
     .ok { color: var(--success); }
     .warn { color: var(--warn); }
     .tip {
-      margin-top: 16px; padding: 12px 14px; background: #1c1917;
-      border-radius: 10px; font-size: 13px; color: #a8a29e; border: 1px solid #292524;
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #1c1917;
+      border-radius: 10px;
+      font-size: 12px;
+      color: #a8a29e;
+      border: 1px solid #292524;
     }
     a { color: #60a5fa; }
     details.fold {
-      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-      margin-bottom: 16px; overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      overflow: hidden;
     }
     details.fold summary {
-      list-style: none; cursor: pointer; padding: 14px 18px; font-weight: 600; font-size: 0.95rem;
-      display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      user-select: none; background: var(--surface2);
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      background: var(--surface2);
     }
     details.fold summary::-webkit-details-marker { display: none; }
-    details.fold summary::after {
-      content: "▾"; color: var(--muted); font-size: 0.85rem; transition: transform 0.15s;
-    }
-    details.fold[open] summary::after { transform: rotate(180deg); }
     details.fold .fold-body {
-      padding: 14px 18px 18px; font-size: 0.9rem; color: var(--muted); line-height: 1.65;
+      padding: 12px 14px;
+      font-size: 0.85rem;
+      color: var(--muted);
       border-top: 1px solid var(--border);
     }
     details.fold .fold-body ol { margin: 8px 0 8px 18px; color: var(--text); }
     details.fold .fold-body li { margin-bottom: 6px; }
     details.fold .fold-body code {
-      background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 0.84rem;
+      background: var(--surface2);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 0.8rem;
     }
-    .workspace-grid {
-      display: grid; grid-template-columns: 1fr 340px; gap: 16px;
+
+    /* File picker row */
+    .file-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: center;
     }
-    @media (max-width: 860px) {
-      .workspace-grid { grid-template-columns: 1fr; }
+    .file-row input[type="file"] {
+      flex: 1 1 160px;
+      min-width: 0;
+      max-width: 100%;
+      font-size: 0.8rem;
+      padding: 8px;
+      margin: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface2);
+      color: var(--text);
     }
-    .preview-frame-wrap {
-      position: relative; background: #000; border-radius: var(--radius);
-      border: 1px solid var(--border); overflow: hidden; min-height: 480px;
-      aspect-ratio: 16/10;
-    }
-    .preview-frame-wrap iframe {
-      width: 100%; height: 100%; border: 0; display: block; background: #111;
-    }
+    .file-row .btn-primary { flex: 0 0 auto; }
+
+    /* Preview toolbar — grid on mobile, no wide empty space */
     .preview-toolbar {
-      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center;
+      display: none;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: stretch;
     }
+    .preview-toolbar.active { display: grid; }
+    .preview-toolbar button {
+      width: 100%;
+      justify-content: center;
+    }
+    .preview-toolbar .badge {
+      grid-column: 1 / -1;
+      justify-self: start;
+    }
+    @media (min-width: 640px) {
+      .preview-toolbar {
+        display: none;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .preview-toolbar.active { display: grid; }
+    }
+
     .badge {
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
     }
     .badge-ok { background: #14532d; color: #86efac; }
     .badge-warn { background: #713f12; color: #fde68a; }
-    .progress-wrap {
-      margin: 12px 0 8px; display: none;
-    }
+    .badge-err { background: #7f1d1d; color: #fecaca; }
+
+    .progress-wrap { margin: 10px 0; display: none; }
     .progress-wrap.active { display: block; }
     .progress-bar {
-      height: 8px; background: var(--surface2); border-radius: 99px; overflow: hidden;
+      height: 8px;
+      background: var(--surface2);
+      border-radius: 99px;
+      overflow: hidden;
       border: 1px solid var(--border);
     }
     .progress-bar > div {
-      height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #60a5fa);
-      border-radius: 99px; transition: width 0.4s ease;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), #60a5fa);
+      border-radius: 99px;
+      transition: width 0.35s ease;
     }
     .progress-meta {
-      display: flex; justify-content: space-between; font-size: 12px; color: var(--muted);
-      margin-top: 6px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 5px;
+      gap: 8px;
     }
+
     .diff-box {
-      background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
-      padding: 12px; font-size: 13px; margin-top: 10px; display: none;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 12px;
+      margin: 10px 0;
+      display: none;
+      word-break: break-word;
     }
     .diff-box.active { display: block; }
-    .diff-box .diff-row { display: flex; gap: 16px; flex-wrap: wrap; }
-    .diff-box .diff-item { flex: 1; min-width: 120px; }
-    .diff-box .num { font-size: 1.4rem; font-weight: 700; }
-    .diff-box .label { color: var(--muted); font-size: 11px; }
+    .diff-box .diff-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+      gap: 8px;
+    }
+    .diff-box .num { font-size: 1.2rem; font-weight: 700; }
+    .diff-box .label { color: var(--muted); font-size: 10px; }
+
+    /* Workspace layout */
+    .workspace-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    @media (min-width: 860px) {
+      .workspace-grid {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 14px;
+        align-items: start;
+      }
+    }
+    .preview-frame-wrap {
+      position: relative;
+      background: #000;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      min-height: 280px;
+      height: min(56vh, 480px);
+      width: 100%;
+    }
+    .preview-frame-wrap iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #111;
+    }
     .file-list {
-      max-height: 220px; overflow-y: auto; font-size: 12px;
-      background: var(--surface2); border-radius: 8px; padding: 8px; border: 1px solid var(--border);
+      max-height: 180px;
+      overflow-y: auto;
+      font-size: 11px;
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      word-break: break-all;
     }
-    .file-list div { padding: 3px 0; color: var(--muted); border-bottom: 1px solid #222; }
-    .file-list div:last-child { border-bottom: none; }
+    .file-list div {
+      padding: 3px 0;
+      color: var(--muted);
+      border-bottom: 1px solid #222;
+    }
     .history-item {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 12px; border-bottom: 1px solid var(--border); gap: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+      flex-wrap: wrap;
     }
-    .history-item:last-child { border-bottom: none; }
     .history-meta { font-size: 12px; color: var(--muted); }
-    .empty { text-align: center; color: var(--muted); padding: 40px 20px; }
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 28px 12px;
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
@@ -223,10 +408,8 @@
         </div>
         <div id="status">Masukkan URL → Capture (Cloudflare) atau Collect via GitHub (tanpa buka GitHub manual).</div>
         <div class="tip">
-          <b>Capture (Cloudflare):</b> cepat, limit ~10 menit browser/hari. Auto-click Play + path rewrite pintar aktif.<br>
-          <b>Collect via GitHub:</b> dari web ini juga — tanpa buka GitHub. Lebih stabil, tanpa limit itu.<br><br>
-          <b>Offline:</b> Setelah ZIP siap → tab <b>Workspace</b> → Load ZIP → Preview.<br>
-          <b>Notifikasi:</b> Izinkan notifikasi browser agar tahu saat collect selesai.
+          Capture = Cloudflare (ada limit/hari). GitHub = lebih stabil.
+          Setelah ZIP → Workspace → Load → Preview.
         </div>
       </div>
 
@@ -268,25 +451,21 @@
     <section id="panel-workspace" class="panel">
       <div class="card">
         <h2>Workspace — Preview Offline</h2>
-        <p class="sub">Load ZIP → mainkan offline di browser. Tidak butuh server & tidak panggil API game asli.</p>
+        <p class="sub">Load ZIP, lalu pilih mode Preview.</p>
 
-        <div class="row">
-          <input type="file" id="zip-input" accept=".zip,application/zip" style="flex:1">
-          <button class="btn-primary" onclick="loadZip()">Load ZIP</button>
+        <div class="file-row">
+          <input type="file" id="zip-input" accept=".zip,application/zip">
+          <button class="btn-primary" type="button" onclick="loadZip()">Load ZIP</button>
         </div>
 
-        <div class="preview-toolbar" id="preview-toolbar" style="display:none">
-          <button class="btn-success" onclick="startPreview('sandbox')">▶ Preview (Sandbox)</button>
-          <button class="btn-secondary" onclick="startPreview('protected')">🛡 Protected Mode</button>
-          <button class="btn-primary" onclick="startPreview('online')" title="Asset lokal + izinkan koneksi ke server game">🌐 Online Hybrid</button>
-          <button class="btn-secondary" onclick="startPreview('window')">⧉ Open Isolated Window</button>
+        <div class="preview-toolbar" id="preview-toolbar">
+          <button class="btn-success" onclick="startPreview('sandbox')">▶ Sandbox</button>
+          <button class="btn-secondary" onclick="startPreview('protected')">🛡 Protected</button>
+          <button class="btn-primary" onclick="startPreview('online')">🌐 Hybrid</button>
+          <button class="btn-secondary" onclick="startPreview('window')">⧉ Window</button>
           <button class="btn-secondary" onclick="stopPreview()">Stop</button>
           <span id="preview-status" class="badge badge-ok">Ready</span>
         </div>
-        <p class="sub" id="online-tip" style="margin-top:-4px;margin-bottom:10px;font-size:12px">
-          <b>Online Hybrid:</b> asset dari ZIP dipakai dulu, request ke server game tetap diizinkan.
-          Login/cookie first-party bisa terbatas di blob URL — kalau gagal auth, pakai Isolated Window atau main di situs asli.
-        </p>
 
         <div class="workspace-grid">
           <div>
@@ -714,7 +893,7 @@
         }
         paths.sort();
         document.getElementById('file-list').innerHTML = paths.map(p => `<div>${esc(p)}</div>`).join('') || '<div>—</div>';
-        document.getElementById('preview-toolbar').style.display = 'flex';
+        document.getElementById('preview-toolbar').classList.add('active');
         document.getElementById('btn-repair').disabled = false;
         document.getElementById('btn-repack').disabled = false;
         document.getElementById('btn-ai').disabled = false;
@@ -941,146 +1120,114 @@
 
     async function prepareHtml(mode) {
       const idx = findIndexHtml();
-      if (!idx) throw new Error('Tidak menemukan index.html di dalam ZIP');
+      if (!idx) throw new Error('index.html tidak ada di ZIP');
 
-      // Online hybrid: prefer original snapshot agar offline-block dari Auto Repair tidak ikut
       let source = zipFS[idx];
       if ((mode === 'online' || mode === 'hybrid') && zipFSOriginal && zipFSOriginal[idx]) {
         source = zipFSOriginal[idx];
-        log('Online Hybrid: pakai snapshot original (tanpa offline-block)');
       }
       let raw = new TextDecoder().decode(source);
-      let neutralized = 0;
 
-      // Frame-buster: tetap netralisir untuk mode iframe (termasuk online)
-      if (mode === 'protected' || mode === 'sandbox' || mode === 'online' || mode === 'hybrid') {
-        const res = neutralizeFrameBusters(raw);
-        raw = res.html;
-        neutralized = res.neutralized;
-        if (neutralized) log(`Frame-buster neutralization: ${neutralized} pola`);
+      try {
+        if (mode === 'protected' || mode === 'sandbox' || mode === 'online' || mode === 'hybrid') {
+          const res = neutralizeFrameBusters(raw);
+          raw = res.html;
+          if (res.neutralized) log('Frame-buster: ' + res.neutralized);
+        }
+      } catch (e) {
+        log('Frame protect skip: ' + e.message);
       }
 
-      // Hapus offline bootstrap lama jika ada (supaya online mode tidak ke-block)
       if (mode === 'online' || mode === 'hybrid') {
-        raw = raw.replace(/<script>\s*\(function\(\)\{\s*if\s*\(window\.__gc_deep_offline\)[\s\S]*?<\/script>/i, '');
-        raw = raw.replace(/<script>\s*\(function\(\)\{\s*try\{Object\.defineProperty\(window,"top"[\s\S]*?<\/script>/i, '');
+        raw = raw.replace(/<script[^>]*data-gc-hard-frame[\s\S]*?<\/script>/gi, '');
+        raw = raw.replace(/window\.__gc_deep_offline[\s\S]*?<\/script>/gi, '');
       }
 
       const urls = buildVirtualFS();
-      // Index path → blob juga by pathname variants
       const assetIndex = {};
       for (const [p, u] of Object.entries(urls)) {
         assetIndex[p] = u;
-        assetIndex[p.split('/').pop()] = u;
-        try { assetIndex['/' + p] = u; } catch {}
+        const bare = p.split('/').pop();
+        if (bare) assetIndex[bare] = u;
       }
 
       const isOnline = (mode === 'online' || mode === 'hybrid');
-      const mapScript = isOnline ? `<script>
-window.__GC_ASSETS = ${JSON.stringify(assetIndex)};
-window.__GC_MODE = 'online';
-window.__gc_offline = 0;
+      const mapScript = isOnline
+        ? `<script>
+window.__GC_ASSETS=${JSON.stringify(assetIndex)};
+window.__GC_MODE='online';
 (function(){
-  function resolveAsset(u) {
-    if (!u) return null;
-    try {
-      if (window.__GC_ASSETS[u]) return window.__GC_ASSETS[u];
-      var bare = String(u).split('?')[0].split('#')[0].split('/').pop();
-      if (bare && window.__GC_ASSETS[bare]) return window.__GC_ASSETS[bare];
-      // path only
-      try {
-        var path = new URL(u, location.href).pathname;
-        if (window.__GC_ASSETS[path]) return window.__GC_ASSETS[path];
-        var b2 = path.split('/').pop();
-        if (b2 && window.__GC_ASSETS[b2]) return window.__GC_ASSETS[b2];
-      } catch(e){}
-    } catch(e){}
+  function resolve(u){
+    if(!u)return null;
+    try{
+      if(window.__GC_ASSETS[u])return window.__GC_ASSETS[u];
+      var b=String(u).split('?')[0].split('#')[0].split('/').pop();
+      if(b&&window.__GC_ASSETS[b])return window.__GC_ASSETS[b];
+    }catch(e){}
     return null;
   }
-  // fetch: lokal dulu, lalu network (hybrid)
-  var _f = window.fetch;
-  window.fetch = function(input, init) {
-    try {
-      var u = typeof input === 'string' ? input : (input && input.url);
-      var local = resolveAsset(u);
-      if (local) return _f(local, init);
-    } catch(e){}
-    return _f.apply(this, arguments);
+  var _f=window.fetch;
+  window.fetch=function(input,init){
+    try{var u=typeof input==='string'?input:(input&&input.url);var l=resolve(u);if(l)return _f(l,init);}catch(e){}
+    return _f.apply(this,arguments);
   };
-  // XHR: coba rewrite ke lokal jika ada
-  var _xo = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(m, u) {
-    try {
-      var local = resolveAsset(u);
-      if (local) arguments[1] = local;
-    } catch(e){}
-    return _xo.apply(this, arguments);
-  };
-  // Frame protect KERAS (tanpa block network)
-  function __gcLock(obj, prop, val) {
-    try {
-      Object.defineProperty(obj, prop, {
-        get: function(){ return typeof val === 'function' ? val() : val; },
-        set: function(){},
-        configurable: false
-      });
-    } catch(e){}
-  }
-  __gcLock(window, 'top', function(){ return window; });
-  __gcLock(window, 'parent', function(){ return window; });
-  __gcLock(window, 'frameElement', null);
-  try {
-    Object.defineProperty(window, 'length', { get: function(){ return 0; }, set: function(){}, configurable: false });
-  } catch(e){}
-  setInterval(function(){
-    __gcLock(window, 'top', function(){ return window; });
-    __gcLock(window, 'parent', function(){ return window; });
-    __gcLock(window, 'frameElement', null);
-  }, 800);
-  try {
-    var _open = window.open;
-    window.open = function(url, name, specs) {
-      if (name === '_top' || name === '_parent') name = '_blank';
-      return _open.call(window, url, name, specs);
-    };
-  } catch(e){}
-  window.__gc_frame_protected = true;
-  window.__gc_hard_frame = true;
-  console.info('[GC] Online Hybrid + hard frame protection');
+  try{Object.defineProperty(window,'top',{get:function(){return window}});}catch(e){}
+  try{Object.defineProperty(window,'parent',{get:function(){return window}});}catch(e){}
+  try{Object.defineProperty(window,'frameElement',{get:function(){return null}});}catch(e){}
 })();
-<\/script>` : `<script>
-window.__GC_ASSETS = ${JSON.stringify(assetIndex)};
-window.__GC_MODE = 'offline';
+<\/script>`
+        : `<script>
+window.__GC_ASSETS=${JSON.stringify(assetIndex)};
+window.__GC_MODE='offline';
 (function(){
-  const origFetch = window.fetch;
-  window.fetch = function(input, init) {
-    try {
-      let u = typeof input === 'string' ? input : (input && input.url);
-      if (u && window.__GC_ASSETS[u]) return origFetch(window.__GC_ASSETS[u], init);
-      const bare = (u||'').split('/').pop();
-      if (bare && window.__GC_ASSETS[bare]) return origFetch(window.__GC_ASSETS[bare], init);
-    } catch(e){}
-    return origFetch.apply(this, arguments);
+  function resolve(u){
+    if(!u)return null;
+    try{
+      if(window.__GC_ASSETS[u])return window.__GC_ASSETS[u];
+      var b=String(u).split('?')[0].split('#')[0].split('/').pop();
+      if(b&&window.__GC_ASSETS[b])return window.__GC_ASSETS[b];
+    }catch(e){}
+    return null;
+  }
+  var _f=window.fetch;
+  window.fetch=function(input,init){
+    try{
+      var u=typeof input==='string'?input:(input&&input.url);
+      var l=resolve(u);
+      if(l)return _f(l,init);
+      if(typeof u==='string'&&/^https?:/i.test(u)){
+        console.warn('[GC] blocked',u);
+        return Promise.reject(new Error('offline'));
+      }
+    }catch(e){}
+    return _f.apply(this,arguments);
   };
+  try{Object.defineProperty(window,'top',{get:function(){return window}});}catch(e){}
+  try{Object.defineProperty(window,'parent',{get:function(){return window}});}catch(e){}
+  try{Object.defineProperty(window,'frameElement',{get:function(){return null}});}catch(e){}
 })();
 <\/script>`;
 
-      if (raw.includes('<head>')) raw = raw.replace('<head>', '<head>' + mapScript);
+      if (/<head[\s>]/i.test(raw)) raw = raw.replace(/<head([^>]*)>/i, '<head$1>' + mapScript);
       else raw = mapScript + raw;
 
-      const blob = new Blob([raw], { type: 'text/html' });
-      return URL.createObjectURL(blob);
+      return URL.createObjectURL(new Blob([raw], { type: 'text/html' }));
     }
 
     async function startPreview(mode) {
-      if (!zipFS) { log('Load ZIP dulu'); return; }
+      if (!zipFS || !Object.keys(zipFS).length) {
+        log('Load ZIP dulu');
+        return;
+      }
       stopPreview();
       const statusBadge = document.getElementById('preview-status');
       const frame = document.getElementById('game-frame');
       const placeholder = document.getElementById('preview-placeholder');
+      const toolbar = document.getElementById('preview-toolbar');
+      if (toolbar) toolbar.classList.add('active');
 
       try {
-        log(`Starting preview mode: ${mode}`);
+        log('Preview: ' + mode);
         statusBadge.textContent = 'Loading...';
         statusBadge.className = 'badge badge-warn';
 
@@ -1090,45 +1237,48 @@ window.__GC_MODE = 'offline';
         if (mode === 'window') {
           isolatedWin = window.open(blobUrl, 'gc-preview', 'noopener,noreferrer,width=1024,height=720');
           if (!isolatedWin) {
-            log('Popup diblokir browser. Izinkan popup untuk Isolated Window.');
+            log('Popup diblokir — izinkan popup browser');
             statusBadge.textContent = 'Popup blocked';
             statusBadge.className = 'badge badge-warn';
             return;
           }
-          log('Isolated Window dibuka (full control, anti-iframe bypass via top-level)');
-          statusBadge.textContent = 'Isolated Window';
+          log('Isolated Window dibuka');
+          statusBadge.textContent = 'Window';
           statusBadge.className = 'badge badge-ok';
           return;
         }
 
-        placeholder.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'none';
         frame.style.display = 'block';
-
-        if (mode === 'protected' || mode === 'online' || mode === 'hybrid') {
-          frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock allow-orientation-lock');
-        } else {
-          frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock');
-        }
+        // Sandbox: same-origin + scripts wajib agar banyak game jalan
+        frame.setAttribute(
+          'sandbox',
+          'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock allow-orientation-lock'
+        );
         frame.setAttribute('allow', 'fullscreen; autoplay; clipboard-read; clipboard-write; gamepad; accelerometer; gyroscope');
         frame.setAttribute('referrerpolicy', 'no-referrer');
         frame.src = blobUrl;
 
         frame.onload = () => {
-          log('Iframe loaded');
-          statusBadge.textContent = mode === 'online' || mode === 'hybrid' ? 'Online Hybrid' : (mode === 'protected' ? 'Protected Active' : 'Sandbox Active');
+          log('Iframe loaded (' + mode + ')');
+          const labels = { sandbox: 'Sandbox', protected: 'Protected', online: 'Hybrid', hybrid: 'Hybrid' };
+          statusBadge.textContent = labels[mode] || 'OK';
           statusBadge.className = 'badge badge-ok';
-          try {
-            const w = frame.contentWindow;
-            if (w && w.__gc_frame_protected) log('Frame protection active inside game');
-          } catch (e) {
-            log('Cross-origin isolation (normal untuk blob)');
-          }
         };
-        frame.onerror = () => log('Iframe error');
+        frame.onerror = () => {
+          log('Iframe error');
+          statusBadge.textContent = 'Error';
+          statusBadge.className = 'badge badge-err';
+        };
       } catch (e) {
-        log('Preview error: ' + e.message);
+        log('Preview error: ' + (e && e.message ? e.message : e));
         statusBadge.textContent = 'Error';
-        statusBadge.className = 'badge badge-warn';
+        statusBadge.className = 'badge badge-err';
+        if (placeholder) {
+          placeholder.style.display = 'block';
+          placeholder.textContent = 'Preview gagal: ' + (e && e.message ? e.message : e);
+        }
+        if (frame) frame.style.display = 'none';
       }
     }
 
@@ -1636,7 +1786,7 @@ Format jawaban:
     }
 
     // Minta izin notifikasi saat pertama kali buka
-    setTimeout(requestNotifyPermission, 2000);
+    // notifikasi hanya saat user collect, tidak auto-prompt
   </script>
 </body>
 </html>
