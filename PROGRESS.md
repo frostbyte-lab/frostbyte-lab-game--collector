@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-15 (P6+P8 aggressive rewrite + dep-guided repair)
+Update terakhir: 2026-08-15 (P12 SW Proxy asset cache)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -32,6 +32,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | P7 | Engine-specific repair | ✅ | Phaser/Pixi/Unity/Construct/Cocos di Auto Repair Deep + packaging |
 | P6 | Path rewrite agresif | ✅ | Multi-pass, srcset, escaped URLs, source map strip, tail-3 |
 | P8 | Auto-repair dalam (Dependency) | ✅ | Pass-2 guided by dependency.json missingUnique |
+| P12 | Proxy asset / SW cache | ✅ | SW v2 `/__gc__/` virtual ZIP + mode Preview SW Proxy |
 | KV | Namespace `gc-history` | ✅ | ID `3869a97c9eaf49129a666476fcb672e8` |
 | Deploy | Worker live + binding | ✅ | MYBROWSER, GC_HISTORY, GITHUB_TOKEN |
 
@@ -58,7 +59,6 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | 9 | R2 untuk ZIP besar (>~30MB) | ❌ |
 | 10 | Live Viewer + Start/Stop Capture | ❌ |
 | 11 | UI Split View + Workspace repair interaktif | ❌ |
-| 12 | Proxy asset / SW cache asset di Preview | ⚠️ SW shell ada |
 | 13 | Custom domain | ⚠️ manual Dashboard |
 
 ---
@@ -142,4 +142,14 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - Auto Repair Deep: resolveLocal + baseFile relative, tail-2/3
 - Pass 2: baca `dependency.json` missingUnique → replace ref yang resolveable
 - Engine patches (P7) tetap jalan di pass yang sama
+
+
+
+## Catatan teknis SW Proxy (P12)
+
+- `public/sw.js` v2: shell cache + ZIP cache `gc-pro-zip-v2`
+- Message: `PUT_ZIP_ASSETS`, `CLEAR_ZIP`, `SKIP_WAITING`
+- Route: `GET /__gc__/{path}` dari Cache
+- UI: tombol **SW Proxy** → push ZIP ke SW → iframe src same-origin `/__gc__/index.html`
+- Relative paths lebih stabil dibanding blob: origin
 
