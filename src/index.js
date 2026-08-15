@@ -278,6 +278,155 @@ function classifyResource(url, type, contentType, bodyText) {
   return { category: "game", reason: "default" };
 }
 
+/**
+ * Poin 4 — Semantik API snapshot
+ * Mengenali jenis endpoint + field penting dari URL + body JSON.
+ */
+function classifyApiSemantics(url, type, contentType, bodyText) {
+  const out = {
+    kind: "unknown",
+    confidence: "low",
+    fields: {},
+    topKeys: [],
+    signals: []
+  };
+
+  let pathname = "";
+  let search = "";
+  try {
+    const u = new URL(url);
+    pathname = u.pathname.toLowerCase();
+    search = u.search.toLowerCase();
+  } catch {
+    pathname = String(url || "").toLowerCase();
+  }
+
+  const pathBag = pathname + " " + search;
+
+  // Path-based kind
+  if (/launch|initgame|init[_-]?game|gamedata|game[_-]?info|config/i.test(pathBag)) {
+    out.kind = "launch";
+    out.signals.push("path-launch");
+  }
+  if (/auth|login|oauth|token|signin|sign-in/i.test(pathBag)) {
+    out.kind = "auth";
+    out.signals.push("path-auth");
+  }
+  if (/session|reconnect|heartbeat|keep[_-]?alive/i.test(pathBag)) {
+    out.kind = "session";
+    out.signals.push("path-session");
+  }
+  if (/balance|wallet|credit|cashier|funds/i.test(pathBag)) {
+    out.kind = "balance";
+    out.signals.push("path-balance");
+  }
+  if (/spin|play|bet|wager|do[_-]?spin|start[_-]?spin|action=spin/i.test(pathBag)) {
+    out.kind = "spin-request";
+    out.signals.push("path-spin");
+  }
+  if (/result|outcome|round|settle|win/i.test(pathBag) && out.kind === "unknown") {
+    out.kind = "spin-result";
+    out.signals.push("path-result");
+  }
+  if (/error|fail|status/i.test(pathBag) && out.kind === "unknown") {
+    out.kind = "error-or-status";
+    out.signals.push("path-error");
+  }
+
+  // Body JSON
+  let json = null;
+  const sample = (bodyText || "").trim();
+  if (sample.startsWith("{") || sample.startsWith("[")) {
+    try {
+      json = JSON.parse(sample.length > 200000 ? sample.slice(0, 200000) : sample);
+    } catch {}
+  }
+
+  if (json && typeof json === "object") {
+    const keys = Array.isArray(json) ? [] : Object.keys(json);
+    out.topKeys = keys.slice(0, 30);
+    const flat = {};
+
+    function collect(obj, prefix, depth) {
+      if (!obj || typeof obj !== "object" || depth > 4) return;
+      if (Array.isArray(obj)) {
+        if (obj.length && typeof obj[0] !== "object") {
+          flat[prefix || "array"] = obj.slice(0, 20);
+        } else if (obj.length && Array.isArray(obj[0])) {
+          // possible reel matrix
+          flat[prefix || "matrix"] = obj.slice(0, 8).map(row =>
+            Array.isArray(row) ? row.slice(0, 10) : row
+          );
+        }
+        return;
+      }
+      for (const [k, v] of Object.entries(obj)) {
+        const lk = k.toLowerCase();
+        const p = prefix ? prefix + "." + k : k;
+        if (v !== null && typeof v === "object") {
+          collect(v, p, depth + 1);
+        } else if (typeof v === "number" || typeof v === "string" || typeof v === "boolean") {
+          flat[p] = v;
+        }
+
+        // Semantic field mapping
+        if (/^(balance|credit|cash|wallet|credits)$/i.test(k) || /player\.balance|user\.balance/i.test(p)) {
+          out.fields.balance = v;
+          out.signals.push("field-balance");
+          if (out.kind === "unknown" || out.kind === "spin-result") out.kind = out.kind === "spin-result" ? "spin-result" : "balance";
+        }
+        if (/^(bet|stake|totalbet|betamount|wager)$/i.test(k)) {
+          out.fields.bet = v;
+          out.signals.push("field-bet");
+        }
+        if (/^(win|winamount|totalwin|payout|prize)$/i.test(k)) {
+          out.fields.win = v;
+          out.signals.push("field-win");
+          if (out.kind === "unknown" || out.kind === "spin-request") out.kind = "spin-result";
+        }
+        if (/^(session|sessionid|sid|token|accesstoken|auth)$/i.test(k)) {
+          out.fields.session = typeof v === "string" ? v.slice(0, 24) + (String(v).length > 24 ? "…" : "") : v;
+          out.signals.push("field-session");
+          if (out.kind === "unknown") out.kind = "session";
+        }
+        if (/symbol|symbols|reels|reelwindow|window|board|matrix|grid/i.test(lk)) {
+          out.signals.push("field-symbols");
+          if (Array.isArray(v)) out.fields.symbols = v;
+          if (out.kind === "unknown" || out.kind === "spin-request") out.kind = "spin-result";
+        }
+        if (/freespin|free_spin|fsleft|freespinsleft|bonus/i.test(lk)) {
+          out.fields.feature = out.fields.feature || {};
+          out.fields.feature[k] = v;
+          out.signals.push("field-feature");
+        }
+        if (/^(error|errcode|errorcode|message|msg)$/i.test(k) && keys.length <= 8) {
+          out.fields.error = v;
+          if (out.kind === "unknown") out.kind = "error-or-status";
+        }
+      }
+    }
+    collect(json, "", 0);
+
+    // Boost confidence
+    if (out.signals.length >= 2) out.confidence = "medium";
+    if (out.signals.length >= 4 || (out.fields.win !== undefined && out.fields.symbols)) {
+      out.confidence = "high";
+    }
+    if (out.kind === "spin-result" && (out.fields.win !== undefined || out.fields.symbols)) {
+      out.confidence = "high";
+    }
+  } else if (out.kind !== "unknown") {
+    out.confidence = "medium";
+  }
+
+  // Normalize spin-request vs result: if body has win/symbols → result
+  if (out.kind === "spin-request" && (out.fields.win !== undefined || out.fields.symbols)) {
+    out.kind = "spin-result";
+  }
+
+  return out;
+}
+
 function buildKeterangan(target, manifest, smart, analysis = null) {
   const game = manifest.filter(r => r.category === "game");
   const api = manifest.filter(r => r.category === "api");
@@ -411,16 +560,48 @@ function buildKeterangan(target, manifest, smart, analysis = null) {
     for (const s of info.samples) lines.push(`  - ${s}`);
     lines.push("");
   }
-  lines.push("## Endpoint API (snapshot saat collect)");
+  lines.push("## Endpoint API (snapshot saat collect) — Poin 4");
   lines.push("");
+  // Ringkasan jenis API dari manifest
+  const apiKindBag = {};
+  for (const r of api) {
+    const k = r.apiKind || "unknown";
+    apiKindBag[k] = (apiKindBag[k] || 0) + 1;
+  }
+  if (Object.keys(apiKindBag).length) {
+    lines.push("| Jenis API (semantik) | Jumlah |");
+    lines.push("|----------------------|--------|");
+    for (const [k, n] of Object.entries(apiKindBag).sort((a, b) => b[1] - a[1])) {
+      lines.push(`| \`${k}\` | ${n} |`);
+    }
+    lines.push("");
+  }
   if (!apiEndpoints.length) {
     lines.push("_Tidak ada response API yang tertangkap saat collect._");
   } else {
     lines.push("File body disimpan di `server/api/`. Ini **snapshot** saat capture, bukan live server.");
     lines.push("");
-    for (const ep of apiEndpoints) {
-      lines.push(`- \`${ep.url}\``);
-      lines.push(`  - local: \`${ep.localPath}\` · status ${ep.status} · ${ep.size} byte · ${ep.reason}`);
+    for (const r of api.slice(0, 80)) {
+      lines.push(`- \`${r.url}\``);
+      const bits = [
+        r.localPath ? `local: \`${r.localPath}\`` : null,
+        r.status != null ? `status ${r.status}` : null,
+        r.size != null ? `${r.size} byte` : null,
+        r.apiKind ? `kind: **${r.apiKind}**` : null,
+        r.apiConfidence ? `conf: ${r.apiConfidence}` : null
+      ].filter(Boolean);
+      lines.push(`  - ${bits.join(" · ")}`);
+      if (r.apiFields && Object.keys(r.apiFields).length) {
+        const f = r.apiFields;
+        const parts = [];
+        if (f.balance !== undefined) parts.push(`balance=${f.balance}`);
+        if (f.bet !== undefined) parts.push(`bet=${f.bet}`);
+        if (f.win !== undefined) parts.push(`win=${f.win}`);
+        if (f.session !== undefined) parts.push(`session=${f.session}`);
+        if (f.symbols) parts.push("symbols=yes");
+        if (f.feature) parts.push("feature=yes");
+        if (parts.length) lines.push(`  - fields: ${parts.join(", ")}`);
+      }
     }
   }
   lines.push("");
@@ -1010,19 +1191,16 @@ function analyzeGameContent(zipFiles, manifest, htmlText = "") {
         extractBets(key, value);
       });
 
-      // API snapshot heuristics (server/api)
-      if (path.startsWith("server/api/") || path.includes("/api/")) {
-        const keys = json && typeof json === "object" && !Array.isArray(json) ? Object.keys(json) : [];
-        const joined = keys.join(",").toLowerCase();
-        let kind = "unknown";
-        if (/balance|credit|wallet|cash/.test(joined)) kind = "balance";
-        if (/spin|reel|result|outcome|winamount|winsymbol|slot/.test(joined)) kind = "spin-result";
-        if (/session|token|auth|login|launch/.test(joined)) kind = "session-auth";
-        if (/error|code|message/.test(joined) && keys.length <= 6) kind = "error-or-status";
+      // API snapshot semantics (Poin 4)
+      if (path.startsWith("server/api/") || path.includes("/api/") || path.includes("server/")) {
+        const sem = classifyApiSemantics(path, "fetch", "application/json", text);
         result.apiSnapshots.push({
           path,
-          kind,
-          topKeys: keys.slice(0, 20),
+          kind: sem.kind,
+          confidence: sem.confidence,
+          fields: sem.fields,
+          topKeys: sem.topKeys.slice(0, 20),
+          signals: sem.signals,
           size: data.byteLength
         });
       }
@@ -1055,6 +1233,18 @@ function analyzeGameContent(zipFiles, manifest, htmlText = "") {
     return true;
   }).slice(0, 50);
 
+  // Agregasi API kinds dari snapshot + manifest
+  const apiKindCounts = {};
+  for (const s of result.apiSnapshots) {
+    const k = s.kind || "unknown";
+    apiKindCounts[k] = (apiKindCounts[k] || 0) + 1;
+  }
+  for (const r of manifest || []) {
+    if (r.apiKind) {
+      apiKindCounts[r.apiKind] = (apiKindCounts[r.apiKind] || 0) + 1;
+    }
+  }
+
   result.summary = {
     engine: result.engine?.engine || "unknown",
     engineConfidence: result.engine?.confidence || "none",
@@ -1067,6 +1257,7 @@ function analyzeGameContent(zipFiles, manifest, htmlText = "") {
     spineCount: result.spine.length,
     audioMapCount: result.audioMaps.length,
     apiSnapshotCount: result.apiSnapshots.length,
+    apiKinds: apiKindCounts,
     note: "Hasil heuristik dari isi file yang ter-collect. Bukan reverse-engineer server."
   };
 
@@ -1478,11 +1669,13 @@ export default {
             else if (ct.includes("woff")) name += ".woff";
           }
 
-          // Peek body text for JSON classification (limit)
+          // Peek body text for JSON classification (lebih besar untuk API)
           let bodyPeek = "";
           try {
-            if ((ct.includes("json") || ct.includes("text") || type === "xhr" || type === "fetch") && buffer.byteLength < 500000) {
-              bodyPeek = new TextDecoder().decode(buffer.slice(0, 400));
+            const wantPeek = ct.includes("json") || ct.includes("text") || type === "xhr" || type === "fetch";
+            if (wantPeek && buffer.byteLength < 800000) {
+              const maxPeek = (type === "xhr" || type === "fetch" || ct.includes("json")) ? 120000 : 400;
+              bodyPeek = new TextDecoder().decode(buffer.slice(0, Math.min(maxPeek, buffer.byteLength)));
             }
           } catch {}
 
@@ -1494,6 +1687,14 @@ export default {
           const localPath = `${folder}/${String(manifest.length + 1).padStart(4, "0")}-${name}`;
           const r2Key = `${id}/${localPath}`;
 
+          // Poin 4: semantik API
+          let apiMeta = null;
+          if (classified.category === "api" || type === "xhr" || type === "fetch") {
+            try {
+              apiMeta = classifyApiSemantics(u, type, ct, bodyPeek);
+            } catch {}
+          }
+
           if (env.COLLECTOR_BUCKET) {
             await env.COLLECTOR_BUCKET.put(r2Key, buffer, {
               httpMetadata: { contentType: ct || "application/octet-stream" }
@@ -1501,7 +1702,7 @@ export default {
           }
 
           zipFiles[localPath] = new Uint8Array(buffer);
-          manifest.push({
+          const entry = {
             url: u,
             type,
             status: response.status(),
@@ -1511,7 +1712,15 @@ export default {
             category: classified.category,
             subCategory: slot.sub || null,
             classifyReason: classified.reason + (slot.reason ? "+" + slot.reason : "")
-          });
+          };
+          if (apiMeta) {
+            entry.apiKind = apiMeta.kind;
+            entry.apiConfidence = apiMeta.confidence;
+            entry.apiFields = apiMeta.fields;
+            entry.apiSignals = apiMeta.signals;
+            entry.apiTopKeys = apiMeta.topKeys;
+          }
+          manifest.push(entry);
         } catch {}
       });
 
