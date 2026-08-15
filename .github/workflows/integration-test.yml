@@ -2,6 +2,8 @@ name: CI Integration Tests
 
 on:
   workflow_dispatch: {}
+  schedule:
+    - cron: '0 3 * * *' # nightly at 03:00 UTC
   pull_request:
     types: [opened, synchronize, reopened]
 
