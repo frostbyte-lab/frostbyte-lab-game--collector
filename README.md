@@ -13,7 +13,7 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 | No | Item | Status | Catatan untuk langkah berikutnya |
 |----|------|--------|----------------------------------|
 | 1.1 | **R2 untuk ZIP besar** | ❌ Belum | Aktifkan R2 di Dashboard CF → buat bucket `game-collector-packages` → bind `COLLECTOR_BUCKET` di `wrangler.jsonc` → Worker sudah punya cabang `env.COLLECTOR_BUCKET.put`. Setelah enable, deploy ulang + uji ZIP >30MB. |
-| 1.2 | **History server-side (KV)** | ❌ Belum | Tambah KV namespace `GC_HISTORY`, API `POST/GET /api/history`, ganti `localStorage` di frontend. Schema: `{ id, url, ts, status, files, zipSize, totals }`. |
+| 1.2 | **History server-side (KV)** | ⚠️ Kode siap; bind KV di Dashboard | Tambah KV namespace `GC_HISTORY`, API `POST/GET /api/history`, ganti `localStorage` di frontend. Schema: `{ id, url, ts, status, files, zipSize, totals }`. |
 | 1.3 | **Progress collect real (stream)** | ⚠️ Estimasi UI saja | Ganti long-request tunggal dengan SSE atau Durable Object status + poll. Frontend `startProgress()` sudah ada; tinggal sumber % dari server. |
 
 ### Prioritas 2 — Offline & Preview lebih stabil
@@ -27,8 +27,8 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 ### Prioritas 3 — Polish & skala
 | No | Item | Status | Catatan untuk langkah berikutnya |
 |----|------|--------|----------------------------------|
-| 3.1 | Custom domain | ❌ | Workers Custom Domain / Routes di CF Dashboard. |
-| 3.2 | Retry / resume collect | ❌ | Simpan partial manifest + lanjut fetch missing. |
+| 3.1 | Custom domain | ⚠️ Docs di wrangler + README | Workers Custom Domain / Routes di CF Dashboard. |
+| 3.2 | Retry / resume collect | ⚠️ `/api/resume` + session KV | Simpan partial manifest + lanjut fetch missing. |
 | 3.3 | Iframe “maksimal absolut” | ⚠️ Hard sudah ada | Isolated Window tetap cadangan; jangan janji 100% lawan anti-embed ekstrem. |
 
 ### Yang tidak perlu dikejar sebagai “100%”
@@ -68,6 +68,31 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 - [x] **View kelengkapan** panel setelah load ZIP
 - [x] Packaging ulang
 - [x] AI Assistant (endpoint OpenAI-compatible / Groq)
+
+
+### A.5–A.7 History KV · Resume · Custom domain
+- [x] API `GET/POST/DELETE /api/history` (KV `GC_HISTORY`, fallback localStorage di UI)
+- [x] API `POST /api/resume` — fetch `stillMissing` tanpa browser; session `sess:{id}` di KV (TTL 24 jam)
+- [x] Collect menyimpan session jika masih ada missing + header `X-GC-Session-Id` / `X-GC-Still-Missing`
+- [x] UI: tombol **Resume missing**, Resume dari riwayat, sumber history server/local
+- [x] Custom domain: langkah di bawah (Dashboard CF, bukan kode)
+
+#### Setup KV (wajib agar history server aktif)
+1. Cloudflare Dashboard → **Workers & Pages** → **KV** → Create namespace `gc-history`
+2. Copy **Namespace ID**
+3. Uncomment di `wrangler.jsonc`:
+   ```jsonc
+   "kv_namespaces": [
+     { "binding": "GC_HISTORY", "id": "NAMESPACE_ID_KAMU" }
+   ]
+   ```
+4. `npx wrangler deploy`
+
+#### Custom domain (A.7)
+1. Dashboard CF → Workers → **game-resource-collector** → **Settings** → **Domains & Routes**
+2. **Add Custom Domain** → isi mis. `collector.domain-kamu.com`
+3. Ikuti instruksi DNS (CNAME / otomatis jika domain di CF)
+4. Tidak perlu ubah kode repo
 
 ### UX
 - [x] Progress bar + ETA (client-side estimate)
