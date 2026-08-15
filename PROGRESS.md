@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-15 (P2 Dependency Analyzer)
+Update terakhir: 2026-08-15 (P3+P4 fitur + paytable)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -25,6 +25,8 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 |----|------|--------|---------|
 | P1 | Progress collect real (server poll) | ✅ | `/api/progress?id=` + KV `prog:{id}` + UI poll 800ms |
 | P2 | Dependency Analyzer + Path Resolver | ✅ | `dependency.json` + skor dependencies + missing graph |
+| P3 | Deteksi fitur game lebih dalam | ✅ | FreeSpin, Bonus, Cascade, Wild, Scatter, Multiplier, Jackpot, Respin, Gamble, BuyFeature |
+| P4 | Paytable lebih akurat | ✅ | structured map/array + symbol refs + skor kualitas |
 | KV | Namespace `gc-history` | ✅ | ID `3869a97c9eaf49129a666476fcb672e8` |
 | Deploy | Worker live + binding | ✅ | MYBROWSER, GC_HISTORY, GITHUB_TOKEN |
 
@@ -39,8 +41,6 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 ### Tier 2 — Slot intelligence
 | # | Item | Status |
 |---|------|--------|
-| 3 | Deteksi fitur game lebih dalam (FS, Bonus, Cascade, Wild, Scatter, Multiplier) | ⚠️ dasar ada |
-| 4 | Deteksi & ekstraksi Paytable lebih akurat | ⚠️ hit ada |
 | 5 | Mapping relasi asset (symbol ↔ animation ↔ audio) | ❌ |
 
 ### Tier 3 — Repair
@@ -65,8 +65,8 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 
 1. ~~Progress collect real~~ ✅
 2. ~~Dependency Analyzer + Path Resolver~~ ✅
-3. **Fitur game + Paytable lebih dalam** ← next
-4. R2 ZIP besar
+3. ~~Fitur game + Paytable lebih dalam~~ ✅
+4. **R2 ZIP besar** ← next (atau mapping relasi / engine repair)
 5. Engine-specific repair
 6. Mapping relasi asset
 7. Path rewrite + auto-repair dalam
@@ -95,4 +95,13 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - Resolve ke path lokal ZIP (exact, relative, bare, tail-2, URL pathname)
 - Output: `dependency.json` + `analisis.dependencies` + skor di `kelengkapan.json`
 - UI: bar "Dependencies resolved?" + daftar missing + top files
+
+
+
+## Catatan teknis Fitur + Paytable (P3/P4)
+
+- Feature types: FreeSpin, Bonus, Cascade, Wild, Scatter, Multiplier, Jackpot, Respin, Gamble, BuyFeature
+- Scan JSON keys + JS text references
+- Paytable: detect symbol→pays map, array of {symbol,pay}, structured score
+- UI: tampil type counts + paytable key/kind/symbols
 
