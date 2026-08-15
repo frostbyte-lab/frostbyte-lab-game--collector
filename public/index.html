@@ -770,42 +770,88 @@
       }
     }
 
+        function stepIcon(st, conclusion) {
+      if (st === 'completed' && conclusion === 'success') return '✓';
+      if (st === 'completed' && conclusion === 'failure') return '✗';
+      if (st === 'completed' && conclusion === 'skipped') return '–';
+      if (st === 'in_progress') return '…';
+      return '○';
+    }
+
+    function formatGitHubDetail(data, runId, elapsedSec) {
+      const lines = [];
+      lines.push('GitHub Actions — detail proses');
+      lines.push('Run ID: ' + runId);
+      lines.push('Status run: ' + (data.status || '-') + (data.conclusion ? ' / ' + data.conclusion : ''));
+      lines.push('Waktu: ' + elapsedSec + 's');
+      lines.push('');
+      lines.push('Fase: ' + (data.phase || 'Memuat status...'));
+      if (data.current_step) lines.push('Step aktif: ' + data.current_step);
+      lines.push('');
+      lines.push('Langkah yang dijalankan:');
+      const jobs = data.jobs || [];
+      if (!jobs.length) {
+        lines.push('  (menunggu job runner...)');
+      } else {
+        for (const job of jobs) {
+          lines.push('• Job: ' + job.name + ' [' + job.status + (job.conclusion ? '/' + job.conclusion : '') + ']');
+          for (const s of (job.steps || [])) {
+            const icon = stepIcon(s.status, s.conclusion);
+            lines.push('    ' + icon + ' ' + s.name + (s.status === 'in_progress' ? '  ← sedang' : ''));
+          }
+        }
+      }
+      lines.push('');
+      lines.push('Yang diambil saat Capture:');
+      lines.push('  HTML halaman, JS, CSS, gambar, audio/font,');
+      lines.push('  data XHR/fetch (snapshot), auto-click Play,');
+      lines.push('  path rewrite, lalu dikemas ZIP artifact.');
+      if (data.artifact) {
+        lines.push('');
+        lines.push('Artifact: ' + data.artifact.name + ' (' + Math.round((data.artifact.size || 0) / 1024) + ' KB)');
+      }
+      if (data.html_url) lines.push('Log lengkap: ' + data.html_url);
+      return lines.join('\n');
+    }
+
     function pollGitHubRun(runId) {
       if (ghPollTimer) clearInterval(ghPollTimer);
       let tries = 0;
+      const t0 = Date.now();
       ghPollTimer = setInterval(async () => {
         tries++;
-        if (tries > 60) {
+        if (tries > 90) {
           clearInterval(ghPollTimer);
           statusEl.className = 'warn';
-          statusEl.textContent += '\n\nTimeout menunggu. Cek status di GitHub Actions.';
+          statusEl.textContent += '\n\nTimeout menunggu. Buka link log GitHub di atas.';
           return;
         }
         try {
           const res = await fetch('/api/github/status?run_id=' + encodeURIComponent(runId));
           const data = await res.json();
           if (!res.ok) return;
-
+          const elapsed = Math.round((Date.now() - t0) / 1000);
           statusEl.className = data.conclusion === 'success' ? 'ok' : (data.conclusion === 'failure' ? 'error' : 'warn');
-          statusEl.textContent = `GitHub Actions\nRun ID: ${runId}\nStatus: ${data.status}\nConclusion: ${data.conclusion || '-'}\n\n` +
-            (data.status !== 'completed' ? `Masih berjalan... (${tries * 5}s)` : '');
+          statusEl.textContent = formatGitHubDetail(data, runId, elapsed);
 
           if (data.status === 'completed') {
             clearInterval(ghPollTimer);
             if (data.conclusion === 'success' && data.artifact) {
-              statusEl.textContent += `\nArtifact: ${data.artifact.name} (${Math.round((data.artifact.size || 0) / 1024)} KB)\nMengunduh ZIP...`;
+              statusEl.textContent += '\n\nMengunduh ZIP artifact...';
               await downloadGitHubArtifact(data.artifact.id, runId);
+            } else if (data.conclusion === 'success' && !data.artifact) {
+              statusEl.textContent += '\n\nSukses tapi artifact belum terbaca. Cek tab Actions.';
             } else {
-              statusEl.textContent += '\nRun gagal atau tidak ada artifact.\n' + (data.html_url || '');
+              statusEl.textContent += '\n\nRun gagal. Lihat log GitHub.';
             }
           }
         } catch (e) {
-          // ignore transient
+          // ignore transient network
         }
-      }, 5000);
+      }, 4000);
     }
 
-    async function downloadGitHubArtifact(artifactId, runId) {
+async function downloadGitHubArtifact(artifactId, runId) {
       try {
         const res = await fetch('/api/github/artifact?artifact_id=' + encodeURIComponent(artifactId));
         if (!res.ok) {

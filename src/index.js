@@ -632,6 +632,49 @@ export default {
       const run = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${runId}`);
       if (!run.ok) return Response.json({ error: "Gagal ambil status", detail: run.data }, { status: run.status });
       const r = run.data;
+
+      // Detail job + steps (apa yang sedang dijalankan)
+      let jobsOut = [];
+      let currentStep = null;
+      try {
+        const jobs = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${runId}/jobs`);
+        const list = jobs.data?.jobs || [];
+        for (const job of list) {
+          const steps = (job.steps || []).map(s => ({
+            name: s.name,
+            status: s.status,
+            conclusion: s.conclusion,
+            number: s.number
+          }));
+          jobsOut.push({
+            name: job.name,
+            status: job.status,
+            conclusion: job.conclusion,
+            steps
+          });
+          for (const s of steps) {
+            if (s.status === "in_progress") currentStep = s.name;
+          }
+          if (!currentStep && job.status === "in_progress") {
+            const last = [...steps].reverse().find(s => s.conclusion === "success") || steps[steps.length - 1];
+            if (last) currentStep = last.name + (last.conclusion === "success" ? " (selesai, lanjut...)" : "");
+          }
+        }
+      } catch {}
+
+      // Fase ramah pengguna dari nama step
+      const phaseHint = (() => {
+        const n = (currentStep || "").toLowerCase();
+        if (!n && r.status === "queued") return "Antri di GitHub Actions...";
+        if (n.includes("checkout") || n.includes("set up job")) return "Menyiapkan runner & clone repo";
+        if (n.includes("setup node") || n.includes("install")) return "Install Node + Playwright (browser)";
+        if (n.includes("capture") || n.includes("collect")) return "Membuka URL game, scroll, ambil HTML/JS/CSS/gambar/audio, packaging ZIP";
+        if (n.includes("upload") || n.includes("artifact")) return "Upload artifact ZIP ke GitHub";
+        if (n.includes("summary")) return "Menulis ringkasan hasil";
+        if (r.status === "completed") return r.conclusion === "success" ? "Selesai" : "Gagal";
+        return currentStep ? ("Menjalankan: " + currentStep) : "Sedang diproses di runner GitHub...";
+      })();
+
       let artifact = null;
       if (r.status === "completed" && r.conclusion === "success") {
         const arts = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${runId}/artifacts`);
@@ -643,6 +686,11 @@ export default {
         status: r.status,
         conclusion: r.conclusion,
         html_url: r.html_url,
+        run_started_at: r.run_started_at || r.created_at,
+        updated_at: r.updated_at,
+        current_step: currentStep,
+        phase: phaseHint,
+        jobs: jobsOut,
         artifact: artifact ? { id: artifact.id, name: artifact.name, size: artifact.size_in_bytes } : null
       });
     }

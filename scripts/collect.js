@@ -174,7 +174,10 @@ async function main() {
     } catch {}
   });
 
+  console.log("PROGRESS: open_url", TARGET_URL);
   await page.goto(TARGET_URL, { waitUntil: "domcontentloaded", timeout: 45000 });
+  console.log("PROGRESS: page_loaded");
+  console.log("PROGRESS: wait_resources", WAIT_SECONDS, "s");
   await page.waitForTimeout(WAIT_SECONDS * 1000);
 
   // Scroll untuk trigger lazy load
@@ -222,6 +225,7 @@ Atau load di Workspace Game Collector Pro.
   const zipName = `game-resources-${Date.now()}.zip`;
   writeFileSync(join("output", zipName), zipped);
 
+  console.log("PROGRESS: zip_done");
   console.log("Selesai!");
   console.log("Total resource:", resources.length);
   console.log("Smart rewrite:", smart.rewritten, "file · frame-buster:", smart.neutralized);

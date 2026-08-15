@@ -22,16 +22,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Install
+      - name: Install Node deps + Playwright browser
         run: |
           npm install
           npx playwright install chromium --with-deps
-      - name: Capture
+      - name: Capture game (HTML/JS/CSS/assets → ZIP)
         env:
           TARGET_URL: ${{ github.event.inputs.url }}
           WAIT_SECONDS: ${{ github.event.inputs.wait_seconds }}
         run: node scripts/collect.js
-      - name: Upload ZIP
+      - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
           name: game-resources
