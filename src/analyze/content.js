@@ -139,14 +139,89 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
 
   function looksLikePaytable(key, value) {
     const k = String(key).toLowerCase();
-    if (/paytable|pay[_-]?table|payouts?|pays|win[_-]?table/i.test(k)) return true;
+    if (/paytable|pay[_-]?table|payouts?|pays|win[_-]?table|line[_-]?wins?|award[_-]?table/i.test(k)) return true;
     if (Array.isArray(value) && value.length >= 3) {
       const sample = value.slice(0, 5);
-      if (sample.every(x => typeof x === "number" || (x && typeof x === "object" && ("pay" in x || "payout" in x || "prize" in x)))) {
-        return /pay|win|prize|award/i.test(k);
+      if (sample.every(x => typeof x === "number" || (x && typeof x === "object" && ("pay" in x || "payout" in x || "prize" in x || "wins" in x || "multipliers" in x)))) {
+        return /pay|win|prize|award|line/i.test(k);
+      }
+    }
+    // object map symbol -> array of pays
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const vals = Object.values(value).slice(0, 8);
+      if (vals.length >= 2 && vals.every(v => Array.isArray(v) && v.length >= 2 && v.every(n => typeof n === "number"))) {
+        return /pay|symbol|win/i.test(k) || vals.length >= 3;
       }
     }
     return false;
+  }
+
+  function structurePaytable(key, value, file) {
+    const entry = {
+      file,
+      key,
+      kind: Array.isArray(value) ? "array" : typeof value,
+      symbols: [],
+      lines: null,
+      entries: 0,
+      preview: null
+    };
+    try {
+      if (Array.isArray(value)) {
+        entry.entries = value.length;
+        entry.preview = value.slice(0, 6);
+        // array of {symbol, pays} or numbers
+        for (const item of value.slice(0, 40)) {
+          if (item && typeof item === "object") {
+            const name = item.symbol || item.name || item.id || item.key;
+            if (name != null) entry.symbols.push(String(name));
+            if (Array.isArray(item.pay) || Array.isArray(item.pays) || Array.isArray(item.payout)) {
+              entry.kind = "symbol-pay-array";
+            }
+          }
+        }
+      } else if (value && typeof value === "object") {
+        const keys = Object.keys(value);
+        entry.entries = keys.length;
+        entry.symbols = keys.slice(0, 40).map(String);
+        entry.preview = keys.slice(0, 12);
+        // detect map of symbol -> [pay3, pay4, pay5]
+        let mapPays = 0;
+        for (const k of keys.slice(0, 20)) {
+          const v = value[k];
+          if (Array.isArray(v) && v.every(n => typeof n === "number")) mapPays++;
+          else if (v && typeof v === "object" && (v.pay || v.pays || v.payout || v.wins)) mapPays++;
+        }
+        if (mapPays >= 2) entry.kind = "symbol-to-pays-map";
+      } else {
+        entry.preview = value;
+      }
+    } catch {}
+    entry.symbols = [...new Set(entry.symbols)].slice(0, 40);
+    return entry;
+  }
+
+  const FEATURE_TYPES = [
+    { type: "FreeSpin", re: /free[_-]?spins?|freespins?|fs[_-]?count|free[_-]?games?/i },
+    { type: "Bonus", re: /bonus[_-]?game|bonus[_-]?feature|bonus[_-]?round|pick[_-]?bonus|hold[_-]?and[_-]?win/i },
+    { type: "Cascade", re: /cascade|tumble|avalanche|avalanch|reel[_-]?drop|remove[_-]?and[_-]?drop/i },
+    { type: "Wild", re: /\bwilds?\b|expanding[_-]?wild|sticky[_-]?wild|walking[_-]?wild|random[_-]?wild/i },
+    { type: "Scatter", re: /\bscatters?\b|scatter[_-]?pay|scatter[_-]?symbol/i },
+    { type: "Multiplier", re: /multipliers?|win[_-]?multi|global[_-]?multi|x[_-]?multi/i },
+    { type: "Jackpot", re: /jackpots?|progressive|grand[_-]?prize|mega[_-]?jackpot/i },
+    { type: "Respin", re: /respins?|re[_-]?spins?|hold[_-]?spin|nudge/i },
+    { type: "Gamble", re: /gamble|risk[_-]?game|double[_-]?or[_-]?nothing/i },
+    { type: "BuyFeature", re: /buy[_-]?feature|buy[_-]?bonus|feature[_-]?buy|bonus[_-]?buy/i }
+  ];
+
+  function classifyFeatureType(key, value) {
+    const s = String(key) + " " + (typeof value === "string" ? value : "");
+    for (const ft of FEATURE_TYPES) {
+      if (ft.re.test(s)) return ft.type;
+    }
+    if (/bonus/i.test(s)) return "Bonus";
+    if (/feature/i.test(s)) return "Feature";
+    return "Other";
   }
 
   function extractSymbolsFromValue(key, value) {
@@ -173,18 +248,24 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
 
   function extractFeatures(key, value) {
     const k = String(key).toLowerCase();
-    if (/freespin|free[_-]?spin|bonus|scatter|wild|multiplier|cascade|tumble|feature|jackpot/i.test(k)) {
-      featureSet.add(k);
-      if (value && typeof value === "object") {
-        result.features.push({
-          key: k,
-          pathHint: key,
-          sample: Array.isArray(value) ? { type: "array", length: value.length } : { type: "object", keys: Object.keys(value).slice(0, 12) }
-        });
-      } else if (value != null && typeof value !== "object") {
-        result.features.push({ key: k, value: value });
-      }
+    const type = classifyFeatureType(key, value);
+    const matched = FEATURE_TYPES.some(ft => ft.re.test(k)) || /freespin|free[_-]?spin|bonus|scatter|wild|multiplier|cascade|tumble|feature|jackpot|respin|gamble|buy[_-]?feature/i.test(k);
+    if (!matched && type === "Other") return;
+    featureSet.add(type + ":" + k);
+    const row = {
+      key: k,
+      type,
+      pathHint: key,
+      enabled: value === true || value === 1 || value === "1" || value === "true" ? true : (value === false || value === 0 ? false : null)
+    };
+    if (value && typeof value === "object") {
+      row.sample = Array.isArray(value)
+        ? { type: "array", length: value.length, head: value.slice(0, 3) }
+        : { type: "object", keys: Object.keys(value).slice(0, 12) };
+    } else if (value != null && typeof value !== "object") {
+      row.value = value;
     }
+    result.features.push(row);
   }
 
   function extractBets(key, value) {
@@ -265,14 +346,7 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
       // Walk for paytable / symbols / features / bets
       walkObject(json, "", (key, value) => {
         if (looksLikePaytable(key, value)) {
-          result.paytables.push({
-            file: path,
-            key,
-            kind: Array.isArray(value) ? "array" : typeof value,
-            preview: Array.isArray(value)
-              ? value.slice(0, 5)
-              : (value && typeof value === "object" ? Object.keys(value).slice(0, 15) : value)
-          });
+          result.paytables.push(structurePaytable(key, value, path));
         }
         extractSymbolsFromValue(key, value);
         extractFeatures(key, value);
@@ -302,11 +376,19 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
           symbolSet.add(m.replace(/["']/g, ""));
         }
       }
-      if (/paytable|payTable|PAYTABLE/i.test(text)) {
+      if (/paytable|payTable|PAYTABLE|pay_table/i.test(text)) {
         result.hints.push({ file: path, hint: "paytable-reference-in-js" });
       }
-      if (/freeSpin|free_spin|FreeSpin|scatter|cascad|tumble/i.test(text)) {
-        result.hints.push({ file: path, hint: "feature-reference-in-js" });
+      for (const ft of FEATURE_TYPES) {
+        if (ft.re.test(text)) {
+          featureSet.add(ft.type + ":js-ref");
+          result.features.push({ key: "js-ref", type: ft.type, pathHint: path, source: "js-scan" });
+          result.hints.push({ file: path, hint: "feature-" + ft.type });
+        }
+      }
+      // paytable-like arrays in JS: symbol pays [1,2,5,10,20]
+      if (/pays?\s*[:=]\s*\[\s*\d+/i.test(text) || /paytable\s*[:=]/i.test(text)) {
+        result.hints.push({ file: path, hint: "pay-array-in-js" });
       }
     }
   }
@@ -335,6 +417,34 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
     audioByEvent[a.event] = (audioByEvent[a.event] || 0) + 1;
   }
 
+  result.symbols = [...symbolSet].slice(0, 200);
+
+  // Dedupe features by type:key
+  const featKeys = new Set();
+  result.features = result.features.filter(f => {
+    const k = (f.type || "") + ":" + (f.key || "");
+    if (featKeys.has(k)) return false;
+    featKeys.add(k);
+    return true;
+  }).slice(0, 80);
+
+  // Feature type counts
+  const featureTypes = {};
+  for (const f of result.features) {
+    const t = f.type || "Other";
+    featureTypes[t] = (featureTypes[t] || 0) + 1;
+  }
+  result.featureTypes = featureTypes;
+  const uniqueFeatureTypes = Object.keys(featureTypes).filter(t => t !== "Other" && t !== "Feature");
+
+  // Paytable quality
+  let payStructured = 0;
+  let paySymbols = 0;
+  for (const p of result.paytables) {
+    if (p.kind === "symbol-to-pays-map" || p.kind === "symbol-pay-array") payStructured++;
+    if (p.symbols && p.symbols.length) paySymbols += p.symbols.length;
+  }
+
   // Completeness scores (heuristic 0-100 per category)
   function scoreCat(found, good, excellent) {
     if (found <= 0) return 0;
@@ -350,9 +460,25 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
   const audioMapped = result.audioEvents.filter(a => a.event !== "Other").length;
   const engineOk = result.engine && result.engine.engine && result.engine.engine !== "unknown";
 
+  let payScore = 0;
+  if (payStructured > 0) payScore = Math.min(100, 70 + payStructured * 15);
+  else if (payN > 0) payScore = 55;
+  else if (result.hints.some(h => /paytable|pay-array/i.test(h.hint || ""))) payScore = 35;
+
+  let featScore = scoreCat(uniqueFeatureTypes.length, 2, 5);
+  if (featN > 0 && featScore < 40) featScore = 40;
+  if (uniqueFeatureTypes.length >= 3) featScore = Math.max(featScore, 75);
+
   result.scores = {
     symbols: { score: scoreCat(symN, 5, 15), found: symN, label: "Symbols", ok: symN >= 3 },
-    paytable: { score: payN > 0 ? 100 : (result.hints.some(h => h.hint === "paytable-reference-in-js") ? 40 : 0), found: payN, label: "Paytable", ok: payN > 0 },
+    paytable: {
+      score: payScore,
+      found: payN,
+      structured: payStructured,
+      symbolRefs: paySymbols,
+      label: "Paytable",
+      ok: payN > 0 || payScore >= 35
+    },
     audio: {
       score: audioN === 0 ? 0 : Math.min(100, Math.round(40 + 60 * (audioMapped / Math.max(audioN, 1)))),
       found: audioN,
@@ -369,7 +495,14 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
       label: "Atlas / Spine",
       ok: atlasN > 0
     },
-    features: { score: scoreCat(featN, 1, 4), found: featN, label: "Game features", ok: featN > 0 },
+    features: {
+      score: featScore,
+      found: featN,
+      types: uniqueFeatureTypes,
+      typeCounts: featureTypes,
+      label: "Game features",
+      ok: uniqueFeatureTypes.length >= 1
+    },
     engine: {
       score: engineOk ? (result.engine.confidence === "high" ? 100 : result.engine.confidence === "medium" ? 70 : 40) : 0,
       found: engineOk ? 1 : 0,
@@ -381,16 +514,6 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
   };
   const scoreVals = Object.values(result.scores).map(s => s.score);
   result.scores.overall = Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length);
-
-  result.symbols = [...symbolSet].slice(0, 200);
-  // dedupe features by key
-  const featKeys = new Set();
-  result.features = result.features.filter(f => {
-    const k = f.key || "";
-    if (featKeys.has(k)) return false;
-    featKeys.add(k);
-    return true;
-  }).slice(0, 50);
 
   // Agregasi API kinds dari snapshot + manifest
   const apiKindCounts = {};
@@ -409,8 +532,12 @@ export function analyzeGameContent(zipFiles, manifest, htmlText = "") {
     engineConfidence: result.engine?.confidence || "none",
     jsonParsed: result.parsedJson,
     paytableHits: result.paytables.length,
+    paytableStructured: payStructured,
+    paytableSymbols: paySymbols,
     symbolCount: result.symbols.length,
     featureHits: result.features.length,
+    featureTypes: uniqueFeatureTypes,
+    featureTypeCounts: featureTypes,
     betConfigs: result.bets.length,
     atlasCount: result.atlases.length,
     spineCount: result.spine.length,
