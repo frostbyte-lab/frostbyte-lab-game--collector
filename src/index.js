@@ -341,6 +341,31 @@ function buildKeterangan(target, manifest, smart, analysis = null) {
   }
   lines.push("");
 
+  // Poin 3 — engine
+  lines.push("## Deteksi engine (Poin 3)");
+  lines.push("");
+  if (analysis && analysis.engine && !analysis.engine.error) {
+    const eng = analysis.engine;
+    lines.push(`- **Engine:** \`${eng.engine}\``);
+    lines.push(`- **Confidence:** ${eng.confidence} (score ${eng.score ?? 0})`);
+    if (eng.ranked && eng.ranked.length) {
+      lines.push("- **Ranking:** " + eng.ranked.slice(0, 5).map(r => `${r.engine}(${r.score})`).join(", "));
+    }
+    if (eng.repairHints && eng.repairHints.length) {
+      lines.push("- **Repair hints:**");
+      for (const h of eng.repairHints) lines.push(`  - ${h}`);
+    }
+    if (eng.evidence && eng.evidence.length) {
+      lines.push("- **Evidence (sample):**");
+      for (const e of eng.evidence.slice(0, 8)) {
+        lines.push(`  - [${e.engine} +${e.points}] ${e.why}`);
+      }
+    }
+  } else {
+    lines.push("_Engine tidak terdeteksi / analisis gagal._");
+  }
+  lines.push("");
+
   // Poin 2 — ringkasan analisis isi file
   lines.push("## Analisis isi file (Poin 2)");
   lines.push("");
@@ -348,6 +373,7 @@ function buildKeterangan(target, manifest, smart, analysis = null) {
     const s = analysis.summary;
     lines.push("| Temuan | Jumlah |");
     lines.push("|--------|--------|");
+    lines.push(`| Engine | ${s.engine ?? "unknown"} (${s.engineConfidence ?? "none"}) |`);
     lines.push(`| JSON ter-parse | ${s.jsonParsed ?? 0} |`);
     lines.push(`| Paytable hits | ${s.paytableHits ?? 0} |`);
     lines.push(`| Symbol terdeteksi | ${s.symbolCount ?? 0} |`);
@@ -441,6 +467,14 @@ function buildKeterangan(target, manifest, smart, analysis = null) {
     },
     slotSubCategories: subCounts,
     analysisSummary: analysis?.summary || null,
+    engine: analysis?.engine
+      ? {
+          name: analysis.engine.engine,
+          confidence: analysis.engine.confidence,
+          score: analysis.engine.score,
+          ranked: analysis.engine.ranked?.slice(0, 5) || []
+        }
+      : null,
     hosts: [...hosts.entries()].map(([host, info]) => ({
       host,
       count: info.count,
@@ -637,10 +671,159 @@ function guessTypeFromUrl(u, ct) {
 }
 
 /**
+ * Poin 3 — Deteksi game engine dari URL, nama file, dan cuplikan isi.
+ * Mengembalikan engine utama + skor + bukti.
+ */
+function detectGameEngine(zipFiles, manifest, htmlText = "") {
+  const scores = {
+    phaser: 0,
+    pixi: 0,
+    unity: 0,
+    construct: 0,
+    cocos: 0,
+    playcanvas: 0,
+    babylon: 0,
+    three: 0,
+    godot: 0,
+    melonjs: 0,
+    kaboom: 0,
+    custom_slot: 0,
+    unknown: 0
+  };
+  const evidence = [];
+
+  function add(engine, points, why) {
+    scores[engine] = (scores[engine] || 0) + points;
+    evidence.push({ engine, points, why });
+  }
+
+  const allTextBits = [];
+  if (htmlText) allTextBits.push(htmlText.slice(0, 80_000));
+
+  // Manifest URLs + paths
+  for (const r of manifest || []) {
+    const u = (r.url || "") + " " + (r.localPath || "");
+    const low = u.toLowerCase();
+
+    if (/phaser/i.test(low)) add("phaser", 8, "url/path: " + (r.localPath || r.url || "").slice(0, 80));
+    if (/pixi\.?js|pixi-/i.test(low)) add("pixi", 8, "url/path pixi");
+    if (/unity|unityloader|\.unityweb|build\/.*\.framework/i.test(low)) add("unity", 10, "url/path unity");
+    if (/\.data($|\?)|\.wasm($|\?)|\.framework\.js|streamingassets/i.test(low)) add("unity", 6, "unity-like binary: " + low.slice(0, 60));
+    if (/construct|c3runtime|c2runtime/i.test(low)) add("construct", 10, "url/path construct");
+    if (/cocos2d|cocoscreator|cocos-/i.test(low)) add("cocos", 8, "url/path cocos");
+    if (/playcanvas/i.test(low)) add("playcanvas", 8, "url/path playcanvas");
+    if (/babylon\.?js|babylonjs/i.test(low)) add("babylon", 8, "url/path babylon");
+    if (/three\.?js|three\.min/i.test(low)) add("three", 6, "url/path three");
+    if (/godot|\.pck($|\?)/i.test(low)) add("godot", 8, "url/path godot");
+    if (/melonjs|melon\.js/i.test(low)) add("melonjs", 6, "url/path melonjs");
+    if (/kaboom/i.test(low)) add("kaboom", 6, "url/path kaboom");
+
+    // Slot-ish client hints
+    if (/slot|reel|paytable|freespin|scatter/i.test(low)) add("custom_slot", 2, "slot keyword in path");
+  }
+
+  // Scan file contents (limited)
+  for (const [path, data] of Object.entries(zipFiles || {})) {
+    if (!data || data.byteLength > 1_500_000) continue;
+    const lowPath = path.toLowerCase();
+    if (!/\.(js|mjs|html?|json|wasm)$/i.test(lowPath) && path !== "index.html") continue;
+
+    let text = "";
+    try {
+      if (/\.wasm$/i.test(lowPath)) {
+        add("unity", 4, "wasm file: " + path);
+        continue;
+      }
+      text = new TextDecoder().decode(data.slice(0, 120_000));
+    } catch {
+      continue;
+    }
+    allTextBits.push(text);
+
+    if (/Phaser\.Game|new Phaser\.|Phaser\.Scene|phaser\.min\.js/i.test(text)) {
+      add("phaser", 15, "content signature Phaser in " + path);
+    }
+    if (/PIXI\.Application|PIXI\.Container|pixi\.js|PIXI\.Sprite/i.test(text)) {
+      add("pixi", 15, "content signature PIXI in " + path);
+    }
+    if (/UnityLoader|unityFramework|createUnityInstance|Module\.\[\"canvas\"\]/i.test(text)) {
+      add("unity", 15, "content signature Unity in " + path);
+    }
+    if (/runOnStartup|cr\.runtime|C3\.SystemInfo|c3_runtimeInterface/i.test(text)) {
+      add("construct", 15, "content signature Construct in " + path);
+    }
+    if (/cc\.game|cc\.director|CocosEngine|cc\.Sprite/i.test(text)) {
+      add("cocos", 12, "content signature Cocos in " + path);
+    }
+    if (/pc\.Application|playcanvas/i.test(text)) {
+      add("playcanvas", 12, "content signature PlayCanvas in " + path);
+    }
+    if (/BABYLON\.Engine|BABYLON\.Scene/i.test(text)) {
+      add("babylon", 12, "content signature Babylon in " + path);
+    }
+    if (/THREE\.Scene|THREE\.WebGLRenderer/i.test(text)) {
+      add("three", 10, "content signature Three.js in " + path);
+    }
+    if (/GodotEngine|Engine\.js|godot/i.test(text) && /wasm/i.test(text + lowPath)) {
+      add("godot", 12, "content signature Godot in " + path);
+    }
+
+    // Generic HTML5 slot patterns (no known engine lib)
+    if (/reelStrip|reel_strip|spinReels|startSpin|payLines|paylines|scatterCount/i.test(text)) {
+      add("custom_slot", 5, "slot logic identifiers in " + path);
+    }
+  }
+
+  // Combined HTML/JS bag for extra signals
+  const bag = allTextBits.join("\n").slice(0, 200_000);
+  if (/<canvas/i.test(bag) && /webgl/i.test(bag)) {
+    // weak signal only
+  }
+
+  // Pick winner
+  let best = "unknown";
+  let bestScore = 0;
+  for (const [eng, sc] of Object.entries(scores)) {
+    if (eng === "unknown") continue;
+    if (sc > bestScore) {
+      bestScore = sc;
+      best = eng;
+    }
+  }
+  if (bestScore < 5) best = "unknown";
+
+  const ranked = Object.entries(scores)
+    .filter(([, sc]) => sc > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([engine, score]) => ({ engine, score }));
+
+  // Repair hints per engine (for later Poin / Auto Repair)
+  const repairHints = {
+    phaser: ["Check Phaser asset pack / load.atlas paths", "Prefer relative paths under assets/"],
+    pixi: ["Check PIXI.Loader / Assets.load paths", "Atlas JSON + image pairs"],
+    unity: ["Needs Unity loader + .data/.wasm/.framework together", "StreamingAssets paths", "Offline often needs custom loader patch"],
+    construct: ["c3runtime + data.js + images", "Preview may need specific MIME"],
+    cocos: ["settings.js / main.js / cocos2d-js order", "asset-db style paths"],
+    playcanvas: ["config.json + asset registry"],
+    custom_slot: ["Verify reel/symbol image paths", "Paytable JSON paths", "Hybrid mode recommended if API required"],
+    unknown: ["Use Online Hybrid preview", "Inspect manifest + analisis.json"]
+  };
+
+  return {
+    engine: best,
+    confidence: bestScore >= 15 ? "high" : bestScore >= 8 ? "medium" : bestScore >= 5 ? "low" : "none",
+    score: bestScore,
+    ranked,
+    evidence: evidence.slice(0, 40),
+    repairHints: repairHints[best] || repairHints.unknown
+  };
+}
+
+/**
  * Poin 2 — Analisis isi file (JSON / config / atlas / API snapshot)
  * Membaca konten yang sudah ter-collect, mencari struktur slot.
  */
-function analyzeGameContent(zipFiles, manifest) {
+function analyzeGameContent(zipFiles, manifest, htmlText = "") {
   const result = {
     scannedFiles: 0,
     parsedJson: 0,
@@ -653,8 +836,16 @@ function analyzeGameContent(zipFiles, manifest) {
     audioMaps: [],
     apiSnapshots: [],
     hints: [],
+    engine: null,
     summary: {}
   };
+
+  // Poin 3 embedded
+  try {
+    result.engine = detectGameEngine(zipFiles, manifest, htmlText);
+  } catch (e) {
+    result.engine = { engine: "unknown", confidence: "none", error: String(e.message || e) };
+  }
 
   const symbolSet = new Set();
   const featureSet = new Set();
@@ -865,6 +1056,8 @@ function analyzeGameContent(zipFiles, manifest) {
   }).slice(0, 50);
 
   result.summary = {
+    engine: result.engine?.engine || "unknown",
+    engineConfidence: result.engine?.confidence || "none",
     jsonParsed: result.parsedJson,
     paytableHits: result.paytables.length,
     symbolCount: result.symbols.length,
@@ -1411,10 +1604,16 @@ export default {
       // Smart offline packaging: path rewrite + frame-buster neutralize
       const smart = smartPackage(zipFiles, manifest);
 
-      // Poin 2: analisis isi JSON/config/atlas/API snapshot
+      // Poin 2+3: analisis isi JSON/config + deteksi engine
       let analysis = null;
       try {
-        analysis = analyzeGameContent(zipFiles, manifest);
+        let htmlForDetect = "";
+        try {
+          if (zipFiles["index.html"]) {
+            htmlForDetect = new TextDecoder().decode(zipFiles["index.html"]).slice(0, 100_000);
+          }
+        } catch {}
+        analysis = analyzeGameContent(zipFiles, manifest, htmlForDetect);
       } catch (e) {
         analysis = { error: String(e.message || e), summary: {} };
       }
@@ -1458,6 +1657,7 @@ Target: ${target.href}
 Tanggal: ${new Date().toISOString()}
 Total: ${manifest.length} file (game: ${gameCount} · api: ${apiCount} · server: ${serverCount})
 Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
+Engine: ${analysis?.engine?.engine ?? "unknown"} (${analysis?.engine?.confidence ?? "none"})
 Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis?.summary?.symbolCount ?? 0} · features=${analysis?.summary?.featureHits ?? 0} · atlas=${analysis?.summary?.atlasCount ?? 0}
 
 ## Pemisahan otomatis
@@ -1510,7 +1710,9 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
           "X-GC-Fill-Found": String(fillReport.missingFound || 0),
           "X-GC-Fill-Ok": String(fillReport.fetched || 0),
           "X-GC-Fill-Fail": String(fillReport.failed || 0),
-          "X-GC-Message": `Capture berhasil. ZIP ${Math.round(zipData.byteLength / 1024)} KB · game ${gameCount} · api ${apiCount} · server ${serverCount}.`
+          "X-GC-Engine": String(analysis?.engine?.engine || "unknown"),
+          "X-GC-Engine-Confidence": String(analysis?.engine?.confidence || "none"),
+          "X-GC-Message": `Capture berhasil. ZIP ${Math.round(zipData.byteLength / 1024)} KB · game ${gameCount} · api ${apiCount} · engine ${analysis?.engine?.engine || "unknown"}.`
         }
       });
 
