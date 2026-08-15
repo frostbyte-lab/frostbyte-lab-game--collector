@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-15 (P7 engine-specific repair)
+Update terakhir: 2026-08-15 (P6+P8 aggressive rewrite + dep-guided repair)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -30,6 +30,8 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | P9alt | ZIP besar tanpa R2 → GitHub | ✅ | Auto-failover TOO_LARGE / LIMIT_BROWSER → Actions artifact |
 | P5 | Mapping relasi asset | ✅ | symbol ↔ image/atlas/spine ↔ audio + feature→audio |
 | P7 | Engine-specific repair | ✅ | Phaser/Pixi/Unity/Construct/Cocos di Auto Repair Deep + packaging |
+| P6 | Path rewrite agresif | ✅ | Multi-pass, srcset, escaped URLs, source map strip, tail-3 |
+| P8 | Auto-repair dalam (Dependency) | ✅ | Pass-2 guided by dependency.json missingUnique |
 | KV | Namespace `gc-history` | ✅ | ID `3869a97c9eaf49129a666476fcb672e8` |
 | Deploy | Worker live + binding | ✅ | MYBROWSER, GC_HISTORY, GITHUB_TOKEN |
 
@@ -49,7 +51,6 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | # | Item | Status |
 |---|------|--------|
 | 6 | Smart path rewrite lebih agresif | ⚠️ v2 ada |
-| 8 | Auto-repair lebih dalam (pakai Dependency Analyzer) | ❌ |
 
 ### Tier 4 — Infrastruktur & UX
 | # | Item | Status |
@@ -132,4 +133,13 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - UI Auto Repair Deep: deteksi engine dari analisis.json → patch setBaseURL/setPath (Phaser), PIXI basePath, Unity streaming/dataUrl, Construct data.json, Cocos server
 - Collect packaging juga apply patch ringan
 - Diff panel menampilkan engine + jumlah engine-fixes
+
+
+
+## Catatan teknis Path rewrite + Auto-repair (P6/P8)
+
+- `smart-rewrite.js`: 2-pass rewrite, CSS url, HTML attrs/srcset, escaped `https:\/\/`, strip sourceMappingURL
+- Auto Repair Deep: resolveLocal + baseFile relative, tail-2/3
+- Pass 2: baca `dependency.json` missingUnique → replace ref yang resolveable
+- Engine patches (P7) tetap jalan di pass yang sama
 
