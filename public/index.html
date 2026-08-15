@@ -491,6 +491,9 @@
         const zipSize = parseInt(res.headers.get('X-GC-Zip-Size') || blob.size, 10);
         const rewritten = res.headers.get('X-GC-Smart-Rewritten') || '0';
         const neutralized = res.headers.get('X-GC-Smart-Neutralized') || '0';
+        const gameFiles = res.headers.get('X-GC-Game-Files') || '?';
+        const apiFiles = res.headers.get('X-GC-Api-Files') || '?';
+        const serverFiles = res.headers.get('X-GC-Server-Files') || '?';
         const msg = res.headers.get('X-GC-Message') || 'Capture berhasil';
         const sizeKB = Math.round(zipSize / 1024);
         const name = `game-package-${id}.zip`;
@@ -506,7 +509,7 @@
 
         stopProgress(true);
         statusEl.className = 'ok';
-        statusEl.textContent = `✓ BERHASIL (${elapsed}s)\n\nID: ${id}\nFile: ${files}\nZIP: ${sizeKB} KB\nPath rewrite: ${rewritten} · Frame-buster: ${neutralized}\n\n${msg}\n\n✓ ZIP otomatis di-download.\nKlik tombol di bawah untuk Preview offline.`;
+        statusEl.textContent = `✓ BERHASIL (${elapsed}s)\n\nID: ${id}\nTotal: ${files}\n  · Game assets/: ${gameFiles}\n  · API server/api/: ${apiFiles}\n  · Server/config: ${serverFiles}\nZIP: ${sizeKB} KB\nPath rewrite: ${rewritten} · Frame-buster: ${neutralized}\n\n${msg}\n\n✓ ZIP otomatis (game & API dipisah + KETERANGAN.md).\nKlik tombol di bawah untuk Preview.`;
 
         const btn = document.createElement('button');
         btn.className = 'btn-success';
