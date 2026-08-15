@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-15
+Update terakhir: 2026-08-15 (P2 Dependency Analyzer)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -24,6 +24,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | ID | Item | Status | Catatan |
 |----|------|--------|---------|
 | P1 | Progress collect real (server poll) | ✅ | `/api/progress?id=` + KV `prog:{id}` + UI poll 800ms |
+| P2 | Dependency Analyzer + Path Resolver | ✅ | `dependency.json` + skor dependencies + missing graph |
 | KV | Namespace `gc-history` | ✅ | ID `3869a97c9eaf49129a666476fcb672e8` |
 | Deploy | Worker live + binding | ✅ | MYBROWSER, GC_HISTORY, GITHUB_TOKEN |
 
@@ -34,7 +35,6 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 ### Tier 1
 | # | Item | Status |
 |---|------|--------|
-| 2 | Dependency Analyzer + Path Resolver kuat | ❌ |
 
 ### Tier 2 — Slot intelligence
 | # | Item | Status |
@@ -64,8 +64,8 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 ## Urutan lanjut disarankan
 
 1. ~~Progress collect real~~ ✅
-2. **Dependency Analyzer + Path Resolver** ← next
-3. Fitur game + Paytable lebih dalam
+2. ~~Dependency Analyzer + Path Resolver~~ ✅
+3. **Fitur game + Paytable lebih dalam** ← next
 4. R2 ZIP besar
 5. Engine-specific repair
 6. Mapping relasi asset
@@ -86,3 +86,13 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 ---
 
 *Update file ini setiap item selesai.*
+
+
+## Catatan teknis Dependency Analyzer (P2)
+
+- Modul: `src/analyze/dependency.js`
+- Scan HTML/JS/CSS/JSON → extract refs (src/href, url(), import, string literal, json path)
+- Resolve ke path lokal ZIP (exact, relative, bare, tail-2, URL pathname)
+- Output: `dependency.json` + `analisis.dependencies` + skor di `kelengkapan.json`
+- UI: bar "Dependencies resolved?" + daftar missing + top files
+
