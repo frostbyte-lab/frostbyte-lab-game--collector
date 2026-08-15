@@ -382,7 +382,7 @@
         <p style="margin-top:10px"><b>Dua jalur Collect (tanpa R2):</b></p>
         <ul style="margin:6px 0 0 18px;color:var(--text)">
           <li><b>Capture (Cloudflare)</b> — cepat untuk paket kecil/sedang (aman ~20–25 MB ZIP). Ada limit browser Free ~10 menit/hari.</li>
-          <li><b>Collect via GitHub</b> — untuk game besar / limit browser / error TOO_LARGE. Tanpa R2, hasil lewat artifact Actions.</li>
+          <li><b>Collect via GitHub</b> — untuk game besar / limit browser / TOO_LARGE. Tanpa R2, hasil lewat artifact. Capture otomatis failover ke GitHub jika terlalu besar/limit.</li>
         </ul>
         <p style="margin-top:10px;font-size:0.85rem">Tidak mengambil backend, database, atau DRM server-side. Hanya resource yang dikirim ke browser.</p>
       </div>
@@ -737,19 +737,23 @@
             statusEl.className = 'warn';
             statusEl.textContent = '⚠ LIMIT BROWSER TERCAPAI\n\n' +
               (data.message || 'Limit 10 menit/hari Cloudflare Free sudah habis.') +
-              '\n\nSolusi: klik **Collect via GitHub** (tanpa limit itu).';
+              '\n\n→ Auto-failover: Collect via GitHub (tanpa limit browser)...';
             addHistory({ url, status: 'limit', message: data.message });
+            btnCollect.disabled = false;
+            setTimeout(() => runGitHubCollect({ reason: 'LIMIT_BROWSER', auto: true }), 600);
             return;
           }
           if (res.status === 413 || data.error === 'TOO_LARGE' || data.code === 'TOO_LARGE') {
             statusEl.className = 'warn';
             const rawMB = data.rawBytes ? (data.rawBytes / 1024 / 1024).toFixed(1) + ' MB raw' : '';
             const zipMB = data.zipBytes ? (data.zipBytes / 1024 / 1024).toFixed(1) + ' MB zip' : '';
-            statusEl.textContent = '⚠ PAKET TERLALU BESAR UNTUK WORKER\n\n' +
-              (data.message || 'Melewati batas aman tanpa R2 (~20–25 MB ZIP).') +
+            statusEl.textContent = '⚠ PAKET TERLALU BESAR UNTUK WORKER (tanpa R2)\n\n' +
+              (data.message || 'Melewati batas aman ~20–25 MB ZIP.') +
               (rawMB || zipMB ? '\nUkuran: ' + [rawMB, zipMB].filter(Boolean).join(' / ') : '') +
-              '\n\nSolusi: klik **Collect via GitHub** — cocok untuk game besar, tanpa R2.';
+              '\n\n→ Auto-failover: Collect via GitHub Actions...';
             addHistory({ url, status: 'too_large', message: data.message });
+            btnCollect.disabled = false;
+            setTimeout(() => runGitHubCollect({ reason: 'TOO_LARGE', auto: true }), 600);
             return;
           }
           throw new Error(data.error || data.message || 'Gagal capture');
@@ -821,7 +825,8 @@
     // ========== GITHUB ACTIONS DARI WEB ==========
     let ghPollTimer = null;
 
-    async function runGitHubCollect() {
+    async function runGitHubCollect(opts) {
+      opts = opts || {};
       const gameUrl = document.getElementById('url').value.trim();
       if (!gameUrl) {
         statusEl.textContent = 'URL belum diisi.';
@@ -832,7 +837,13 @@
       btnGh.disabled = true;
       btnCollect.disabled = true;
       statusEl.className = '';
-      statusEl.textContent = 'Memicu GitHub Actions...\nTidak perlu buka GitHub manual.';
+      const why = opts.reason === 'TOO_LARGE'
+        ? 'Paket terlalu besar untuk Worker — dialihkan ke GitHub (tanpa R2).'
+        : (opts.reason === 'LIMIT_BROWSER'
+          ? 'Limit browser Cloudflare — dialihkan ke GitHub.'
+          : 'Memicu GitHub Actions...');
+      statusEl.textContent = (opts.auto ? '↻ Auto-failover\n' : '') + why +
+        '\nTidak perlu buka GitHub manual. Menunggu artifact...';
 
       try {
         const res = await fetch('/api/github/collect', {
@@ -846,7 +857,7 @@
         const runId = data.run_id;
         statusEl.className = 'warn';
         statusEl.textContent = `✓ GitHub Actions dimulai\nRun ID: ${runId || '-'}\nStatus: ${data.status || 'queued'}\n\nMenunggu selesai (1–3 menit)...\nProgress akan update otomatis.`;
-        addHistory({ url: gameUrl, status: 'github_queued', id: runId });
+        addHistory({ url: gameUrl, status: opts.auto ? 'github_auto' : 'github_queued', id: runId, message: opts.reason || null });
 
         if (runId) {
           pollGitHubRun(runId);
