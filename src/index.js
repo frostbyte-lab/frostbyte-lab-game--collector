@@ -465,7 +465,41 @@ export default {
             ? "Beberapa file yang kurang berhasil dilengkapi otomatis sebelum ZIP dibuat."
             : "Tidak ada file tambahan yang berhasil di-fetch, atau semua referensi sudah lengkap."
         },
-        stillMissing: fillReport.stillMissing || []
+        stillMissing: fillReport.stillMissing || [],
+        // Skor kelengkapan per kategori slot (dari analyzeGameContent)
+        scores: analysis?.scores || null,
+        categories: {
+          symbols: {
+            ok: !!(analysis?.scores?.symbols?.ok),
+            count: analysis?.summary?.symbolCount ?? 0,
+            samples: (analysis?.symbols || []).slice(0, 20)
+          },
+          paytable: {
+            ok: !!(analysis?.scores?.paytable?.ok),
+            count: analysis?.summary?.paytableHits ?? 0
+          },
+          audioEvents: {
+            ok: !!(analysis?.scores?.audio?.ok),
+            count: analysis?.summary?.audioEventCount ?? 0,
+            byEvent: analysis?.summary?.audioByEvent || {},
+            mapped: analysis?.scores?.audio?.mapped ?? 0
+          },
+          atlasSpine: {
+            ok: !!(analysis?.scores?.atlasSpine?.ok),
+            atlas: analysis?.summary?.atlasCount ?? 0,
+            spine: analysis?.summary?.spineCount ?? 0
+          },
+          features: {
+            ok: !!(analysis?.scores?.features?.ok),
+            count: analysis?.summary?.featureHits ?? 0
+          },
+          engine: {
+            ok: !!(analysis?.scores?.engine?.ok),
+            name: analysis?.summary?.engine || "unknown",
+            confidence: analysis?.summary?.engineConfidence || "none"
+          }
+        },
+        overallScore: analysis?.scores?.overall ?? null
       }, null, 2));
 
       zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
