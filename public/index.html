@@ -1628,6 +1628,14 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
       if (zipFS['analisis.json']) {
         try { analysis = JSON.parse(new TextDecoder().decode(zipFS['analisis.json'])); } catch {}
       }
+      let deps = null;
+      if (zipFS['dependency.json']) {
+        try { deps = JSON.parse(new TextDecoder().decode(zipFS['dependency.json'])); } catch {}
+      } else if (fill && fill.dependencies) {
+        deps = fill.dependencies;
+      } else if (analysis && analysis.dependencies) {
+        deps = analysis.dependencies;
+      }
       if (zipFS['keterangan.json']) {
         try {
           const ket = JSON.parse(new TextDecoder().decode(zipFS['keterangan.json']));
@@ -1688,7 +1696,8 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
           ['audio', 'Audio event terpetakan?'],
           ['atlasSpine', 'Atlas / Spine?'],
           ['features', 'Fitur game (FS/Bonus/...)?'],
-          ['engine', 'Engine terdeteksi?']
+          ['engine', 'Engine terdeteksi?'],
+          ['dependencies', 'Dependencies resolved?']
         ];
         scoreHtml = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid #333">
           <div style="font-weight:600;margin-bottom:6px">Skor kelengkapan per kategori
@@ -1709,6 +1718,7 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
           if (key === 'atlasSpine') extra = ` · atlas ${sc.atlas ?? cats?.atlasSpine?.atlas ?? 0} · spine ${sc.spine ?? cats?.atlasSpine?.spine ?? 0}`;
           if (key === 'features') extra = ` · ${sc.found ?? cats?.features?.count ?? 0} fitur`;
           if (key === 'engine') extra = ` · ${sc.name || cats?.engine?.name || 'unknown'} (${sc.confidence || cats?.engine?.confidence || '?'})`;
+          if (key === 'dependencies') extra = ` · ok ${sc.found ?? deps?.resolved ?? 0} · missing ${sc.missing ?? deps?.missing ?? 0} · external ${deps?.external ?? 0}`;
           scoreHtml += `<div style="font-size:12px;margin-top:6px"><b>${label}</b><span style="color:var(--muted)">${extra}</span>${bar(s, ok)}</div>`;
         }
         const symSamples = (cats && cats.symbols && cats.symbols.samples) || (analysis && analysis.symbols) || [];
@@ -1720,7 +1730,16 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
           const show = audioEv.slice(0, 12).map(a => `${esc(a.event)}:${esc(a.filename || a.path)}`).join(' · ');
           scoreHtml += `<div style="margin-top:6px;font-size:11px;color:var(--muted)"><b>Audio events:</b> ${show}</div>`;
         }
-        scoreHtml += `</div>`;
+        
+        if (deps && deps.missingUnique && deps.missingUnique.length) {
+          const show = deps.missingUnique.slice(0, 15).map(m => esc(m.bare || m.ref)).join(', ');
+          scoreHtml += `<div style="margin-top:6px;font-size:11px;color:var(--warn)"><b>Missing deps:</b> ${show}</div>`;
+        }
+        if (deps && deps.topMissingFiles && deps.topMissingFiles.length) {
+          const show = deps.topMissingFiles.slice(0, 5).map(f => esc(f.file) + '(' + f.missing + ')').join(' · ');
+          scoreHtml += `<div style="margin-top:4px;font-size:11px;color:var(--muted)"><b>Files with most missing:</b> ${show}</div>`;
+        }
+scoreHtml += `</div>`;
       } else {
         scoreHtml = `<div style="margin-top:10px;font-size:12px;color:var(--muted)">Skor kategori belum ada di paket (collect lama). Collect ulang untuk skor Symbols / Paytable / Audio / Atlas.</div>`;
       }
