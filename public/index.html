@@ -1918,6 +1918,10 @@ let zipFSOriginal = null; // snapshot sebelum repair
       let importFixes = 0;
       let attrFixes = 0;
       let jsonFixes = 0;
+      let engineFixes = 0;
+      const engineFixList = [];
+      const engineInfo = detectEngineFromZip();
+      log('Engine terdeteksi: ' + (engineInfo.engine || 'unknown') + ' (' + (engineInfo.confidence || '?') + ')');
       const missing = new Set();
       const ASSET_EXT = /\.(js|mjs|css|json|png|jpe?g|gif|webp|svg|woff2?|ttf|otf|mp3|ogg|wav|mp4|webm|wasm|data|unityweb|bundle)$/i;
 
@@ -2033,6 +2037,16 @@ let zipFSOriginal = null; // snapshot sebelum repair
           } catch {}
         }
 
+        // Engine-specific repair
+        if (isHtml || isJs) {
+          const er = applyEngineRepairs(text, engineInfo.engine, path);
+          if (er.fixes.length) {
+            text = er.text;
+            engineFixes += er.fixes.length;
+            er.fixes.forEach(f => engineFixList.push(path + ':' + f));
+          }
+        }
+
         if (text !== before) {
           zipFS[path] = new TextEncoder().encode(text);
           filesChanged++;
@@ -2044,10 +2058,11 @@ let zipFSOriginal = null; // snapshot sebelum repair
       if (missArr.length) log('⚠ Referensi mungkin hilang (' + missArr.length + '): ' + missArr.join(', '));
       document.getElementById('preview-status').textContent = 'Repaired (deep)';
       document.getElementById('preview-status').className = 'badge badge-ok';
-      showRepairDiff(filesChanged, frameBusters, pathFixes, attrFixes, importFixes, jsonFixes, missArr);
+      log('Engine fixes: ' + engineFixes + (engineFixList.length ? ' → ' + engineFixList.slice(0, 8).join(', ') : ''));
+      showRepairDiff(filesChanged, frameBusters, pathFixes, attrFixes, importFixes, jsonFixes, missArr, engineInfo, engineFixes);
     }
 
-    function showRepairDiff(filesChanged, frameBusters, pathFixes, attrFixes, importFixes, jsonFixes, missing) {
+    function showRepairDiff(filesChanged, frameBusters, pathFixes, attrFixes, importFixes, jsonFixes, missing, engineInfo, engineFixes) {
       let box = document.getElementById('repair-diff');
       if (!box) {
         box = document.createElement('div');
@@ -2072,6 +2087,7 @@ let zipFSOriginal = null; // snapshot sebelum repair
           <div class="diff-item"><div class="num" style="color:#a78bfa">${importFixes + jsonFixes}</div><div class="label">Import / JSON</div></div>
         </div>
         ${missHtml}
+        <div style="margin-top:10px;font-size:12px">Engine: <b>${esc((engineInfo&&engineInfo.engine)||'unknown')}</b> (${esc((engineInfo&&engineInfo.confidence)||'?')}) · engine-fixes: <b>${engineFixes||0}</b></div>
         <div style="margin-top:8px;font-size:12px;color:var(--muted)">Snapshot original disimpan. Preview ulang untuk melihat hasil. Logic server-side tetap tidak bisa diperbaiki otomatis.</div>
       `;
       box.classList.add('active');
