@@ -353,7 +353,55 @@
       padding: 28px 12px;
       font-size: 0.85rem;
     }
-  </style>
+  
+    .btn-danger {
+      background: #c0392b;
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+    .live-viewer {
+      border: 1px solid var(--border, #333);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0d0d12;
+    }
+    .live-viewer-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: #16161f;
+      border-bottom: 1px solid var(--border, #333);
+      font-size: 0.9rem;
+    }
+    .live-viewer-frame {
+      position: relative;
+      min-height: 180px;
+      max-height: 360px;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .live-viewer-frame img {
+      max-width: 100%;
+      max-height: 360px;
+      display: none;
+      object-fit: contain;
+    }
+    .live-viewer-frame img.visible { display: block; }
+    .live-view-empty {
+      color: #888;
+      font-size: 0.85rem;
+      padding: 24px;
+      text-align: center;
+    }
+</style>
 </head>
 <body>
   <div class="app">
@@ -397,6 +445,7 @@
         <div class="row">
           <button class="btn-primary" id="btn-collect" onclick="runCollect()">Capture (Cloudflare)</button>
           <button class="btn-success" id="btn-gh" onclick="runGitHubCollect()">Collect via GitHub</button>
+          <button class="btn-danger" id="btn-stop" onclick="stopCollect()" disabled style="display:none">⏹ Stop Capture</button>
           <button class="btn-secondary" onclick="clearStatus()">Clear</button>
         </div>
         <div class="progress-wrap" id="progress-wrap">
@@ -404,6 +453,17 @@
           <div class="progress-meta">
             <span id="progress-label">Menyiapkan...</span>
             <span id="progress-eta">Estimasi: —</span>
+          </div>
+        </div>
+        <!-- Live Viewer -->
+        <div id="live-viewer" class="live-viewer" style="display:none;margin-top:12px">
+          <div class="live-viewer-head">
+            <strong>Live Viewer</strong>
+            <span id="live-viewer-phase" style="opacity:.75;font-size:.85rem"></span>
+          </div>
+          <div class="live-viewer-frame">
+            <img id="live-view-img" alt="Live capture preview" />
+            <div id="live-view-empty" class="live-view-empty">Menunggu screenshot dari browser collect...</div>
           </div>
         </div>
         <div id="status">Masukkan URL → Capture (Cloudflare) atau Collect via GitHub (tanpa buka GitHub manual).</div>
@@ -652,8 +712,11 @@
             const elapsed = Math.round((Date.now() - progressStart) / 1000);
             const extra = data.files != null ? (' · ' + data.files + ' file') : '';
             eta.textContent = data.done ? 'Selesai' : (elapsed + 's' + extra + ' · ' + (data.phase || ''));
+            // Live Viewer update
+            updateLiveViewer(data);
             if (data.done) {
               if (progressPollTimer) { clearInterval(progressPollTimer); progressPollTimer = null; }
+              setStopButtonVisible(false);
             }
           } catch {}
         };
@@ -666,6 +729,9 @@
       if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
       if (progressPollTimer) { clearInterval(progressPollTimer); progressPollTimer = null; }
       currentProgressId = null;
+      setStopButtonVisible(false);
+      const stopBtn = document.getElementById('btn-stop');
+      if (stopBtn) stopBtn.textContent = '⏹ Stop Capture';
       const wrap = document.getElementById('progress-wrap');
       const fill = document.getElementById('progress-fill');
       if (success) {
@@ -708,6 +774,60 @@
       }
     }
 
+
+    function setStopButtonVisible(show) {
+      const btn = document.getElementById('btn-stop');
+      if (!btn) return;
+      btn.style.display = show ? '' : 'none';
+      btn.disabled = !show;
+    }
+
+    function showLiveViewer(show) {
+      const el = document.getElementById('live-viewer');
+      if (el) el.style.display = show ? 'block' : 'none';
+    }
+
+    function updateLiveViewer(data) {
+      if (!data) return;
+      const phaseEl = document.getElementById('live-viewer-phase');
+      const img = document.getElementById('live-view-img');
+      const empty = document.getElementById('live-view-empty');
+      if (phaseEl) {
+        phaseEl.textContent = (data.phase || '') + (data.stopRequested ? ' · STOP' : '');
+      }
+      if (data.screenshot && img) {
+        img.src = data.screenshot;
+        img.classList.add('visible');
+        if (empty) empty.style.display = 'none';
+      }
+    }
+
+    async function stopCollect() {
+      if (!currentProgressId) return;
+      const btn = document.getElementById('btn-stop');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏹ Stopping...';
+      }
+      try {
+        await fetch('/api/collect/stop', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ progressId: currentProgressId })
+        });
+        const statusEl = document.getElementById('status');
+        if (statusEl) {
+          statusEl.className = 'warn';
+          statusEl.textContent = '⏹ Stop diminta. Worker akan packing resource yang sudah terkumpul...';
+        }
+      } catch (e) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '⏹ Stop Capture';
+        }
+      }
+    }
+
     async function runCollect() {
       const url = document.getElementById('url').value.trim();
       if (!url) {
@@ -718,6 +838,12 @@
       requestNotifyPermission();
       btnCollect.disabled = true;
       statusEl.className = '';
+      setStopButtonVisible(true);
+      showLiveViewer(true);
+      const liveImg = document.getElementById('live-view-img');
+      const liveEmpty = document.getElementById('live-view-empty');
+      if (liveImg) { liveImg.src = ''; liveImg.classList.remove('visible'); }
+      if (liveEmpty) liveEmpty.style.display = '';
       statusEl.textContent = 'Sedang capture...\nProgress real dari server (poll).';
       const progressId = (crypto.randomUUID && crypto.randomUUID()) || ('p-' + Date.now());
       startProgress(30, progressId);

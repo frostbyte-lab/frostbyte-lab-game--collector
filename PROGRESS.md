@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-16 (ZIP besar via GitHub Actions — tanpa R2)
+Update terakhir: 2026-08-16 (Live Viewer + Stop Capture)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -58,7 +58,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | # | Item | Status |
 |---|------|--------|
 | 9 | R2 untuk ZIP besar (>~30MB) | ❌ skip (pakai GitHub Actions) |
-| 10 | Live Viewer + Start/Stop Capture | ❌ |
+| 10 | Live Viewer + Start/Stop Capture | ✅ |
 | 11 | UI Split View + Workspace repair interaktif | ❌ |
 | 13 | Custom domain | ⚠️ manual Dashboard |
 

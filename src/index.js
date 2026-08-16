@@ -32,7 +32,14 @@ import {
   getSession,
   deleteSession
 } from "./history/kv.js";
-import { hasProgressStore, setProgress, getProgress } from "./progress/store.js";
+import {
+  hasProgressStore,
+  setProgress,
+  getProgress,
+  requestStop,
+  isStopRequested,
+  clearStop
+} from "./progress/store.js";
 
 const GH_OWNER = "frostbyte-lab";
 const GH_REPO = "frostbyte-lab-game--collector";
@@ -249,6 +256,19 @@ export default {
       return Response.json({ ok: true, ...row });
     }
 
+    // --- Stop Capture (Live Viewer) ---
+    if (request.method === "POST" && url.pathname === "/api/collect/stop") {
+      let body = {};
+      try { body = await request.json(); } catch {}
+      const id = String(body.progressId || body.id || url.searchParams.get("id") || "").slice(0, 80);
+      if (!id) return Response.json({ error: "progressId required" }, { status: 400 });
+      if (!hasProgressStore(env)) {
+        return Response.json({ ok: false, error: "NO_KV" }, { status: 503 });
+      }
+      const ok = await requestStop(env, id);
+      return Response.json({ ok, id, message: ok ? "Stop diminta" : "Gagal set stop flag" });
+    }
+
     // --- History (KV) ---
     if (url.pathname === "/api/history") {
       if (request.method === "GET") {
@@ -403,8 +423,41 @@ export default {
 
     const id = crypto.randomUUID();
     const progressId = String(body.progressId || body.progress_id || id).slice(0, 80);
-    const report = (pct, phase, label, extra = {}) =>
-      setProgress(env, progressId, { pct, phase, label, ...extra });
+    await clearStop(env, progressId);
+    const report = async (pct, phase, label, extra = {}) => {
+      // jangan timpa screenshot lama kecuali ada yang baru
+      const prev = extra.screenshot ? null : await getProgress(env, progressId);
+      const shot = extra.screenshot !== undefined
+        ? extra.screenshot
+        : (prev && prev.screenshot) || null;
+      return setProgress(env, progressId, {
+        pct,
+        phase,
+        label,
+        ...extra,
+        screenshot: shot,
+        stopRequested: extra.stopRequested || (prev && prev.stopRequested) || false
+      });
+    };
+
+    /** Ambil screenshot kecil untuk Live Viewer */
+    const snap = async (page) => {
+      try {
+        const buf = await page.screenshot({
+          type: "jpeg",
+          quality: 42,
+          fullPage: false
+        });
+        const b64 = Buffer.from(buf).toString("base64");
+        return "data:image/jpeg;base64," + b64;
+      } catch {
+        return null;
+      }
+    };
+
+    /** Cek apakah user tekan Stop */
+    const shouldStop = async () => isStopRequested(env, progressId);
+
     await report(2, "init", "Menyiapkan collect...");
     const manifest = [];
     const seen = new Set();
@@ -534,9 +587,22 @@ export default {
 
       // Navigate
       await page.goto(target.href, { waitUntil: "domcontentloaded", timeout: 40000 });
-      await report(22, "loaded", "Halaman termuat, capture network...");
-      await page.waitForTimeout(3000);
-      await report(30, "interact", "Auto-click Play / Start...");
+      {
+        const shot = await snap(page);
+        await report(22, "loaded", "Halaman termuat, capture network...", { screenshot: shot, files: manifest.length });
+      }
+
+      // Tunggu sebentar kecuali user sudah Stop
+      if (!(await shouldStop())) {
+        await page.waitForTimeout(3000);
+      } else {
+        await report(50, "stopping", "Stop — lanjut packing...", { files: manifest.length, stopRequested: true });
+      }
+
+      {
+        const shot = await snap(page);
+        await report(30, "interact", "Auto-click Play / Start...", { screenshot: shot, files: manifest.length });
+      }
 
       // === Auto-click Play / Start / Mulai / Continue buttons ===
       try {
@@ -597,18 +663,28 @@ export default {
         }
       } catch {}
 
-      await report(42, "scroll", "Scroll & lazy-load asset...");
-      // Scroll halaman utama (trigger lazy load)
-      await page.evaluate(async () => {
-        const total = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0, 2000);
-        for (let y = 0; y < total; y += 700) {
-          window.scrollTo(0, y);
-          await new Promise(r => setTimeout(r, 180));
+      if (await shouldStop()) {
+        await report(50, "stopping", "Stop — skip scroll, packing...", { files: manifest.length, stopRequested: true });
+      } else {
+        {
+          const shot = await snap(page);
+          await report(42, "scroll", "Scroll & lazy-load asset...", { screenshot: shot, files: manifest.length });
         }
-        window.scrollTo(0, 0);
-      });
-      await page.waitForTimeout(2500);
-      await report(55, "html", "Ambil HTML + resource tertangkap...", { files: manifest.length });
+        // Scroll halaman utama (trigger lazy load)
+        await page.evaluate(async () => {
+          const total = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0, 2000);
+          for (let y = 0; y < total; y += 700) {
+            window.scrollTo(0, y);
+            await new Promise(r => setTimeout(r, 180));
+          }
+          window.scrollTo(0, 0);
+        });
+        await page.waitForTimeout(2500);
+      }
+      {
+        const shot = await snap(page);
+        await report(55, "html", "Ambil HTML + resource tertangkap...", { screenshot: shot, files: manifest.length });
+      }
 
       // Ambil HTML
       let html = await page.content();
