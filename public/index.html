@@ -135,6 +135,20 @@
       color: var(--text);
       border: 1px solid var(--border);
     }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn-ghost:hover {
+      color: var(--text);
+      background: var(--surface2);
+      border-color: #3a4150;
+    }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     #status, .log-box {
       white-space: pre-wrap;
@@ -246,10 +260,29 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 12px;
+      padding: 0;
       font-size: 12px;
+      overflow: hidden;
     }
     .preview-guide.active { display: block; }
+    .preview-guide > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text);
+      background: var(--surface2);
+      user-select: none;
+    }
+    .preview-guide > summary::-webkit-details-marker { display: none; }
+    .preview-guide > summary::after {
+      content: ' ▾';
+      color: var(--muted);
+      font-weight: 400;
+    }
+    .preview-guide[open] > summary::after { content: ' ▴'; }
+    .preview-guide .pg-body { padding: 12px 14px; }
     .preview-guide h3 {
       font-size: 0.9rem;
       margin: 0 0 8px;
@@ -486,8 +519,8 @@
       width: 100%;
     }
     body.split-mode .preview-frame-wrap {
-      height: min(70vh, 640px);
-      min-height: 360px;
+      height: min(72vh, 720px);
+      min-height: 380px;
     }
     .preview-frame-wrap iframe {
       width: 100%;
@@ -507,7 +540,7 @@
       word-break: break-all;
     }
     body.split-mode .file-list {
-      max-height: min(58vh, 520px);
+      max-height: min(70vh, 720px);
     }
     .file-list div, .file-list .file-item {
       padding: 4px 6px;
@@ -823,6 +856,7 @@
               <div id="ws-error-panel"></div>
             </div>
             <div class="ws-error-actions">
+              <button class="btn-secondary btn-sm" type="button" onclick="copyWsErrors()" style="flex:1">📋 Copy</button>
               <button class="btn-danger btn-sm" type="button" onclick="stopPreview()" style="flex:1">⏹ Stop</button>
             </div>
           </div>
@@ -837,8 +871,9 @@
           <button class="btn-secondary" onclick="stopPreview()">Stop</button>
         </div>
 
-        <div class="preview-guide" id="preview-guide">
-          <h3>Bagian Preview — panduan & saran</h3>
+        <details class="preview-guide" id="preview-guide" open>
+          <summary>Bagian Preview — panduan & saran (klik untuk lipat)</summary>
+          <div class="pg-body">
           <div class="modes">
             <div class="mode-card"><b>▶ Offline (Sandbox)</b><span>Mode utama offline. Hanya resource di dalam ZIP. Cocok jika collect lengkap.</span></div>
             <div class="mode-card"><b>⚡ SW Offline</b><span>Offline lewat Service Worker (path same-origin). Sering lebih stabil dari blob URL.</span></div>
@@ -849,10 +884,11 @@
           <ul class="hint-list">
             <li><b>Offline utama:</b> Offline → jika gagal coba SW Offline → Auto Repair Deep</li>
             <li><b>Online pun bisa:</b> Hybrid jika spin/login masih butuh server asli</li>
-            <li><b>ZIP ke server sendiri:</b> Packaging Ulang → extract → upload ke hosting → buka index.html</li>
+            <li><b>ZIP ke server sendiri:</b> Pack Game → extract → upload ke hosting → buka index.html</li>
             <li><b>Custom domain:</b> Cloudflare Workers → Domains & Routes (opsional, bukan wajib)</li>
           </ul>
-        </div>
+          </div>
+        </details>
 
         <div class="workspace-grid" id="workspace-grid">
           <!-- Split: File tree -->
@@ -868,7 +904,7 @@
               <div class="file-list" id="file-list-split" style="flex:1"><div class="empty" style="padding:12px">—</div></div>
               <div class="row" style="margin-top:10px">
                 <button class="btn-secondary btn-sm" onclick="runAutoRepair()" id="btn-repair-split" disabled style="flex:1">Auto Repair</button>
-                <button class="btn-secondary btn-sm" onclick="repackage()" id="btn-repack-split" disabled style="flex:1">Repack</button>
+                <button class="btn-secondary btn-sm" onclick="repackage()" id="btn-repack-split" disabled style="flex:1">Pack Game</button>
               </div>
             </div>
           </div>
@@ -908,7 +944,7 @@
             </div>
             <div class="row" style="margin-top:12px">
               <button class="btn-secondary" onclick="runAutoRepair()" id="btn-repair" disabled>Auto Repair (Deep)</button>
-              <button class="btn-secondary" onclick="repackage()" id="btn-repack" disabled>Packaging Ulang</button>
+              <button class="btn-secondary" onclick="repackage()" id="btn-repack" disabled>Pack Game</button>
             </div>
             <div class="card" style="padding:14px;margin-top:12px" id="ai-card">
               <h2 style="font-size:0.95rem">AI Assistant</h2>
@@ -998,6 +1034,29 @@
       }
       log(msg);
     }
+    function copyWsErrors() {
+      const errEl = document.getElementById('ws-error-panel');
+      const text = (errEl && errEl.textContent || '').trim();
+      if (!text || text.indexOf('Belum ada error') === 0) {
+        wsProc('tidak ada error untuk di-copy', 'err');
+        return;
+      }
+      const done = () => wsProc('✓ error di-copy ke clipboard', 'ok');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(() => {
+          // fallback
+          const ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); done(); } catch (e) { wsProc('gagal copy: ' + e.message, 'err'); }
+          document.body.removeChild(ta);
+        });
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) { wsProc('gagal copy: ' + e.message, 'err'); }
+        document.body.removeChild(ta);
+      }
+    }
     function appendStatus(msg) {
       if (!statusEl) return;
       statusEl.textContent = (statusEl.textContent ? statusEl.textContent + '\n' : '') + '[' + termTs() + '] ' + msg;
@@ -1005,6 +1064,8 @@
     }
 
     let zipFS = null;
+    let currentBlobUrl = null;
+    let isolatedWin = null;
 
     // ========== NAV ==========
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -2518,7 +2579,7 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
         lines.push('⚠ Ada ~' + depMissing + ' referensi kemungkinan hilang.');
         lines.push('Saran offline: 1) Auto Repair Deep  2) Offline / SW Offline  3) Split View edit path');
         lines.push('Saran online: Hybrid (network server diizinkan)');
-        lines.push('Host sendiri: Packaging Ulang → extract ZIP → upload folder ke hosting → buka index.html');
+        lines.push('Host sendiri: Pack Game → extract ZIP → upload folder ke hosting → buka index.html');
         lines.push('Custom domain app: CF Dashboard → Workers → Domains (opsional)');
         box.textContent = lines.join('\n');
         return;
@@ -2528,7 +2589,7 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
       lines.push('');
       lines.push('✓ Cukup resource untuk coba offline.');
       lines.push('Urutan: Offline → jika gagal SW Offline → Auto Repair → Hybrid jika masih butuh server.');
-      lines.push('ZIP ke server sendiri: Packaging Ulang → extract → upload ke VPS/hosting statis.');
+      lines.push('ZIP ke server sendiri: Pack Game → extract → upload ke VPS/hosting statis.');
       lines.push('Domain kustom hanya untuk web Collect (CF Workers), bukan wajib agar game offline jalan.');
       box.textContent = lines.join('\n');
     }
@@ -3218,6 +3279,34 @@ let zipFSOriginal = null; // snapshot sebelum repair
 <\/script>`;
     }
 
+
+    // Stub UI-safe (engine repair penuh ada di Worker; di browser cegah ReferenceError)
+    function detectEngineFromZip() {
+      try {
+        if (zipFS && zipFS['analisis.json']) {
+          const a = JSON.parse(new TextDecoder().decode(zipFS['analisis.json']));
+          if (a && a.engine) return typeof a.engine === 'string' ? { engine: a.engine, confidence: 'med' } : a.engine;
+          if (a && a.summary && a.summary.engine) return { engine: a.summary.engine, confidence: a.summary.engineConfidence || 'low' };
+        }
+        if (zipFS && zipFS['kelengkapan.json']) {
+          const k = JSON.parse(new TextDecoder().decode(zipFS['kelengkapan.json']));
+          const eng = k && k.categories && k.categories.engine;
+          if (eng && eng.name) return { engine: eng.name, confidence: eng.confidence || 'low' };
+        }
+        const keys = Object.keys(zipFS || {}).join(' ').toLowerCase();
+        if (/phaser/.test(keys)) return { engine: 'phaser', confidence: 'low' };
+        if (/pixi/.test(keys)) return { engine: 'pixi', confidence: 'low' };
+        if (/unity|createunityinstance/.test(keys)) return { engine: 'unity', confidence: 'low' };
+        if (/construct/.test(keys)) return { engine: 'construct', confidence: 'low' };
+        if (/cocos/.test(keys)) return { engine: 'cocos', confidence: 'low' };
+      } catch {}
+      return { engine: 'unknown', confidence: 'none' };
+    }
+    function applyEngineRepairs(text, engine, filePath) {
+      // UI-only soft pass; deep engine patches remain server-side
+      return { text: text || '', fixes: [] };
+    }
+
     function runAutoRepair() {
       if (!zipFS) return;
       wsProc('$ auto-repair deep …');
@@ -3453,7 +3542,7 @@ let zipFSOriginal = null; // snapshot sebelum repair
 
     async function repackage() {
       if (!zipFS) return;
-      log('Packaging ulang...');
+      log('Pack Game...');
       const zip = new JSZip();
       for (const [path, data] of Object.entries(zipFS)) {
         zip.file(path, data);
