@@ -1222,10 +1222,10 @@
             const id = data.id || res.headers.get('X-GC-Id') || String(Date.now());
             const files = data.files || res.headers.get('X-GC-Files') || '?';
             const zipSize = data.zipSize || parseInt(res.headers.get('X-GC-Zip-Size') || '0', 10);
-            const gameFiles = data.gameFiles ?? res.headers.get('X-GC-Game-Files') || '?';
-            const apiFiles = data.apiFiles ?? res.headers.get('X-GC-Api-Files') || '?';
-            const serverFiles = data.serverFiles ?? res.headers.get('X-GC-Server-Files') || '?';
-            const stillMissing = data.stillMissing ?? res.headers.get('X-GC-Still-Missing') || '0';
+            const gameFiles = (data.gameFiles ?? res.headers.get('X-GC-Game-Files')) || '?';
+            const apiFiles = (data.apiFiles ?? res.headers.get('X-GC-Api-Files')) || '?';
+            const serverFiles = (data.serverFiles ?? res.headers.get('X-GC-Server-Files')) || '?';
+            const stillMissing = (data.stillMissing ?? res.headers.get('X-GC-Still-Missing')) || '0';
             const msg = data.message || res.headers.get('X-GC-Message') || 'Capture berhasil via R2';
             const sizeMB = (zipSize / 1024 / 1024).toFixed(1);
             const name = `game-package-${id}.zip`;
