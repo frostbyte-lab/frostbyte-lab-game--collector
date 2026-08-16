@@ -41,6 +41,10 @@
       max-width: 960px;
       margin: 0 auto;
       padding: 12px;
+      transition: max-width .2s ease;
+    }
+    body.split-mode .app {
+      max-width: min(1480px, 100%);
     }
     header {
       display: flex;
@@ -305,6 +309,17 @@
         align-items: start;
       }
     }
+    body.split-mode .workspace-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 900px) {
+      body.split-mode .workspace-grid {
+        grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(280px, 34%);
+        align-items: stretch;
+      }
+    }
     .preview-frame-wrap {
       position: relative;
       background: #000;
@@ -314,6 +329,10 @@
       min-height: 280px;
       height: min(56vh, 480px);
       width: 100%;
+    }
+    body.split-mode .preview-frame-wrap {
+      height: min(70vh, 640px);
+      min-height: 360px;
     }
     .preview-frame-wrap iframe {
       width: 100%;
@@ -332,10 +351,117 @@
       border: 1px solid var(--border);
       word-break: break-all;
     }
-    .file-list div {
-      padding: 3px 0;
+    body.split-mode .file-list {
+      max-height: min(58vh, 520px);
+    }
+    .file-list div, .file-list .file-item {
+      padding: 4px 6px;
       color: var(--muted);
       border-bottom: 1px solid #222;
+      cursor: pointer;
+      border-radius: 4px;
+      line-height: 1.35;
+    }
+    .file-list .file-item:hover {
+      background: #222836;
+      color: var(--text);
+    }
+    .file-list .file-item.active {
+      background: #1e3a5f;
+      color: #93c5fd;
+    }
+    .file-list .file-item.binary { opacity: 0.7; }
+    .file-list .file-item.dirty::before {
+      content: '● ';
+      color: var(--warn);
+    }
+    .split-pane {
+      display: none;
+      flex-direction: column;
+      min-height: 0;
+    }
+    body.split-mode .split-pane {
+      display: flex;
+    }
+    body.split-mode .ws-side-classic {
+      display: none !important;
+    }
+    .editor-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .editor-toolbar .path {
+      flex: 1 1 160px;
+      font-size: 12px;
+      color: var(--muted);
+      word-break: break-all;
+      min-width: 0;
+    }
+    #code-editor {
+      width: 100%;
+      min-height: 280px;
+      height: min(58vh, 520px);
+      resize: vertical;
+      background: #0d1117;
+      color: #e6edf3;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      tab-size: 2;
+    }
+    #code-editor:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .issue-list {
+      max-height: 140px;
+      overflow: auto;
+      font-size: 11px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      margin-top: 8px;
+    }
+    .issue-list .issue {
+      padding: 4px 0;
+      border-bottom: 1px solid #222;
+      color: var(--warn);
+      word-break: break-all;
+      cursor: pointer;
+    }
+    .issue-list .issue:hover { color: #fcd34d; }
+    .issue-list .issue.ok { color: var(--success); }
+    .split-file-tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .split-file-tools input[type="search"] {
+      flex: 1 1 120px;
+      min-width: 0;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+    .btn-sm {
+      padding: 6px 10px !important;
+      font-size: 12px !important;
+    }
+    .split-toggle.active {
+      background: #1e3a5f !important;
+      border-color: var(--accent) !important;
+      color: #93c5fd !important;
     }
     .history-item {
       display: flex;
@@ -511,11 +637,12 @@
     <section id="panel-workspace" class="panel">
       <div class="card">
         <h2>Workspace — Preview Offline</h2>
-        <p class="sub">Load ZIP, lalu pilih mode Preview.</p>
+        <p class="sub">Load ZIP, lalu pilih mode Preview. Aktifkan <b>Split View</b> untuk edit file interaktif di samping preview.</p>
 
         <div class="file-row">
           <input type="file" id="zip-input" accept=".zip,application/zip">
           <button class="btn-primary" type="button" onclick="loadZip()">Load ZIP</button>
+          <button class="btn-secondary split-toggle" type="button" id="btn-split-view" onclick="toggleSplitView()">◫ Split View</button>
         </div>
 
         <div class="preview-toolbar" id="preview-toolbar">
@@ -528,14 +655,50 @@
           <span id="preview-status" class="badge badge-ok">Ready</span>
         </div>
 
-        <div class="workspace-grid">
-          <div>
+        <div class="workspace-grid" id="workspace-grid">
+          <!-- Split: File tree -->
+          <div class="split-pane" id="split-files-pane">
+            <div class="card" style="padding:12px;height:100%;display:flex;flex-direction:column">
+              <h2 style="font-size:0.95rem;margin-bottom:8px">File Tree</h2>
+              <div class="split-file-tools">
+                <input type="search" id="file-filter" placeholder="Filter path…" oninput="renderFileTree()" />
+                <button class="btn-ghost btn-sm" type="button" onclick="setFileFilter('text')">Text</button>
+                <button class="btn-ghost btn-sm" type="button" onclick="setFileFilter('html')">HTML</button>
+                <button class="btn-ghost btn-sm" type="button" onclick="setFileFilter('')">All</button>
+              </div>
+              <div class="file-list" id="file-list-split" style="flex:1"><div class="empty" style="padding:12px">—</div></div>
+              <div class="row" style="margin-top:10px">
+                <button class="btn-secondary btn-sm" onclick="runAutoRepair()" id="btn-repair-split" disabled style="flex:1">Auto Repair</button>
+                <button class="btn-secondary btn-sm" onclick="repackage()" id="btn-repack-split" disabled style="flex:1">Repack</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Split: Editor -->
+          <div class="split-pane" id="split-editor-pane">
+            <div class="card" style="padding:12px;height:100%;display:flex;flex-direction:column">
+              <div class="editor-toolbar">
+                <span class="path" id="editor-path">Pilih file dari tree →</span>
+                <button class="btn-primary btn-sm" type="button" id="btn-save-file" onclick="saveCurrentFile()" disabled>💾 Save</button>
+                <button class="btn-secondary btn-sm" type="button" id="btn-repair-file" onclick="repairCurrentFile()" disabled>🔧 Repair file</button>
+                <button class="btn-ghost btn-sm" type="button" id="btn-scan-file" onclick="scanCurrentFileIssues()" disabled>Scan refs</button>
+              </div>
+              <textarea id="code-editor" spellcheck="false" disabled placeholder="Klik file text (html/js/css/json/…) di tree untuk membuka editor."></textarea>
+              <div id="editor-issues" class="issue-list" style="display:none"></div>
+              <div class="log-box" id="terminal-split" style="min-height:72px;max-height:120px;overflow:auto;margin-top:8px;font-size:11px">Split View aktif · edit → Save · Repair file / Auto Repair</div>
+            </div>
+          </div>
+
+          <!-- Preview (always) -->
+          <div id="ws-preview-col">
             <div class="preview-frame-wrap" id="preview-wrap">
               <div class="empty" id="preview-placeholder">Load ZIP terlebih dahulu untuk preview</div>
               <iframe id="game-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads allow-pointer-lock" allow="fullscreen; autoplay; clipboard-read; clipboard-write; gamepad" style="display:none"></iframe>
             </div>
           </div>
-          <div>
+
+          <!-- Classic sidebar (hidden in split mode) -->
+          <div class="ws-side-classic" id="ws-side-classic">
             <div class="card" style="padding:14px">
               <h2 style="font-size:0.95rem">Terminal / Log</h2>
               <div class="log-box" id="terminal" style="min-height:140px;max-height:200px;overflow:auto">Menunggu ZIP...</div>
@@ -582,6 +745,31 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script>
+    // ========== helpers ==========
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    function log(msg) {
+      const line = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+      const terminal = document.getElementById('terminal');
+      if (terminal) {
+        terminal.textContent = (terminal.textContent ? terminal.textContent + '\n' : '') + line;
+        terminal.scrollTop = terminal.scrollHeight;
+      }
+      const ts = document.getElementById('terminal-split');
+      if (ts) {
+        ts.textContent = (ts.textContent ? ts.textContent + '\n' : '') + line;
+        ts.scrollTop = ts.scrollHeight;
+      }
+      try { console.log('[GC]', msg); } catch {}
+    }
+    let zipFS = null;
+
     // ========== NAV ==========
     document.querySelectorAll('.nav-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1353,15 +1541,18 @@ async function downloadGitHubArtifact(artifactId, runId) {
         if (!paths.length) throw new Error('ZIP kosong');
 
         const hasIndex = paths.some(p => /index\.html?$/i.test(p.split('/').pop()));
-        document.getElementById('file-list').innerHTML = paths.map(p => `<div>${esc(p)}</div>`).join('') || '<div>—</div>';
+        renderFileTree();
         document.getElementById('preview-toolbar').classList.add('active');
 
         // Cache ZIP ke SW (background) untuk mode SW Proxy
         pushZipToSW(true).catch(() => {});
         document.getElementById('btn-repair').disabled = false;
         document.getElementById('btn-repack').disabled = false;
+        const brs = document.getElementById('btn-repair-split'); if (brs) brs.disabled = false;
+        const bps = document.getElementById('btn-repack-split'); if (bps) bps.disabled = false;
         document.getElementById('btn-ai').disabled = false;
         document.getElementById('btn-ai-fix').disabled = false;
+        resetEditorState();
         log('ZIP loaded · ' + paths.length + ' file' + (hasIndex ? '' : ' · peringatan: index.html tidak ketemu'));
         analyzeCompleteness();
         document.getElementById('preview-status').textContent = hasIndex ? 'ZIP Ready' : 'No index';
@@ -2135,6 +2326,383 @@ scoreHtml += `</div>`;
     }
 
 
+
+    // ========== Split View + Interactive Repair ==========
+    let splitViewOn = false;
+    let editorPath = null;
+    let editorDirty = false;
+    let fileFilterMode = '';
+    const TEXT_EXTS = new Set(['html','htm','js','mjs','cjs','css','json','txt','md','svg','xml','map','csv','tsv','glsl','vert','frag','wasm.js','atlas','fnt','plist','yaml','yml','ini','cfg','conf']);
+
+    function isTextPath(p) {
+      if (!p) return false;
+      const ext = (p.split('.').pop() || '').toLowerCase();
+      if (TEXT_EXTS.has(ext)) return true;
+      if (/\.(html?|js|css|json|txt|md|svg|xml|map|atlas)$/i.test(p)) return true;
+      // small heuristic for extensionless text
+      try {
+        if (!zipFS || !zipFS[p]) return false;
+        const d = zipFS[p];
+        if (d.byteLength > 2_000_000) return false;
+        const sample = d.slice(0, Math.min(256, d.byteLength));
+        let nulls = 0;
+        for (let i = 0; i < sample.length; i++) if (sample[i] === 0) nulls++;
+        return nulls === 0;
+      } catch { return false; }
+    }
+
+    function toggleSplitView(force) {
+      splitViewOn = typeof force === 'boolean' ? force : !splitViewOn;
+      document.body.classList.toggle('split-mode', splitViewOn);
+      const btn = document.getElementById('btn-split-view');
+      if (btn) btn.classList.toggle('active', splitViewOn);
+      // mirror terminal logs into split terminal when opening
+      const t = document.getElementById('terminal');
+      const ts = document.getElementById('terminal-split');
+      if (splitViewOn && t && ts && !ts.dataset.seeded) {
+        ts.textContent = t.textContent || ts.textContent;
+        ts.dataset.seeded = '1';
+      }
+      renderFileTree();
+      log(splitViewOn ? 'Split View ON — klik file untuk edit interaktif' : 'Split View OFF');
+    }
+
+    function setFileFilter(mode) {
+      fileFilterMode = mode || '';
+      const inp = document.getElementById('file-filter');
+      if (inp && mode === 'html') inp.value = '.html';
+      else if (inp && mode === 'text') inp.value = '';
+      else if (inp && mode === '') inp.value = '';
+      renderFileTree();
+    }
+
+    function resetEditorState() {
+      editorPath = null;
+      editorDirty = false;
+      const ed = document.getElementById('code-editor');
+      if (ed) { ed.value = ''; ed.disabled = true; }
+      const pathEl = document.getElementById('editor-path');
+      if (pathEl) pathEl.textContent = 'Pilih file dari tree →';
+      ['btn-save-file','btn-repair-file','btn-scan-file'].forEach(id => {
+        const b = document.getElementById(id); if (b) b.disabled = true;
+      });
+      const issues = document.getElementById('editor-issues');
+      if (issues) { issues.style.display = 'none'; issues.innerHTML = ''; }
+    }
+
+    function renderFileTree() {
+      if (!zipFS) return;
+      const filterEl = document.getElementById('file-filter');
+      const q = ((filterEl && filterEl.value) || '').trim().toLowerCase();
+      let paths = Object.keys(zipFS).sort();
+      if (fileFilterMode === 'text') paths = paths.filter(isTextPath);
+      if (q) paths = paths.filter(p => p.toLowerCase().includes(q));
+      const htmlList = paths.length
+        ? paths.map(p => {
+            const cls = ['file-item'];
+            if (p === editorPath) cls.push('active');
+            if (!isTextPath(p)) cls.push('binary');
+            if (p === editorPath && editorDirty) cls.push('dirty');
+            return `<div class="${cls.join(' ')}" data-path="${esc(p)}" onclick="openFileInEditor(this.dataset.path)">${esc(p)}</div>`;
+          }).join('')
+        : '<div class="empty" style="padding:12px">Tidak ada file</div>';
+      const splitList = document.getElementById('file-list-split');
+      if (splitList) splitList.innerHTML = htmlList;
+      // keep classic list in sync (clickable too)
+      const classic = document.getElementById('file-list');
+      if (classic) {
+        const all = Object.keys(zipFS).sort();
+        classic.innerHTML = all.map(p => {
+          const cls = ['file-item'];
+          if (p === editorPath) cls.push('active');
+          return `<div class="${cls.join(' ')}" data-path="${esc(p)}" onclick="openFileInEditor(this.dataset.path)">${esc(p)}</div>`;
+        }).join('') || '<div>—</div>';
+      }
+    }
+
+    function openFileInEditor(path) {
+      if (!zipFS || !path || !zipFS[path]) {
+        log('File tidak ada: ' + path);
+        return;
+      }
+      if (editorDirty && editorPath && editorPath !== path) {
+        if (!confirm('Perubahan di ' + editorPath + ' belum disimpan. Buang?')) return;
+      }
+      // auto enable split if opening from classic list
+      if (!splitViewOn) toggleSplitView(true);
+
+      const data = zipFS[path];
+      const ed = document.getElementById('code-editor');
+      const pathEl = document.getElementById('editor-path');
+      if (!isTextPath(path)) {
+        editorPath = path;
+        editorDirty = false;
+        if (ed) {
+          ed.value = '/* Binary / non-text file · ' + path + ' · ' + data.byteLength + ' bytes */\\n/* Tidak bisa diedit sebagai teks */';
+          ed.disabled = true;
+        }
+        if (pathEl) pathEl.textContent = path + ' (binary)';
+        ['btn-save-file','btn-repair-file','btn-scan-file'].forEach(id => {
+          const b = document.getElementById(id); if (b) b.disabled = true;
+        });
+        const issues = document.getElementById('editor-issues');
+        if (issues) { issues.style.display = 'none'; issues.innerHTML = ''; }
+        renderFileTree();
+        log('Buka binary: ' + path + ' (' + data.byteLength + ' B)');
+        return;
+      }
+      let text;
+      try {
+        text = new TextDecoder('utf-8', { fatal: false }).decode(data);
+      } catch (e) {
+        log('Gagal decode: ' + e.message);
+        return;
+      }
+      editorPath = path;
+      editorDirty = false;
+      if (ed) {
+        ed.value = text;
+        ed.disabled = false;
+        ed.oninput = () => {
+          editorDirty = true;
+          const b = document.getElementById('btn-save-file');
+          if (b) b.disabled = false;
+          renderFileTree();
+        };
+      }
+      if (pathEl) pathEl.textContent = path + ' · ' + data.byteLength + ' B';
+      const saveBtn = document.getElementById('btn-save-file');
+      if (saveBtn) saveBtn.disabled = true;
+      const repBtn = document.getElementById('btn-repair-file');
+      if (repBtn) repBtn.disabled = false;
+      const scanBtn = document.getElementById('btn-scan-file');
+      if (scanBtn) scanBtn.disabled = false;
+      renderFileTree();
+      scanCurrentFileIssues(true);
+      log('Buka: ' + path);
+    }
+
+    function saveCurrentFile() {
+      if (!zipFS || !editorPath) return;
+      const ed = document.getElementById('code-editor');
+      if (!ed || ed.disabled) return;
+      zipFS[editorPath] = new TextEncoder().encode(ed.value);
+      editorDirty = false;
+      const saveBtn = document.getElementById('btn-save-file');
+      if (saveBtn) saveBtn.disabled = true;
+      const pathEl = document.getElementById('editor-path');
+      if (pathEl) pathEl.textContent = editorPath + ' · saved · ' + zipFS[editorPath].byteLength + ' B';
+      // keep SW cache in sync if used
+      pushZipToSW(true).catch(() => {});
+      renderFileTree();
+      log('Saved: ' + editorPath);
+      scanCurrentFileIssues(true);
+    }
+
+    function extractRefsFromText(text) {
+      const refs = new Set();
+      const patterns = [
+        /(?:src|href|data-src|data-href|poster)=["']([^"']+)["']/gi,
+        /url\(\s*['"]?([^'")\s]+)['"]?\s*\)/gi,
+        /import\s+(?:[^'"]+\s+from\s+)?['"]([^'"]+)['"]/gi,
+        /(?:require|import)\(\s*['"]([^'"]+)['"]\s*\)/gi,
+        /["']((?:https?:)?\/\/[^"']+\.(?:js|css|png|jpg|jpeg|webp|gif|svg|json|mp3|ogg|wav|atlas|fnt)[^"']*)["']/gi,
+        /["'](\.?\.?\/[^"']+\.(?:js|css|png|jpg|jpeg|webp|gif|svg|json|mp3|ogg|wav|atlas|fnt|html?))["']/gi,
+      ];
+      for (const re of patterns) {
+        let m;
+        while ((m = re.exec(text))) {
+          const r = (m[1] || '').trim();
+          if (r && !r.startsWith('data:') && !r.startsWith('blob:') && !r.startsWith('#') && !r.startsWith('javascript:')) {
+            refs.add(r);
+          }
+        }
+      }
+      return [...refs];
+    }
+
+    function scanCurrentFileIssues(silent) {
+      const box = document.getElementById('editor-issues');
+      if (!box) return;
+      if (!editorPath || !zipFS) {
+        box.style.display = 'none';
+        return;
+      }
+      const ed = document.getElementById('code-editor');
+      const text = ed && !ed.disabled ? ed.value : (isTextPath(editorPath) ? new TextDecoder().decode(zipFS[editorPath]) : '');
+      if (!text) { box.style.display = 'none'; return; }
+
+      const index = buildPathIndex();
+      const refs = extractRefsFromText(text);
+      const missing = [];
+      const resolved = [];
+      for (const ref of refs) {
+        const hit = resolveLocal(ref, index, editorPath);
+        if (hit) resolved.push({ ref, hit });
+        else missing.push(ref);
+      }
+      // also use dependency.json if present
+      let depMissing = [];
+      try {
+        if (zipFS['dependency.json']) {
+          const dep = JSON.parse(new TextDecoder().decode(zipFS['dependency.json']));
+          const list = dep.missingUnique || dep.missing || [];
+          depMissing = list.filter(r => {
+            // only show those that appear in this file text
+            return text.includes(r) || text.includes(String(r).split('/').pop());
+          }).slice(0, 30);
+        }
+      } catch {}
+
+      const rows = [];
+      if (missing.length) {
+        rows.push(`<div style="color:var(--muted);margin-bottom:4px"><b>Missing di file ini (${missing.length})</b></div>`);
+        missing.slice(0, 40).forEach(r => {
+          rows.push(`<div class="issue" title="Klik untuk cari di editor" onclick="highlightRefInEditor(${JSON.stringify(r)})">${esc(r)}</div>`);
+        });
+      }
+      if (depMissing.length) {
+        rows.push(`<div style="color:var(--muted);margin:6px 0 4px"><b>Dari dependency.json</b></div>`);
+        depMissing.forEach(r => {
+          rows.push(`<div class="issue" onclick="highlightRefInEditor(${JSON.stringify(String(r))})">${esc(String(r))}</div>`);
+        });
+      }
+      if (!missing.length && !depMissing.length) {
+        rows.push(`<div class="issue ok">✓ Tidak ada ref hilang terdeteksi di file ini (${resolved.length} resolved)</div>`);
+      } else {
+        rows.push(`<div style="margin-top:6px;color:var(--muted)">${resolved.length} resolved · ${missing.length} missing</div>`);
+      }
+      box.innerHTML = rows.join('');
+      box.style.display = 'block';
+      if (!silent) log('Scan ' + editorPath + ': ' + missing.length + ' missing, ' + resolved.length + ' ok');
+    }
+
+    function highlightRefInEditor(ref) {
+      const ed = document.getElementById('code-editor');
+      if (!ed || ed.disabled) return;
+      const idx = ed.value.indexOf(ref);
+      if (idx < 0) {
+        // try bare name
+        const bare = String(ref).split('/').pop();
+        const i2 = ed.value.indexOf(bare);
+        if (i2 < 0) { log('Ref tidak ketemu di editor: ' + ref); return; }
+        ed.focus();
+        ed.setSelectionRange(i2, i2 + bare.length);
+        return;
+      }
+      ed.focus();
+      ed.setSelectionRange(idx, idx + ref.length);
+      // scroll roughly
+      const lines = ed.value.slice(0, idx).split('\\n').length;
+      ed.scrollTop = Math.max(0, (lines - 5) * 16);
+    }
+
+    function repairCurrentFile() {
+      if (!zipFS || !editorPath || !isTextPath(editorPath)) return;
+      if (editorDirty) {
+        // use editor buffer
+        zipFS[editorPath] = new TextEncoder().encode(document.getElementById('code-editor').value);
+        editorDirty = false;
+      }
+      if (!zipFSOriginal) {
+        zipFSOriginal = {};
+        for (const [p, d] of Object.entries(zipFS)) {
+          zipFSOriginal[p] = d.slice ? d.slice(0) : new Uint8Array(d);
+        }
+      }
+      const index = buildPathIndex();
+      let text = new TextDecoder().decode(zipFS[editorPath]);
+      const before = text;
+      let fixes = 0;
+
+      // same style replacements as deep repair but single-file
+      const tryReplace = (re, kind) => {
+        text = text.replace(re, (full, ...groups) => {
+          // last capturing group before offset is usually the URL
+          const ref = groups.find(g => typeof g === 'string' && g.length > 0 && !/^=$/.test(g));
+          // more reliable: scan groups
+          let url = null;
+          for (const g of groups) {
+            if (typeof g === 'string' && /[./]|https?:|^\w+\.\w+/.test(g) && g.length < 500) {
+              url = g;
+              break;
+            }
+          }
+          if (!url) return full;
+          const hit = resolveLocal(url, index, editorPath);
+          if (!hit || hit === url) return full;
+          fixes++;
+          return full.replace(url, hit);
+        });
+      };
+
+      // src/href
+      text = text.replace(/(\b(?:src|href|data-src|data-href|poster)\s*=\s*["'])([^"']+)(["'])/gi, (full, a, url, b) => {
+        const hit = resolveLocal(url, index, editorPath);
+        if (hit && hit !== url) { fixes++; return a + hit + b; }
+        return full;
+      });
+      // CSS url()
+      text = text.replace(/url\(\s*(['"]?)([^'")\s]+)\1\s*\)/gi, (full, q, url) => {
+        const hit = resolveLocal(url, index, editorPath);
+        if (hit && hit !== url) { fixes++; return 'url(' + (q || '') + hit + (q || '') + ')'; }
+        return full;
+      });
+      // import/require
+      text = text.replace(/((?:import\s+(?:[^'"]+\s+from\s+)?|require\s*\(\s*|import\s*\(\s*)['"])([^'"]+)(['"]\s*\)?)/gi, (full, a, url, b) => {
+        const hit = resolveLocal(url, index, editorPath);
+        if (hit && hit !== url) { fixes++; return a + hit + b; }
+        return full;
+      });
+      // escaped absolute URLs in strings
+      text = text.replace(/(["'])(https?:\\\/\\\/[^"']+)(["'])/g, (full, a, url, b) => {
+        const unesc = url.replace(/\\\//g, '/');
+        const hit = resolveLocal(unesc, index, editorPath);
+        if (hit) { fixes++; return a + hit + b; }
+        return full;
+      });
+      // absolute http(s) that resolve locally
+      text = text.replace(/(["'])(https?:\/\/[^"']+)(["'])/g, (full, a, url, b) => {
+        const hit = resolveLocal(url, index, editorPath);
+        if (hit && hit !== url) { fixes++; return a + hit + b; }
+        return full;
+      });
+
+      if (text !== before) {
+        zipFS[editorPath] = new TextEncoder().encode(text);
+        const ed = document.getElementById('code-editor');
+        if (ed) { ed.value = text; editorDirty = false; }
+        const saveBtn = document.getElementById('btn-save-file');
+        if (saveBtn) saveBtn.disabled = true;
+        log('Repair file: ' + editorPath + ' · ' + fixes + ' fix');
+      } else {
+        log('Repair file: ' + editorPath + ' · tidak ada path yang bisa di-resolve');
+      }
+      scanCurrentFileIssues(true);
+      renderFileTree();
+      pushZipToSW(true).catch(() => {});
+    }
+
+    // Tab key inserts spaces in editor
+    document.addEventListener('keydown', (e) => {
+      const ed = document.getElementById('code-editor');
+      if (!ed || document.activeElement !== ed) return;
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = ed.selectionStart, end = ed.selectionEnd;
+        ed.value = ed.value.slice(0, s) + '  ' + ed.value.slice(end);
+        ed.selectionStart = ed.selectionEnd = s + 2;
+        editorDirty = true;
+        const b = document.getElementById('btn-save-file');
+        if (b) b.disabled = false;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveCurrentFile();
+      }
+    });
+
+
 let zipFSOriginal = null; // snapshot sebelum repair
 
     function buildPathIndex() {
@@ -2419,6 +2987,9 @@ let zipFSOriginal = null; // snapshot sebelum repair
       if (missArr.length) log('⚠ Referensi mungkin hilang (' + missArr.length + '): ' + missArr.join(', '));
       document.getElementById('preview-status').textContent = 'Repaired (deep)';
       document.getElementById('preview-status').className = 'badge badge-ok';
+      renderFileTree();
+      if (editorPath) openFileInEditor(editorPath);
+
       // Pass 2: Dependency-guided rewrite (ganti ref missing yang bisa di-resolve bare/tail)
       try {
         const index2 = buildPathIndex();
@@ -2521,7 +3092,7 @@ let zipFSOriginal = null; // snapshot sebelum repair
         const raw = new TextDecoder().decode(zipFS[idx]);
         indexSample = raw.slice(0, 3500);
       }
-      const term = terminal.textContent.slice(-1500);
+      const _termEl = document.getElementById('terminal'); const term = (_termEl && _termEl.textContent || '').slice(-1500);
 
       const system = `Kamu adalah AI assistant untuk Game Collector Pro. Tugasmu membantu memperbaiki game web hasil collect agar bisa jalan offline.
 Jawab dalam Bahasa Indonesia, ringkas, praktis, dan actionable.

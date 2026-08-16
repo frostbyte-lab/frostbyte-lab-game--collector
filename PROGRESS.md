@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-16 (Live Viewer + Stop Capture)
+Update terakhir: 2026-08-16 (UI Split View + Workspace repair interaktif)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -59,7 +59,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 |---|------|--------|
 | 9 | R2 untuk ZIP besar (>~30MB) | ❌ skip (pakai GitHub Actions) |
 | 10 | Live Viewer + Start/Stop Capture | ✅ |
-| 11 | UI Split View + Workspace repair interaktif | ❌ |
+| 11 | UI Split View + Workspace repair interaktif | ✅ |
 | 13 | Custom domain | ⚠️ manual Dashboard |
 
 ---
@@ -153,4 +153,16 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - Route: `GET /__gc__/{path}` dari Cache
 - UI: tombol **SW Proxy** → push ZIP ke SW → iframe src same-origin `/__gc__/index.html`
 - Relative paths lebih stabil dibanding blob: origin
+
+
+## Catatan teknis Split View + Interactive Repair (P11)
+
+- Toggle **Split View** di Workspace → layout 3 kolom: File Tree | Code Editor | Preview
+- Klik file text → buka di editor (html/js/css/json/…)
+- **Save** (Ctrl/Cmd+S) menulis kembali ke `zipFS` + sync SW cache
+- **Repair file**: path rewrite lokal hanya untuk file aktif (src/href/url/import/escaped URL)
+- **Scan refs**: deteksi missing reference di file aktif (+ dependency.json)
+- Filter path + shortcut Text / HTML / All
+- Mode classic (sidebar) tetap ada saat Split View OFF
+- Helper `esc()` + `log()` dilengkapi (sebelumnya dipakai tapi belum terdefinisi di bundle UI)
 
