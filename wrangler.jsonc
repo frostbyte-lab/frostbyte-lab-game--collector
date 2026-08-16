@@ -12,15 +12,5 @@
   },
   "kv_namespaces": [
     { "binding": "GC_HISTORY", "id": "3869a97c9eaf49129a666476fcb672e8" }
-  ],
-  // R2 untuk ZIP besar (Poin 1)
-  // 1. Buat bucket di CF Dashboard → R2 → Create bucket → nama: game-collector-packages
-  // 2. Deploy ulang. Binding otomatis aktif.
-  "r2_buckets": [
-    {
-      "binding": "COLLECTOR_BUCKET",
-      "bucket_name": "game-collector-packages"
-    }
   ]
 }
-

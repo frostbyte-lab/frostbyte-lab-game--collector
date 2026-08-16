@@ -12,7 +12,7 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 ### Prioritas 1 — Fondasi produk (kerjakan dulu)
 | No | Item | Status | Catatan untuk langkah berikutnya |
 |----|------|--------|----------------------------------|
-| 1.1 | **R2 untuk ZIP besar** | ✅ Selesai | Bucket `game-collector-packages` + binding `COLLECTOR_BUCKET`. ZIP besar → simpan R2 → return `downloadUrl` (`/api/r2/download`). Frontend auto-unduh. |
+| 1.1 | **ZIP besar (>~25MB)** | ✅ via GitHub | Tanpa R2. Capture Worker → TOO_LARGE → auto-failover **Collect via GitHub Actions** (artifact). |
 | 1.2 | **History server-side (KV)** | ⚠️ Kode siap; bind KV di Dashboard | Tambah KV namespace `GC_HISTORY`, API `POST/GET /api/history`, ganti `localStorage` di frontend. Schema: `{ id, url, ts, status, files, zipSize, totals }`. |
 | 1.3 | **Progress collect real (stream)** | ⚠️ Estimasi UI saja | Ganti long-request tunggal dengan SSE atau Durable Object status + poll. Frontend `startProgress()` sudah ada; tinggal sumber % dari server. |
 
