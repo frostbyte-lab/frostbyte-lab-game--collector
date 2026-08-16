@@ -155,25 +155,91 @@
     #status.error, .log-box.error { color: #fca5a5; border-color: #7f1d1d; background: #140a0a; }
     #status.ok, .log-box.ok { color: #86efac; }
     #status.warn, .log-box.warn { color: #fde68a; border-color: #78350f; background: #120e08; }
+    /* === Workspace top split: Proses | Error === */
+    .ws-top-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 12px 0;
+    }
+    @media (max-width: 640px) {
+      .ws-top-split { grid-template-columns: 1fr; }
+    }
+    .ws-top-panel {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 140px;
+    }
+    .ws-top-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #0f1218;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .ws-top-panel-header .title { color: var(--text); }
+    .ws-top-panel-body {
+      flex: 1;
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 100px;
+      max-height: 200px;
+    }
     #ws-process {
       display: none;
-      margin: 10px 0;
+      margin: 0;
       white-space: pre-wrap;
       background: #0a0e0a;
       color: #b8f5c0;
-      border-radius: 10px;
+      border-radius: 0;
       padding: 10px 12px;
       font-size: 11px;
       line-height: 1.45;
-      min-height: 48px;
-      max-height: 180px;
+      min-height: 100px;
+      max-height: 200px;
       overflow-y: auto;
-      border: 1px solid #1a3d24;
+      border: none;
       font-family: ui-monospace, Menlo, Consolas, monospace;
+      flex: 1;
     }
     #ws-process.active { display: block; }
-    #ws-process.err { color: #fca5a5; border-color: #7f1d1d; }
+    #ws-process.err { color: #fca5a5; }
     #ws-process.ok { color: #86efac; }
+    #ws-error-panel {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #fca5a5;
+      white-space: pre-wrap;
+      min-height: 60px;
+      padding: 10px 12px;
+      overflow-y: auto;
+      flex: 1;
+      background: #140a0a;
+    }
+    #ws-error-panel:empty::before {
+      content: "Belum ada error. Error & kerusakan akan muncul di sini.";
+      color: var(--muted);
+      font-style: italic;
+    }
+    .ws-error-actions {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: #0f1218;
+    }
     .preview-guide {
       display: none;
       margin: 10px 0 12px;
@@ -734,7 +800,33 @@
           <button class="btn-secondary split-toggle" type="button" id="btn-split-view" onclick="toggleSplitView()">◫ Split View</button>
         </div>
 
-        <div id="ws-process" class="active">$ workspace ready · pilih ZIP lalu Load</div>
+        <!-- Satu layar, 2 bagian: Proses | Error -->
+        <div class="ws-top-split">
+          <!-- Kiri: Proses Berjalan (style Linux) -->
+          <div class="ws-top-panel">
+            <div class="ws-top-panel-header">
+              <span class="title">▶ Proses Berjalan</span>
+              <span style="font-size:0.7rem;opacity:0.7">Linux style</span>
+            </div>
+            <div class="ws-top-panel-body">
+              <div id="ws-process" class="active">$ workspace ready · pilih ZIP lalu Load</div>
+            </div>
+          </div>
+
+          <!-- Kanan: Tampilkan Error + Stop -->
+          <div class="ws-top-panel">
+            <div class="ws-top-panel-header">
+              <span class="title">⚠ Error / Rusak</span>
+              <span id="preview-status" class="badge badge-ok">Ready</span>
+            </div>
+            <div class="ws-top-panel-body">
+              <div id="ws-error-panel"></div>
+            </div>
+            <div class="ws-error-actions">
+              <button class="btn-danger btn-sm" type="button" onclick="stopPreview()" style="flex:1">⏹ Stop</button>
+            </div>
+          </div>
+        </div>
 
         <div class="preview-toolbar" id="preview-toolbar">
           <button class="btn-success" onclick="startPreview('sandbox')" title="Offline utama — hanya asset di ZIP">▶ Offline</button>
@@ -743,7 +835,6 @@
           <button class="btn-secondary" onclick="startPreview('protected')" title="Offline + proteksi frame keras">🛡 Protected</button>
           <button class="btn-secondary" onclick="startPreview('window')" title="Buka di jendela terpisah">⧉ Window</button>
           <button class="btn-secondary" onclick="stopPreview()">Stop</button>
-          <span id="preview-status" class="badge badge-ok">Ready</span>
         </div>
 
         <div class="preview-guide" id="preview-guide">
@@ -894,6 +985,17 @@
       keep.push(line);
       el.textContent = keep.join('\n');
       el.scrollTop = el.scrollHeight;
+      // Tampilkan error di panel kanan (tampilan saja)
+      if (kind === 'err') {
+        const errEl = document.getElementById('ws-error-panel');
+        if (errEl) {
+          const prevErr = errEl.textContent || '';
+          const keepErr = prevErr.split('\n').filter(Boolean).slice(-30);
+          keepErr.push(line);
+          errEl.textContent = keepErr.join('\n');
+          errEl.scrollTop = errEl.scrollHeight;
+        }
+      }
       log(msg);
     }
     function appendStatus(msg) {
