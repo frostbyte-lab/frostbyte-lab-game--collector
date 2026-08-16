@@ -174,6 +174,69 @@
     #ws-process.active { display: block; }
     #ws-process.err { color: #fca5a5; border-color: #7f1d1d; }
     #ws-process.ok { color: #86efac; }
+    .preview-guide {
+      display: none;
+      margin: 10px 0 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 12px;
+    }
+    .preview-guide.active { display: block; }
+    .preview-guide h3 {
+      font-size: 0.9rem;
+      margin: 0 0 8px;
+      color: var(--text);
+    }
+    .preview-guide .modes {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    @media (min-width: 640px) {
+      .preview-guide .modes {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    .preview-guide .mode-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .preview-guide .mode-card b {
+      display: block;
+      margin-bottom: 4px;
+      color: #93c5fd;
+      font-size: 12px;
+    }
+    .preview-guide .mode-card span {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .preview-guide .advice {
+      background: #0c1220;
+      border: 1px solid #1e3a5f;
+      border-radius: 10px;
+      padding: 10px;
+      color: #cbd5e1;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .preview-guide .advice.ok { border-color: #14532d; background: #0a120e; color: #bbf7d0; }
+    .preview-guide .advice.warn { border-color: #78350f; background: #120e08; color: #fde68a; }
+    .preview-guide .advice.err { border-color: #7f1d1d; background: #140a0a; color: #fecaca; }
+    .preview-guide .hint-list {
+      margin: 8px 0 0;
+      padding-left: 16px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .preview-guide .hint-list li { margin: 3px 0; }
+
     .error { color: var(--danger); }
     .ok { color: var(--success); }
     .warn { color: var(--warn); }
@@ -663,7 +726,7 @@
     <section id="panel-workspace" class="panel">
       <div class="card">
         <h2>Workspace — Preview Offline</h2>
-        <p class="sub">Load ZIP, lalu pilih mode Preview. Aktifkan <b>Split View</b> untuk edit file interaktif di samping preview.</p>
+        <p class="sub">Load ZIP → <b>Offline</b> (utama) atau <b>Hybrid</b> (online). Panel saran di bawah tombol menjelaskan mode & langkah host/ZIP.</p>
 
         <div class="file-row">
           <input type="file" id="zip-input" accept=".zip,application/zip">
@@ -674,13 +737,30 @@
         <div id="ws-process" class="active">$ workspace ready · pilih ZIP lalu Load</div>
 
         <div class="preview-toolbar" id="preview-toolbar">
-          <button class="btn-success" onclick="startPreview('sandbox')">▶ Sandbox</button>
-          <button class="btn-secondary" onclick="startPreview('protected')">🛡 Protected</button>
-          <button class="btn-primary" onclick="startPreview('online')">🌐 Hybrid</button>
-          <button class="btn-secondary" onclick="startPreview('window')">⧉ Window</button>
-          <button class="btn-primary" onclick="startPreview('sw')">⚡ SW Proxy</button>
+          <button class="btn-success" onclick="startPreview('sandbox')" title="Offline utama — hanya asset di ZIP">▶ Offline</button>
+          <button class="btn-primary" onclick="startPreview('sw')" title="Offline same-origin via Service Worker">⚡ SW Offline</button>
+          <button class="btn-primary" onclick="startPreview('online')" title="Asset lokal dulu, network diizinkan">🌐 Hybrid Online</button>
+          <button class="btn-secondary" onclick="startPreview('protected')" title="Offline + proteksi frame keras">🛡 Protected</button>
+          <button class="btn-secondary" onclick="startPreview('window')" title="Buka di jendela terpisah">⧉ Window</button>
           <button class="btn-secondary" onclick="stopPreview()">Stop</button>
           <span id="preview-status" class="badge badge-ok">Ready</span>
+        </div>
+
+        <div class="preview-guide" id="preview-guide">
+          <h3>Bagian Preview — panduan & saran</h3>
+          <div class="modes">
+            <div class="mode-card"><b>▶ Offline (Sandbox)</b><span>Mode utama offline. Hanya resource di dalam ZIP. Cocok jika collect lengkap.</span></div>
+            <div class="mode-card"><b>⚡ SW Offline</b><span>Offline lewat Service Worker (path same-origin). Sering lebih stabil dari blob URL.</span></div>
+            <div class="mode-card"><b>🌐 Hybrid Online</b><span>Asset lokal dulu; network server tetap boleh. Untuk game yang masih butuh API live.</span></div>
+            <div class="mode-card"><b>🛡 Protected / ⧉ Window</b><span>Proteksi anti frame-buster / buka jendela terpisah jika iframe diblok.</span></div>
+          </div>
+          <div id="preview-advice" class="advice warn">Load ZIP dulu — saran offline / host / domain muncul di sini.</div>
+          <ul class="hint-list">
+            <li><b>Offline utama:</b> Offline → jika gagal coba SW Offline → Auto Repair Deep</li>
+            <li><b>Online pun bisa:</b> Hybrid jika spin/login masih butuh server asli</li>
+            <li><b>ZIP ke server sendiri:</b> Packaging Ulang → extract → upload ke hosting → buka index.html</li>
+            <li><b>Custom domain:</b> Cloudflare Workers → Domains & Routes (opsional, bukan wajib)</li>
+          </ul>
         </div>
 
         <div class="workspace-grid" id="workspace-grid">
@@ -1638,6 +1718,8 @@ async function downloadGitHubArtifact(artifactId, runId) {
         wsProc(hasIndex ? '✓ index.html found' : '⚠ index.html NOT found');
         renderFileTree();
         document.getElementById('preview-toolbar').classList.add('active');
+        const pg = document.getElementById('preview-guide');
+        if (pg) pg.classList.add('active');
 
         wsProc('… push assets to Service Worker (bg)');
         pushZipToSW(true).catch((e) => wsProc('SW cache skip: ' + (e.message||e), 'err'));
@@ -1671,8 +1753,9 @@ async function downloadGitHubArtifact(artifactId, runId) {
         }
 
         wsProc('✓ ZIP ready · ' + paths.length + ' file' + (hasIndex ? '' : ' · NO index.html'), hasIndex ? 'ok' : 'err');
-        wsProc('→ pilih mode Preview (Sandbox/Hybrid/SW) atau Auto Repair');
+        wsProc('→ pilih mode Preview (Offline/Hybrid/SW) atau Auto Repair');
         analyzeCompleteness();
+        buildPreviewAdvice();
         try {
           const n = Object.keys(zipFS||{}).length;
           const js = n && Object.keys(zipFS).filter(p => /\.js$/i.test(p)).length;
@@ -2270,7 +2353,85 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
     }
 
 
-        function analyzeCompleteness() {
+    
+    function buildPreviewAdvice() {
+      const box = document.getElementById('preview-advice');
+      if (!box) return;
+      if (!zipFS || !Object.keys(zipFS).length) {
+        box.className = 'advice warn';
+        box.textContent = 'Load ZIP dulu — saran offline / host / domain muncul di sini.';
+        return;
+      }
+      const paths = Object.keys(zipFS);
+      const hasIndex = paths.some(p => /index\.html?$/i.test(p.split('/').pop()));
+      const js = paths.filter(p => /\.js$/i.test(p)).length;
+      const img = paths.filter(p => /\.(png|jpe?g|webp|gif|svg)$/i.test(p)).length;
+      const audio = paths.filter(p => /\.(mp3|ogg|wav|m4a)$/i.test(p)).length;
+      let failed = null;
+      try {
+        if (zipFS['COLLECT_FAILED.json'])
+          failed = JSON.parse(new TextDecoder().decode(zipFS['COLLECT_FAILED.json']));
+      } catch {}
+      let depMissing = 0;
+      try {
+        if (zipFS['dependency.json']) {
+          const d = JSON.parse(new TextDecoder().decode(zipFS['dependency.json']));
+          depMissing = Number(d.missing) || (d.missingUnique && d.missingUnique.length) || 0;
+        }
+      } catch {}
+      let indexBlocked = false;
+      try {
+        if (zipFS['index.html']) {
+          const ih = new TextDecoder().decode(zipFS['index.html']).slice(0, 2500);
+          if (/403\s*Forbidden|Request forbidden by administrative rules/i.test(ih)) indexBlocked = true;
+        }
+      } catch {}
+
+      const lines = [];
+      lines.push('Paket: ' + paths.length + ' file · js=' + js + ' · img=' + img + ' · audio=' + audio);
+      lines.push('Index: ' + (hasIndex ? 'ada' : 'TIDAK ADA') + (indexBlocked ? ' (ISI 403 BLOCKED)' : ''));
+
+      if (failed || indexBlocked) {
+        box.className = 'advice err';
+        lines.push('');
+        lines.push('✗ Paket tidak layak offline penuh.');
+        lines.push(failed?.message || 'Collect diblokir / kosong.');
+        lines.push('Saran: collect ulang target terbuka, atau Hybrid hanya jika ada sisa asset.');
+        box.textContent = lines.join('\n');
+        return;
+      }
+
+      if (!hasIndex || (js < 1 && img < 1)) {
+        box.className = 'advice err';
+        lines.push('');
+        lines.push('✗ Terlalu sedikit resource untuk offline.');
+        lines.push('Saran: Collect via GitHub dengan wait lebih lama, pastikan URL langsung ke game.');
+        box.textContent = lines.join('\n');
+        return;
+      }
+
+      if (depMissing > 5) {
+        box.className = 'advice warn';
+        lines.push('');
+        lines.push('⚠ Ada ~' + depMissing + ' referensi kemungkinan hilang.');
+        lines.push('Saran offline: 1) Auto Repair Deep  2) Offline / SW Offline  3) Split View edit path');
+        lines.push('Saran online: Hybrid (network server diizinkan)');
+        lines.push('Host sendiri: Packaging Ulang → extract ZIP → upload folder ke hosting → buka index.html');
+        lines.push('Custom domain app: CF Dashboard → Workers → Domains (opsional)');
+        box.textContent = lines.join('\n');
+        return;
+      }
+
+      box.className = 'advice ok';
+      lines.push('');
+      lines.push('✓ Cukup resource untuk coba offline.');
+      lines.push('Urutan: Offline → jika gagal SW Offline → Auto Repair → Hybrid jika masih butuh server.');
+      lines.push('ZIP ke server sendiri: Packaging Ulang → extract → upload ke VPS/hosting statis.');
+      lines.push('Domain kustom hanya untuk web Collect (CF Workers), bukan wajib agar game offline jalan.');
+      box.textContent = lines.join('\n');
+    }
+
+    function analyzeCompleteness() {
       let box = document.getElementById('completeness-box');
       if (!box) {
         box = document.createElement('div');
@@ -3120,6 +3281,7 @@ let zipFSOriginal = null; // snapshot sebelum repair
       log(`Auto Repair dalam selesai · file diubah: ${filesChanged} · frame-buster: ${frameBusters} · path: ${pathFixes} · attr: ${attrFixes} · import: ${importFixes} · json: ${jsonFixes}`);
       if (missArr.length) log('⚠ Referensi mungkin hilang (' + missArr.length + '): ' + missArr.join(', '));
       document.getElementById('preview-status').textContent = 'Repaired (deep)';
+      try { buildPreviewAdvice(); } catch {}
       document.getElementById('preview-status').className = 'badge badge-ok';
       renderFileTree();
       if (editorPath) openFileInEditor(editorPath);
