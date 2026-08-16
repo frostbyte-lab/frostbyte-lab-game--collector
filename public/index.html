@@ -1255,7 +1255,7 @@
         const res = await fetch('/api/github/collect', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ url: gameUrl, wait_seconds: '10' })
+          body: JSON.stringify({ url: gameUrl, wait_seconds: '12' })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || data.detail || 'Gagal trigger');
@@ -1351,6 +1351,9 @@
               await downloadGitHubArtifact(data.artifact.id, runId);
             } else if (data.conclusion === 'success' && !data.artifact) {
               statusEl.textContent += '\n\nSukses tapi artifact belum terbaca. Cek tab Actions.';
+            } else if (data.conclusion === 'failure') {
+              statusEl.className = 'error';
+              statusEl.textContent += '\n\n✗ GitHub collect GAGAL (quality gate / error).\nBiasanya TARGET_BLOCKED (403) atau EMPTY_PACKAGE.\nCek log Actions untuk detail — bukan sukses palsu.';
             } else {
               statusEl.textContent += '\n\nRun gagal. Lihat log GitHub.';
             }

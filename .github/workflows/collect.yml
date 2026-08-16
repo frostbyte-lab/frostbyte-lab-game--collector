@@ -10,7 +10,7 @@ on:
       wait_seconds:
         description: "Waktu tunggu setelah load (detik)"
         required: false
-        default: "8"
+        default: "12"
         type: string
 
 jobs:

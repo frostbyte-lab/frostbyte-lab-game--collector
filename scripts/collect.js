@@ -1,10 +1,19 @@
+/**
+ * GitHub Actions collect — diperkuat mendekati Worker:
+ * - status HTTP dokumen utama
+ * - filter resource status >= 400
+ * - auto-click Play/Start (main + iframe)
+ * - scroll lazy-load
+ * - smart rewrite + frame-buster
+ * - quality gate (403/empty → exit 2)
+ */
 import { chromium } from "playwright";
 import { zipSync, strToU8 } from "fflate";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 
 const TARGET_URL = process.env.TARGET_URL;
-const WAIT_SECONDS = parseInt(process.env.WAIT_SECONDS || "8", 10);
+const WAIT_SECONDS = Math.max(5, parseInt(process.env.WAIT_SECONDS || "12", 10));
 
 if (!TARGET_URL) {
   console.error("ERROR: TARGET_URL tidak diisi");
@@ -19,6 +28,12 @@ const EXCLUDE = [
   /google-analytics\.com/i, /googletagmanager\.com/i, /facebook\.net/i,
   /doubleclick\.net/i, /googlesyndication\.com/i, /hotjar\.com/i,
   /clarity\.ms/i, /segment\.(com|io)/i, /mixpanel\.com/i, /sentry\.io/i
+];
+
+const PLAY_KEYWORDS = [
+  "play", "start", "mulai", "continue", "lanjut", "main", "go", "enter",
+  "tap to play", "click to play", "klik untuk main", "start game", "play now",
+  "mulai game", "lanjutkan", "ok", "yes", "accept", "agree", "demo"
 ];
 
 function safe(s) {
@@ -48,13 +63,16 @@ const FRAME_BUSTER_RE = [
   /parent\.location\.href\s*=/gi,
   /window\.top\.location/gi,
   /if\s*\(\s*window\s*!==\s*window\.top\s*\)/gi,
-  /if\s*\(\s*top\s*!=\s*self\s*\)/gi,
+  /if\s*\(\s*top\s*!=\s*self\s*\)/gi
 ];
 
 function neutralizeFrameBusters(text) {
   let out = text, n = 0;
   for (const re of FRAME_BUSTER_RE) {
-    out = out.replace(re, (m) => { n++; return "/* GC-PRO */ false && " + m; });
+    out = out.replace(re, (m) => {
+      n++;
+      return "/* GC-PRO */ false && " + m;
+    });
   }
   return { text: out, count: n };
 }
@@ -78,62 +96,138 @@ function smartPackage(zipFiles, resources) {
     const isJs = /\.js$/i.test(key);
     const isCss = /\.css$/i.test(key);
     if (!isHtml && !isJs && !isCss) continue;
-    try {
-      let text = new TextDecoder().decode(zipFiles[key]);
-      const before = text;
-      for (const [from, to] of urlMap) {
-        if (String(from).startsWith("http") && text.includes(from)) {
-          text = text.split(from).join(to);
+    let text = new TextDecoder().decode(zipFiles[key]);
+    const nb = neutralizeFrameBusters(text);
+    text = nb.text;
+    neutralized += nb.count;
+
+    for (const [from, to] of urlMap) {
+      if (!from || from.length < 4) continue;
+      if (text.includes(from)) {
+        const parts = text.split(from);
+        if (parts.length > 1) {
+          text = parts.join(to);
+          rewritten += parts.length - 1;
         }
       }
-      if (isHtml || isJs) {
-        const res = neutralizeFrameBusters(text);
-        text = res.text;
-        neutralized += res.count;
-      }
-      if (isHtml && !/<base\s/i.test(text) && text.includes("<head>")) {
-        text = text.replace("<head>", '<head>\n<base href="./">');
-      }
-      if (isHtml && text.includes("<head>")) {
-        const offlineBoot = `<script>
-(function(){
-  try{Object.defineProperty(window,"top",{get:function(){return window}})}catch(e){}
-  try{Object.defineProperty(window,"parent",{get:function(){return window}})}catch(e){}
-  window.__gc_offline=1;window.__gc_protected=1;
-  var _f=window.fetch;
-  window.fetch=function(u,i){
-    try{
-      var s=typeof u==="string"?u:(u&&u.url)||"";
-      if(/^https?:\\/\\//i.test(s)&&!/^(blob:|data:)/i.test(s)){
-        console.warn("[GC-Offline] blocked external:",s);
-        return Promise.reject(new Error("offline"));
-      }
-    }catch(e){}
-    return _f.apply(this,arguments);
-  };
-})();
-<\/script>`;
-        text = text.replace("<head>", "<head>" + offlineBoot);
-      }
-      if (text !== before) {
-        zipFiles[key] = strToU8(text);
+    }
+    // protocol-relative
+    text = text.replace(/(["'])\/\/([^"']+)/g, (full, q, rest) => {
+      const abs = "https://" + rest;
+      if (urlMap.has(abs)) {
         rewritten++;
+        return q + urlMap.get(abs);
       }
-    } catch {}
+      return full;
+    });
+    zipFiles[key] = strToU8(text);
   }
   return { rewritten, neutralized };
 }
 
-async function main() {
-  console.log("Target:", TARGET_URL);
-  console.log("Wait  :", WAIT_SECONDS, "detik");
+function isBlockedHtml(html) {
+  const h = String(html || "");
+  const hl = h.toLowerCase();
+  return (
+    /\b403\s*forbidden\b/i.test(h) ||
+    /request forbidden by administrative rules/i.test(h) ||
+    /\b401\s*unauthorized\b/i.test(h) ||
+    /\baccess denied\b/i.test(h) ||
+    (/\bcaptcha\b/i.test(hl) && /challenge|verify you are human|cloudflare/i.test(hl)) ||
+    (/just a moment/i.test(hl) && /cloudflare/i.test(hl))
+  );
+}
 
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+/** Auto-click tombol Play/Start di satu frame */
+async function autoClickPlayInFrame(frame) {
+  try {
+    await frame.evaluate((keywords) => {
+      const all = document.querySelectorAll(
+        "button, a, div, span, input[type=button], input[type=submit], [role=button], .btn, .button"
+      );
+      const scored = [];
+      for (const el of all) {
+        try {
+          const text = (
+            (el.textContent || "") +
+            " " +
+            (el.getAttribute("aria-label") || "") +
+            " " +
+            (el.id || "") +
+            " " +
+            (el.className || "")
+          ).toLowerCase();
+          if (!keywords.some((k) => text.includes(k))) continue;
+          const style = window.getComputedStyle(el);
+          if (style.display === "none" || style.visibility === "hidden") continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 2 || r.height < 2) continue;
+          scored.push(el);
+        } catch {}
+      }
+      for (const el of scored.slice(0, 8)) {
+        try {
+          el.click();
+        } catch {}
+      }
+      return scored.length;
+    }, PLAY_KEYWORDS);
+  } catch {}
+}
+
+async function autoClickAllFrames(page) {
+  console.log("PROGRESS: auto_click");
+  await autoClickPlayInFrame(page.mainFrame());
+  const frames = page.frames();
+  for (const frame of frames) {
+    if (frame === page.mainFrame()) continue;
+    const fu = frame.url();
+    if (!fu || fu === "about:blank" || fu.startsWith("chrome")) continue;
+    console.log("PROGRESS: iframe", fu.slice(0, 120));
+    await autoClickPlayInFrame(frame);
+  }
+}
+
+async function scrollPage(page) {
+  console.log("PROGRESS: scroll");
+  try {
+    await page.evaluate(async () => {
+      const total = Math.max(
+        document.body?.scrollHeight || 0,
+        document.documentElement?.scrollHeight || 0,
+        2000
+      );
+      for (let y = 0; y < total; y += 600) {
+        window.scrollTo(0, y);
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      window.scrollTo(0, 0);
+    });
+  } catch {}
+}
+
+async function main() {
+  console.log("PROGRESS: init");
+  console.log("Target:", TARGET_URL);
+  console.log("Wait seconds:", WAIT_SECONDS);
+
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--disable-blink-features=AutomationControlled"]
+  });
+  const context = await browser.newContext({
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    viewport: { width: 1280, height: 800 },
+    locale: "en-US"
+  });
+  const page = await context.newPage();
 
   const resources = [];
-  const seen = new Set();
   const zipFiles = {};
+  const seen = new Set();
+  let mainDocStatus = 0;
+  let mainDocUrl = TARGET_URL;
 
   page.on("response", async (response) => {
     try {
@@ -142,15 +236,16 @@ async function main() {
       if (!TYPES.has(type)) return;
 
       const url = response.url();
-      if (seen.has(url) || EXCLUDE.some(r => r.test(url))) return;
+      if (seen.has(url) || EXCLUDE.some((r) => r.test(url))) return;
       if (url.startsWith("data:") || url.startsWith("blob:")) return;
-      seen.add(url);
 
       const status = response.status();
       if (status >= 400) return;
+      seen.add(url);
 
       const buffer = await response.body();
       if (!buffer || buffer.length === 0) return;
+      if (buffer.length > 18 * 1024 * 1024) return;
 
       const ct = response.headers()["content-type"] || "";
       let name = safe(new URL(url).pathname.split("/").pop() || "index");
@@ -164,62 +259,98 @@ async function main() {
         else if (ct.includes("webp")) name += ".webp";
         else if (ct.includes("woff2")) name += ".woff2";
         else if (ct.includes("woff")) name += ".woff";
+        else if (ct.includes("mp3") || ct.includes("audio")) name += ".mp3";
       }
 
       const folder = folderOf(type);
       const localPath = `${folder}/${String(resources.length + 1).padStart(4, "0")}-${name}`;
-
       zipFiles[localPath] = new Uint8Array(buffer);
-      resources.push({ url, type, status, localPath, size: buffer.length });
+      resources.push({
+        url,
+        type,
+        status,
+        localPath,
+        size: buffer.length,
+        contentType: ct
+      });
     } catch {}
   });
 
   console.log("PROGRESS: open_url", TARGET_URL);
-  await page.goto(TARGET_URL, { waitUntil: "domcontentloaded", timeout: 45000 });
-  console.log("PROGRESS: page_loaded");
+  try {
+    const nav = await page.goto(TARGET_URL, {
+      waitUntil: "domcontentloaded",
+      timeout: 60000
+    });
+    if (nav) {
+      mainDocStatus = nav.status();
+      mainDocUrl = nav.url() || TARGET_URL;
+    }
+  } catch (navErr) {
+    const bare = TARGET_URL.split("#")[0];
+    if (bare && bare !== TARGET_URL) {
+      console.log("PROGRESS: retry_without_hash", bare);
+      const nav2 = await page.goto(bare, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000
+      });
+      if (nav2) {
+        mainDocStatus = nav2.status();
+        mainDocUrl = nav2.url() || bare;
+      }
+    } else {
+      throw navErr;
+    }
+  }
+
+  console.log("PROGRESS: page_loaded", "status=" + mainDocStatus, mainDocUrl);
+  if (mainDocStatus >= 400) {
+    console.warn("PROGRESS: blocked_doc HTTP", mainDocStatus);
+  }
+
+  // Interaksi: auto-click + tunggu resource
+  await page.waitForTimeout(1500);
+  await autoClickAllFrames(page);
+  await page.waitForTimeout(1500);
+  await autoClickAllFrames(page);
+
   console.log("PROGRESS: wait_resources", WAIT_SECONDS, "s");
   await page.waitForTimeout(WAIT_SECONDS * 1000);
 
-  // Scroll untuk trigger lazy load
-  await page.evaluate(async () => {
-    const total = Math.max(document.body?.scrollHeight || 0, 2000);
-    for (let y = 0; y < total; y += 600) {
-      window.scrollTo(0, y);
-      await new Promise(r => setTimeout(r, 200));
-    }
-    window.scrollTo(0, 0);
-  });
+  await scrollPage(page);
+  await page.waitForTimeout(2000);
+  // klik lagi setelah scroll (lazy UI)
+  await autoClickAllFrames(page);
   await page.waitForTimeout(2000);
 
-  // Ambil HTML akhir
+  // HTML akhir
+  console.log("PROGRESS: capture_html");
   let html = await page.content();
   zipFiles["index.html"] = strToU8(html);
 
-  const htmlLower = html.toLowerCase();
-  const blockedPage =
-    /\b403\s*forbidden\b/i.test(html) ||
-    /request forbidden by administrative rules/i.test(html) ||
-    /\b401\s*unauthorized\b/i.test(html) ||
-    (/\bcaptcha\b/i.test(htmlLower) && /challenge|verify you are human|cloudflare/i.test(htmlLower));
+  const blockedPage = isBlockedHtml(html) || mainDocStatus >= 400;
 
-
-  // Smart offline packaging
+  console.log("PROGRESS: rewrite");
   const smart = smartPackage(zipFiles, resources);
 
-  // Manifest
   const manifest = {
     target: TARGET_URL,
+    mainDocStatus,
+    mainDocUrl,
     collectedAt: new Date().toISOString(),
     totalFiles: resources.length,
     smartRewrite: smart,
+    via: "github-actions",
     resources
   };
   zipFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
   zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
 Target: ${TARGET_URL}
+Main document status: ${mainDocStatus}
 Tanggal: ${new Date().toISOString()}
 Total: ${resources.length} file
 Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
+Via: GitHub Actions (enhanced)
 
 Cara pakai: extract → npx serve . → buka browser
 Atau load di Workspace Game Collector Pro.
@@ -227,21 +358,30 @@ Atau load di Workspace Game Collector Pro.
 
   await browser.close();
 
-  // Quality gate: jangan anggap sukses jika kosong / diblokir
+  if (!existsSync("output")) mkdirSync("output");
+
+  // Quality gate
   if (blockedPage || resources.length === 0) {
     const reason = blockedPage ? "TARGET_BLOCKED" : "EMPTY_PACKAGE";
     const message = blockedPage
-      ? "Situs memblokir akses (403/challenge). 0 asset usable."
+      ? `Situs memblokir akses (HTTP ${mainDocStatus || "?"} / challenge). Asset usable tidak tersedia.`
       : "0 resource tertangkap. Paket tidak usable.";
-    zipFiles["COLLECT_FAILED.json"] = strToU8(JSON.stringify({
-      ok: false,
-      reason,
-      message,
-      target: TARGET_URL,
-      totalFiles: resources.length,
-      at: new Date().toISOString()
-    }, null, 2));
-    if (!existsSync("output")) mkdirSync("output");
+    zipFiles["COLLECT_FAILED.json"] = strToU8(
+      JSON.stringify(
+        {
+          ok: false,
+          reason,
+          message,
+          target: TARGET_URL,
+          mainDocStatus,
+          mainDocUrl,
+          totalFiles: resources.length,
+          at: new Date().toISOString()
+        },
+        null,
+        2
+      )
+    );
     const failName = `game-resources-FAILED-${Date.now()}.zip`;
     writeFileSync(join("output", failName), zipSync(zipFiles, { level: 6 }));
     console.error("PROGRESS: failed", reason);
@@ -250,20 +390,19 @@ Atau load di Workspace Game Collector Pro.
     process.exit(2);
   }
 
-  // Buat ZIP
   const zipped = zipSync(zipFiles, { level: 6 });
-  if (!existsSync("output")) mkdirSync("output");
   const zipName = `game-resources-${Date.now()}.zip`;
   writeFileSync(join("output", zipName), zipped);
 
   console.log("PROGRESS: zip_done");
   console.log("Selesai!");
   console.log("Total resource:", resources.length);
-  console.log("Smart rewrite:", smart.rewritten, "file · frame-buster:", smart.neutralized);
+  console.log("Main doc status:", mainDocStatus);
+  console.log("Smart rewrite:", smart.rewritten, "· frame-buster:", smart.neutralized);
   console.log("ZIP:", zipName);
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error(err);
   process.exit(1);
 });

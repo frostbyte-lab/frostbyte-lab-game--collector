@@ -174,3 +174,10 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - loadZip: deteksi COLLECT_FAILED.json / index 403
 - scripts/collect.js: exit 2 jika blocked atau 0 resource
 - Bukan bypass WAF/403 situs pihak ketiga — hanya deteksi + gagal jujur
+
+## Catatan teknis GitHub collect enhanced (2026-08-16)
+
+- scripts/collect.js: auto-click Play (main+iframe), scroll, mainDocStatus, UA stabil, wait default 12s
+- Quality gate tetap: exit 2 jika blocked/empty
+- UI: wait_seconds 12, pesan gagal Actions lebih jelas
+- Bukan bypass WAF; menyamakan kemampuan capture dengan Worker
