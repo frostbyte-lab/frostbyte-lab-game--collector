@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-15 (P12 SW Proxy asset cache)
+Update terakhir: 2026-08-16 (P1 R2 ZIP besar)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -35,6 +35,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 | P12 | Proxy asset / SW cache | ✅ | SW v2 `/__gc__/` virtual ZIP + mode Preview SW Proxy |
 | KV | Namespace `gc-history` | ✅ | ID `3869a97c9eaf49129a666476fcb672e8` |
 | Deploy | Worker live + binding | ✅ | MYBROWSER, GC_HISTORY, GITHUB_TOKEN |
+| P1-R2 | R2 untuk ZIP besar | ✅ | `COLLECTOR_BUCKET` + `/api/r2/download` + UI handle via:r2 |
 
 ---
 
@@ -56,7 +57,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 ### Tier 4 — Infrastruktur & UX
 | # | Item | Status |
 |---|------|--------|
-| 9 | R2 untuk ZIP besar (>~30MB) | ❌ |
+| 9 | R2 untuk ZIP besar (>~30MB) | ✅ |
 | 10 | Live Viewer + Start/Stop Capture | ❌ |
 | 11 | UI Split View + Workspace repair interaktif | ❌ |
 | 13 | Custom domain | ⚠️ manual Dashboard |
@@ -68,7 +69,7 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 1. ~~Progress collect real~~ ✅
 2. ~~Dependency Analyzer + Path Resolver~~ ✅
 3. ~~Fitur game + Paytable lebih dalam~~ ✅
-4. **R2 ZIP besar** ← next (atau mapping relasi / engine repair)
+4. ~~R2 ZIP besar~~ ✅
 5. Engine-specific repair
 6. Mapping relasi asset
 7. Path rewrite + auto-repair dalam

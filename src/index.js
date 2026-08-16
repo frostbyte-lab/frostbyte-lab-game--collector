@@ -47,10 +47,12 @@ export default {
       return Response.json({
         ok: true,
         service: "game-collector-pro",
-        version: "4.2-no-r2-guard",
+        version: "4.3-r2",
         github: Boolean(env.GITHUB_TOKEN),
         limits: {
-          mode: "worker-small + github-actions-large",
+          mode: env.COLLECTOR_BUCKET
+            ? "worker + r2-large + github-actions-fallback"
+            : "worker-small + github-actions-large",
           maxSingleFileMB: Math.round(MAX_SINGLE_FILE / 1024 / 1024),
           maxRawTotalMB: Math.round(MAX_RAW_TOTAL / 1024 / 1024),
           maxZipResponseMB: Math.round(MAX_ZIP_RESPONSE / 1024 / 1024),
@@ -60,6 +62,33 @@ export default {
         }
       });
     }
+
+    // --- R2 download (Poin 1) — stream ZIP besar dari R2 ---
+    if (request.method === "GET" && url.pathname === "/api/r2/download") {
+      const key = url.searchParams.get("key");
+      if (!key || key.includes("..") || key.startsWith("/")) {
+        return Response.json({ error: "key tidak valid" }, { status: 400 });
+      }
+      if (!env.COLLECTOR_BUCKET) {
+        return Response.json({ error: "R2 belum di-bind (COLLECTOR_BUCKET)" }, { status: 503 });
+      }
+      const obj = await env.COLLECTOR_BUCKET.get(key);
+      if (!obj) {
+        return Response.json({ error: "File tidak ditemukan di R2" }, { status: 404 });
+      }
+      const filename = key.split("/").pop() || "game-package.zip";
+      return new Response(obj.body, {
+        status: 200,
+        headers: {
+          "Content-Type": obj.httpMetadata?.contentType || "application/zip",
+          "Content-Disposition": obj.httpMetadata?.contentDisposition ||
+            `attachment; filename="${filename}"`,
+          "Cache-Control": "private, max-age=3600",
+          "X-GC-Via": "r2"
+        }
+      });
+    }
+
 
     // --- Trigger GitHub Actions collect from web ---
     if (request.method === "POST" && url.pathname === "/api/github/collect") {
@@ -824,9 +853,13 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
       await browser.close();
       browser = null;
 
-      // Guard raw total (tanpa R2) — jika masih jauh di atas batas, minta GitHub Actions
+      // Hitung ukuran raw (masih di memory)
       const rawTotal = sumZipFilesBytes(zipFiles);
-      if (rawTotal > MAX_RAW_TOTAL * 1.15) {
+      const hasR2 = Boolean(env.COLLECTOR_BUCKET);
+
+      // Guard raw total — hanya hard-fail jika TIDAK ada R2
+      // (dengan R2 kita tetap coba packaging, memory tetap batas praktis ~50-60MB)
+      if (!hasR2 && rawTotal > MAX_RAW_TOTAL * 1.15) {
         return tooLargeResponse({
           id,
           totalFiles: manifest.length,
@@ -841,26 +874,19 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
       const zipData = zipSync(zipFiles, { level: 7 });
       const zipKey = `${id}/game-package.zip`;
 
-      // Guard ukuran ZIP response
-      if (zipData.byteLength > MAX_ZIP_RESPONSE) {
-        return tooLargeResponse({
-          id,
-          totalFiles: manifest.length,
-          rawBytes: rawTotal,
-          zipBytes: zipData.byteLength,
-          skippedLargeFiles: sizeState.skippedLarge,
-          stoppedForSize: sizeState.stoppedForSize
-        });
-      }
-
-      // Simpan ke R2 jika bucket sudah di-bind (opsional — bukan syarat)
-      if (env.COLLECTOR_BUCKET) {
-        await env.COLLECTOR_BUCKET.put(zipKey, zipData, {
-          httpMetadata: {
-            contentType: "application/zip",
-            contentDisposition: `attachment; filename="game-package-${id}.zip"`
-          }
-        });
+      // Simpan ke R2 jika bucket sudah di-bind (selalu, baik kecil maupun besar)
+      if (hasR2) {
+        try {
+          await env.COLLECTOR_BUCKET.put(zipKey, zipData, {
+            httpMetadata: {
+              contentType: "application/zip",
+              contentDisposition: `attachment; filename="game-package-${id}.zip"`
+            }
+          });
+        } catch (r2err) {
+          console.error("R2 put failed:", r2err);
+          // Lanjut; kalau ZIP kecil tetap bisa kirim binary
+        }
       }
 
       // History server-side (KV) jika tersedia
@@ -875,39 +901,86 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
             totals: { game: gameCount, api: apiCount, server: serverCount },
             overallScore: analysis?.scores?.overall ?? null,
             stillMissing: (fillReport.stillMissing || []).slice(0, 30),
-            message: resumeSessionId ? `session ${resumeSessionId}` : null
+            message: resumeSessionId ? `session ${resumeSessionId}` : null,
+            via: hasR2 && zipData.byteLength > MAX_ZIP_RESPONSE ? "r2" : "worker"
           });
         }
       } catch {}
 
       await report(100, "done", "Selesai", { files: manifest.length, done: true });
 
-      // ZIP binary langsung (jalur Worker untuk paket kecil/sedang)
+      const commonHeaders = {
+        "X-GC-Ok": "1",
+        "X-GC-Id": id,
+        "X-GC-Progress-Id": progressId,
+        "X-GC-Session-Id": resumeSessionId || "",
+        "X-GC-Still-Missing": String((fillReport.stillMissing || []).length),
+        "X-GC-Files": String(manifest.length),
+        "X-GC-Zip-Size": String(zipData.byteLength),
+        "X-GC-Raw-Bytes": String(rawTotal),
+        "X-GC-Smart-Rewritten": String(smart.rewritten || 0),
+        "X-GC-Smart-Neutralized": String(smart.neutralized || 0),
+        "X-GC-Game-Files": String(gameCount),
+        "X-GC-Api-Files": String(apiCount),
+        "X-GC-Server-Files": String(serverCount),
+        "X-GC-Fill-Found": String(fillReport.missingFound || 0),
+        "X-GC-Fill-Ok": String(fillReport.fetched || 0),
+        "X-GC-Fill-Fail": String(fillReport.failed || 0),
+        "X-GC-Engine": String(analysis?.engine?.engine || "unknown"),
+        "X-GC-Engine-Confidence": String(analysis?.engine?.confidence || "none"),
+        "X-GC-Skipped-Large": String(sizeState.skippedLarge || 0),
+        "X-GC-Size-Capped": sizeState.stoppedForSize ? "1" : "0"
+      };
+
+      // ZIP terlalu besar untuk response Worker → pakai R2 (Poin 1)
+      if (zipData.byteLength > MAX_ZIP_RESPONSE) {
+        if (hasR2) {
+          const downloadUrl = `/api/r2/download?key=${encodeURIComponent(zipKey)}`;
+          return Response.json(
+            {
+              ok: true,
+              via: "r2",
+              id,
+              downloadUrl,
+              zipSize: zipData.byteLength,
+              files: manifest.length,
+              gameFiles: gameCount,
+              apiFiles: apiCount,
+              serverFiles: serverCount,
+              stillMissing: (fillReport.stillMissing || []).length,
+              engine: analysis?.engine?.engine || "unknown",
+              message: `Capture berhasil via R2. ZIP ${(zipData.byteLength / 1024 / 1024).toFixed(1)} MB · game ${gameCount} · api ${apiCount}.`
+            },
+            {
+              status: 200,
+              headers: {
+                ...commonHeaders,
+                "X-GC-Via": "r2",
+                "X-GC-Download-Url": downloadUrl,
+                "X-GC-Message": `Capture berhasil via R2. ZIP ${(zipData.byteLength / 1024 / 1024).toFixed(1)} MB.`
+              }
+            }
+          );
+        }
+        // Tidak ada R2 → fallback lama (GitHub Actions)
+        return tooLargeResponse({
+          id,
+          totalFiles: manifest.length,
+          rawBytes: rawTotal,
+          zipBytes: zipData.byteLength,
+          skippedLargeFiles: sizeState.skippedLarge,
+          stoppedForSize: sizeState.stoppedForSize
+        });
+      }
+
+      // ZIP kecil/sedang → kirim binary langsung (jalur Worker)
       return new Response(zipData, {
         status: 200,
         headers: {
           "Content-Type": "application/zip",
           "Content-Disposition": `attachment; filename="game-package-${id}.zip"`,
-          "X-GC-Ok": "1",
-          "X-GC-Id": id,
-          "X-GC-Progress-Id": progressId,
-          "X-GC-Session-Id": resumeSessionId || "",
-          "X-GC-Still-Missing": String((fillReport.stillMissing || []).length),
-          "X-GC-Files": String(manifest.length),
-          "X-GC-Zip-Size": String(zipData.byteLength),
-          "X-GC-Raw-Bytes": String(rawTotal),
-          "X-GC-Smart-Rewritten": String(smart.rewritten || 0),
-          "X-GC-Smart-Neutralized": String(smart.neutralized || 0),
-          "X-GC-Game-Files": String(gameCount),
-          "X-GC-Api-Files": String(apiCount),
-          "X-GC-Server-Files": String(serverCount),
-          "X-GC-Fill-Found": String(fillReport.missingFound || 0),
-          "X-GC-Fill-Ok": String(fillReport.fetched || 0),
-          "X-GC-Fill-Fail": String(fillReport.failed || 0),
-          "X-GC-Engine": String(analysis?.engine?.engine || "unknown"),
-          "X-GC-Engine-Confidence": String(analysis?.engine?.confidence || "none"),
-          "X-GC-Skipped-Large": String(sizeState.skippedLarge || 0),
-          "X-GC-Size-Capped": sizeState.stoppedForSize ? "1" : "0",
+          ...commonHeaders,
+          "X-GC-Via": hasR2 ? "worker+r2" : "worker",
           "X-GC-Message": `Capture berhasil. ZIP ${Math.round(zipData.byteLength / 1024)} KB · game ${gameCount} · api ${apiCount} · engine ${analysis?.engine?.engine || "unknown"}.`
         }
       });

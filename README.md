@@ -12,7 +12,7 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 ### Prioritas 1 — Fondasi produk (kerjakan dulu)
 | No | Item | Status | Catatan untuk langkah berikutnya |
 |----|------|--------|----------------------------------|
-| 1.1 | **R2 untuk ZIP besar** | ❌ Belum | Aktifkan R2 di Dashboard CF → buat bucket `game-collector-packages` → bind `COLLECTOR_BUCKET` di `wrangler.jsonc` → Worker sudah punya cabang `env.COLLECTOR_BUCKET.put`. Setelah enable, deploy ulang + uji ZIP >30MB. |
+| 1.1 | **R2 untuk ZIP besar** | ✅ Selesai | Bucket `game-collector-packages` + binding `COLLECTOR_BUCKET`. ZIP besar → simpan R2 → return `downloadUrl` (`/api/r2/download`). Frontend auto-unduh. |
 | 1.2 | **History server-side (KV)** | ⚠️ Kode siap; bind KV di Dashboard | Tambah KV namespace `GC_HISTORY`, API `POST/GET /api/history`, ganti `localStorage` di frontend. Schema: `{ id, url, ts, status, files, zipSize, totals }`. |
 | 1.3 | **Progress collect real (stream)** | ⚠️ Estimasi UI saja | Ganti long-request tunggal dengan SSE atau Durable Object status + poll. Frontend `startProgress()` sudah ada; tinggal sumber % dari server. |
 

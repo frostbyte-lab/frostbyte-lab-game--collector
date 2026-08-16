@@ -731,8 +731,64 @@
 
         const ct = (res.headers.get('content-type') || '').toLowerCase();
 
+        // JSON response: bisa error ATAU sukses via R2 (Poin 1)
         if (!res.ok || ct.includes('application/json')) {
           const data = await res.json().catch(() => ({}));
+
+          // === Sukses via R2 (ZIP besar) ===
+          if (res.ok && data.ok && data.via === 'r2' && data.downloadUrl) {
+            stopProgress(true);
+            const id = data.id || res.headers.get('X-GC-Id') || String(Date.now());
+            const files = data.files || res.headers.get('X-GC-Files') || '?';
+            const zipSize = data.zipSize || parseInt(res.headers.get('X-GC-Zip-Size') || '0', 10);
+            const gameFiles = data.gameFiles ?? res.headers.get('X-GC-Game-Files') || '?';
+            const apiFiles = data.apiFiles ?? res.headers.get('X-GC-Api-Files') || '?';
+            const serverFiles = data.serverFiles ?? res.headers.get('X-GC-Server-Files') || '?';
+            const stillMissing = data.stillMissing ?? res.headers.get('X-GC-Still-Missing') || '0';
+            const msg = data.message || res.headers.get('X-GC-Message') || 'Capture berhasil via R2';
+            const sizeMB = (zipSize / 1024 / 1024).toFixed(1);
+            const name = `game-package-${id}.zip`;
+            const elapsed = Math.round((Date.now() - progressStart) / 1000);
+
+            statusEl.className = 'ok';
+            statusEl.textContent = `✓ BERHASIL VIA R2 (${elapsed}s)\n\nID: ${id}\nTotal: ${files}\n  · Game assets/: ${gameFiles}\n  · API server/api/: ${apiFiles}\n  · Server/config: ${serverFiles}\nZIP: ${sizeMB} MB (disimpan di R2)\n\n${msg}\n\nMengunduh ZIP dari R2...`;
+
+            try {
+              const dlRes = await fetch(data.downloadUrl);
+              if (!dlRes.ok) throw new Error('Gagal unduh dari R2: ' + dlRes.status);
+              const blob = await dlRes.blob();
+
+              const a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = name;
+              a.click();
+
+              window.__gc_lastZipBlob = blob;
+              window.__gc_lastZipName = name;
+
+              statusEl.textContent = `✓ BERHASIL VIA R2 (${elapsed}s)\n\nID: ${id}\nTotal: ${files}\n  · Game assets/: ${gameFiles}\n  · API server/api/: ${apiFiles}\n  · Server/config: ${serverFiles}\nZIP: ${sizeMB} MB\n\n${msg}\n\n✓ ZIP diunduh dari R2.\nKlik tombol di bawah untuk Preview.`;
+
+              const btn = document.createElement('button');
+              btn.className = 'btn-success';
+              btn.style.marginTop = '12px';
+              btn.textContent = '▶ Buka di Workspace (Offline)';
+              btn.onclick = () => openLastZipInWorkspace();
+              statusEl.appendChild(document.createElement('br'));
+              statusEl.appendChild(btn);
+
+              addHistory({ url, status: Number(stillMissing) > 0 ? 'ok_partial' : 'ok', id, files, zipSize, elapsed, sessionId: id, via: 'r2' });
+              notifyDone('Collect selesai (R2)', `${files} file · ${sizeMB} MB · ${elapsed}s`);
+            } catch (dlErr) {
+              statusEl.className = 'error';
+              statusEl.textContent = '✓ Collect OK di R2, tapi gagal unduh: ' + dlErr.message +
+                '\n\nCoba buka manual: ' + data.downloadUrl;
+              addHistory({ url, status: 'ok_r2_download_fail', id, files, zipSize, message: dlErr.message });
+            }
+            btnCollect.disabled = false;
+            return;
+          }
+
+          // === Error paths ===
           stopProgress(false);
           if (res.status === 429 || data.error === 'LIMIT_BROWSER') {
             statusEl.className = 'warn';
