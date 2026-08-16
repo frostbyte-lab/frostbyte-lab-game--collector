@@ -138,16 +138,42 @@
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     #status, .log-box {
       white-space: pre-wrap;
-      background: var(--surface2);
+      background: #0a0e0a;
+      color: #b8f5c0;
       border-radius: 10px;
       padding: 12px;
-      font-size: 12px;
-      line-height: 1.5;
+      font-size: 11px;
+      line-height: 1.45;
       min-height: 56px;
-      border: 1px solid var(--border);
-      font-family: ui-monospace, monospace;
+      max-height: min(42vh, 360px);
+      overflow-y: auto;
+      border: 1px solid #1a3d24;
+      font-family: ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
       word-break: break-word;
+      box-shadow: inset 0 0 0 1px rgba(34,197,94,0.08);
     }
+    #status.error, .log-box.error { color: #fca5a5; border-color: #7f1d1d; background: #140a0a; }
+    #status.ok, .log-box.ok { color: #86efac; }
+    #status.warn, .log-box.warn { color: #fde68a; border-color: #78350f; background: #120e08; }
+    #ws-process {
+      display: none;
+      margin: 10px 0;
+      white-space: pre-wrap;
+      background: #0a0e0a;
+      color: #b8f5c0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 11px;
+      line-height: 1.45;
+      min-height: 48px;
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid #1a3d24;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    #ws-process.active { display: block; }
+    #ws-process.err { color: #fca5a5; border-color: #7f1d1d; }
+    #ws-process.ok { color: #86efac; }
     .error { color: var(--danger); }
     .ok { color: var(--success); }
     .warn { color: var(--warn); }
@@ -645,6 +671,8 @@
           <button class="btn-secondary split-toggle" type="button" id="btn-split-view" onclick="toggleSplitView()">◫ Split View</button>
         </div>
 
+        <div id="ws-process" class="active">$ workspace ready · pilih ZIP lalu Load</div>
+
         <div class="preview-toolbar" id="preview-toolbar">
           <button class="btn-success" onclick="startPreview('sandbox')">▶ Sandbox</button>
           <button class="btn-secondary" onclick="startPreview('protected')">🛡 Protected</button>
@@ -768,6 +796,32 @@
       }
       try { console.log('[GC]', msg); } catch {}
     }
+
+    function termTs() {
+      const d = new Date();
+      return d.toTimeString().slice(0, 8);
+    }
+    function wsProc(msg, kind) {
+      const el = document.getElementById('ws-process');
+      if (!el) return;
+      el.classList.add('active');
+      el.classList.remove('err', 'ok');
+      if (kind === 'err') el.classList.add('err');
+      if (kind === 'ok') el.classList.add('ok');
+      const line = '[' + termTs() + '] ' + msg;
+      const prev = el.textContent || '';
+      const keep = prev.split('\n').filter(Boolean).slice(-40);
+      keep.push(line);
+      el.textContent = keep.join('\n');
+      el.scrollTop = el.scrollHeight;
+      log(msg);
+    }
+    function appendStatus(msg) {
+      if (!statusEl) return;
+      statusEl.textContent = (statusEl.textContent ? statusEl.textContent + '\n' : '') + '[' + termTs() + '] ' + msg;
+      try { statusEl.scrollTop = statusEl.scrollHeight; } catch {}
+    }
+
     let zipFS = null;
 
     // ========== NAV ==========
@@ -1290,33 +1344,30 @@
 
     function formatGitHubDetail(data, runId, elapsedSec) {
       const lines = [];
-      lines.push('GitHub Actions — detail proses');
-      lines.push('Run ID: ' + runId);
-      lines.push('Status run: ' + (data.status || '-') + (data.conclusion ? ' / ' + data.conclusion : ''));
-      lines.push('Waktu: ' + elapsedSec + 's');
+      lines.push('$ gh-actions · run ' + runId);
+      lines.push('$ status  ' + (data.status || '-') + (data.conclusion ? ' → ' + data.conclusion : ''));
+      lines.push('$ elapsed ' + elapsedSec + 's');
+      lines.push('$ phase   ' + (data.phase || 'waiting...'));
+      if (data.current_step) lines.push('$ step    ' + data.current_step);
       lines.push('');
-      lines.push('Fase: ' + (data.phase || 'Memuat status...'));
-      if (data.current_step) lines.push('Step aktif: ' + data.current_step);
-      lines.push('');
-      lines.push('Langkah yang dijalankan:');
+      lines.push('# pipeline');
       const jobs = data.jobs || [];
       if (!jobs.length) {
-        lines.push('  (menunggu job runner...)');
+        lines.push('  … waiting for runner');
       } else {
         for (const job of jobs) {
-          lines.push('• Job: ' + job.name + ' [' + job.status + (job.conclusion ? '/' + job.conclusion : '') + ']');
+          lines.push('  job:' + job.name + ' [' + job.status + (job.conclusion ? '/' + job.conclusion : '') + ']');
           for (const s of (job.steps || [])) {
             const icon = stepIcon(s.status, s.conclusion);
-            lines.push('    ' + icon + ' ' + s.name + (s.status === 'in_progress' ? '  ← sedang' : ''));
+            const mark = s.status === 'in_progress' ? ' ◀' : '';
+            lines.push('    ' + icon + ' ' + s.name + mark);
           }
         }
       }
       lines.push('');
-      lines.push('Yang diambil saat Capture:');
-      lines.push('  HTML halaman, JS, CSS, gambar, audio/font,');
-      lines.push('  data XHR/fetch (snapshot), auto-click Play,');
-      lines.push('  path rewrite, lalu dikemas ZIP artifact.');
-      if (data.artifact) {
+      lines.push('# capture: html js css img audio xhr · auto-click · rewrite');
+      lines.push('');
+if (data.artifact) {
         lines.push('');
         lines.push('Artifact: ' + data.artifact.name + ' (' + Math.round((data.artifact.size || 0) / 1024) + ' KB)');
       }
@@ -1361,7 +1412,7 @@
         } catch (e) {
           // ignore transient network
         }
-      }, 4000);
+      }, 2000);
     }
 
 async function downloadGitHubArtifact(artifactId, runId) {
@@ -1561,29 +1612,35 @@ async function downloadGitHubArtifact(artifactId, runId) {
     async function loadZip() {
       const input = document.getElementById('zip-input');
       if (!input.files || !input.files[0]) {
-        log('Pilih file ZIP dulu');
+        wsProc('error: pilih file ZIP dulu', 'err');
         return;
       }
       const terminal = document.getElementById('terminal');
       if (terminal) terminal.textContent = '';
-      log('Membaca ZIP: ' + input.files[0].name);
+      const f = input.files[0];
+      wsProc('$ load ' + f.name + ' (' + Math.round(f.size/1024) + ' KB)');
+      wsProc('… reading arrayBuffer');
       try {
-        const buf = await input.files[0].arrayBuffer();
+        const buf = await f.arrayBuffer();
+        wsProc('✓ buffer ' + Math.round(buf.byteLength/1024) + ' KB');
         zipFSOriginal = null;
         const diffBox = document.getElementById('repair-diff');
         if (diffBox) { diffBox.classList.remove('active'); diffBox.innerHTML = ''; }
         const cbox = document.getElementById('completeness-box');
         if (cbox) { cbox.classList.remove('active'); cbox.innerHTML = ''; }
 
+        wsProc('… extract JSZip + nested zip check');
         const paths = await loadZipFromBuffer(buf);
-        if (!paths.length) throw new Error('ZIP kosong');
+        if (!paths.length) throw new Error('ZIP kosong (0 file)');
+        wsProc('✓ extracted ' + paths.length + ' files');
 
         const hasIndex = paths.some(p => /index\.html?$/i.test(p.split('/').pop()));
+        wsProc(hasIndex ? '✓ index.html found' : '⚠ index.html NOT found');
         renderFileTree();
         document.getElementById('preview-toolbar').classList.add('active');
 
-        // Cache ZIP ke SW (background) untuk mode SW Proxy
-        pushZipToSW(true).catch(() => {});
+        wsProc('… push assets to Service Worker (bg)');
+        pushZipToSW(true).catch((e) => wsProc('SW cache skip: ' + (e.message||e), 'err'));
         document.getElementById('btn-repair').disabled = false;
         document.getElementById('btn-repack').disabled = false;
         const brs = document.getElementById('btn-repair-split'); if (brs) brs.disabled = false;
@@ -1607,14 +1664,29 @@ async function downloadGitHubArtifact(artifactId, runId) {
         } catch {}
         if (collectFailed || indexBlocked) {
           const why = collectFailed?.message || (indexBlocked ? 'index.html = 403 Forbidden (situs memblokir collect)' : 'paket tidak usable');
-          log('⚠ PAKET GAGAL: ' + why);
+          wsProc('✗ PAKET GAGAL: ' + why, 'err');
           const st = document.getElementById('preview-status');
           if (st) { st.textContent = 'Paket gagal'; st.className = 'badge badge-err'; }
           alert('ZIP ini bukan game yang bisa di-preview.\n\n' + why + '\n\nCollect ulang ke target yang tidak memblokir, atau gunakan Hybrid hanya jika ada asset.');
         }
 
-        log('ZIP loaded · ' + paths.length + ' file' + (hasIndex ? '' : ' · peringatan: index.html tidak ketemu'));
+        wsProc('✓ ZIP ready · ' + paths.length + ' file' + (hasIndex ? '' : ' · NO index.html'), hasIndex ? 'ok' : 'err');
+        wsProc('→ pilih mode Preview (Sandbox/Hybrid/SW) atau Auto Repair');
         analyzeCompleteness();
+        try {
+          const n = Object.keys(zipFS||{}).length;
+          const js = n && Object.keys(zipFS).filter(p => /\.js$/i.test(p)).length;
+          const img = n && Object.keys(zipFS).filter(p => /\.(png|jpe?g|webp|gif|svg)$/i.test(p)).length;
+          wsProc('analyze · files=' + n + ' js=' + js + ' img=' + img);
+          if (zipFS['kelengkapan.json']) wsProc('✓ kelengkapan.json present');
+          if (zipFS['dependency.json']) {
+            try {
+              const d = JSON.parse(new TextDecoder().decode(zipFS['dependency.json']));
+              wsProc('deps · resolved=' + (d.resolved||'?') + ' missing=' + (d.missing||d.missingUnique?.length||0));
+            } catch {}
+          }
+          if (zipFS['COLLECT_FAILED.json']) wsProc('⚠ this package marked COLLECT_FAILED', 'err');
+        } catch {}
         document.getElementById('preview-status').textContent = hasIndex ? 'ZIP Ready' : 'No index';
         document.getElementById('preview-status').className = hasIndex ? 'badge badge-ok' : 'badge badge-warn';
         try {
@@ -1624,7 +1696,7 @@ async function downloadGitHubArtifact(artifactId, runId) {
           if (saved.model) document.getElementById('ai-model').value = saved.model;
         } catch {}
       } catch (e) {
-        log('Gagal load ZIP: ' + e.message);
+        wsProc('✗ Gagal load ZIP: ' + e.message, 'err');
         const statusBadge = document.getElementById('preview-status');
         if (statusBadge) {
           statusBadge.textContent = 'Error';
@@ -2116,7 +2188,8 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
       if (toolbar) toolbar.classList.add('active');
 
       try {
-        log('Preview: ' + mode);
+        wsProc('$ preview mode=' + mode);
+        wsProc('… build HTML + resolve assets');
         statusBadge.textContent = 'Loading...';
         statusBadge.className = 'badge badge-warn';
 
@@ -2166,6 +2239,7 @@ window.__GC_MODE=${JSON.stringify(isOnline ? 'online' : 'offline')};
           statusBadge.className = 'badge badge-err';
         };
       } catch (e) {
+        wsProc('✗ Preview gagal: ' + (e.message || e), 'err');
         log('Preview error: ' + (e && e.message ? e.message : e));
         statusBadge.textContent = 'Error';
         statusBadge.className = 'badge badge-err';
@@ -2883,7 +2957,7 @@ let zipFSOriginal = null; // snapshot sebelum repair
 
     function runAutoRepair() {
       if (!zipFS) return;
-      log('Auto Repair dalam dimulai...');
+      wsProc('$ auto-repair deep …');
       if (!zipFSOriginal) {
         zipFSOriginal = {};
         for (const [p, d] of Object.entries(zipFS)) {
