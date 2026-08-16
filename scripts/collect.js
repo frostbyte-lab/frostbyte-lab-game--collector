@@ -195,6 +195,14 @@ async function main() {
   let html = await page.content();
   zipFiles["index.html"] = strToU8(html);
 
+  const htmlLower = html.toLowerCase();
+  const blockedPage =
+    /\b403\s*forbidden\b/i.test(html) ||
+    /request forbidden by administrative rules/i.test(html) ||
+    /\b401\s*unauthorized\b/i.test(html) ||
+    (/\bcaptcha\b/i.test(htmlLower) && /challenge|verify you are human|cloudflare/i.test(htmlLower));
+
+
   // Smart offline packaging
   const smart = smartPackage(zipFiles, resources);
 
@@ -218,6 +226,29 @@ Atau load di Workspace Game Collector Pro.
 `);
 
   await browser.close();
+
+  // Quality gate: jangan anggap sukses jika kosong / diblokir
+  if (blockedPage || resources.length === 0) {
+    const reason = blockedPage ? "TARGET_BLOCKED" : "EMPTY_PACKAGE";
+    const message = blockedPage
+      ? "Situs memblokir akses (403/challenge). 0 asset usable."
+      : "0 resource tertangkap. Paket tidak usable.";
+    zipFiles["COLLECT_FAILED.json"] = strToU8(JSON.stringify({
+      ok: false,
+      reason,
+      message,
+      target: TARGET_URL,
+      totalFiles: resources.length,
+      at: new Date().toISOString()
+    }, null, 2));
+    if (!existsSync("output")) mkdirSync("output");
+    const failName = `game-resources-FAILED-${Date.now()}.zip`;
+    writeFileSync(join("output", failName), zipSync(zipFiles, { level: 6 }));
+    console.error("PROGRESS: failed", reason);
+    console.error(message);
+    console.error("ZIP (gagal):", failName);
+    process.exit(2);
+  }
 
   // Buat ZIP
   const zipped = zipSync(zipFiles, { level: 6 });

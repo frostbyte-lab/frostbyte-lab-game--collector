@@ -12,6 +12,7 @@ import { buildKeterangan } from "./package/keterangan.js";
 import { smartPackage } from "./package/smart-rewrite.js";
 import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
+import { mapAssetRelations } from "./analyze/relations.js";
 import { fillMissingAssets } from "./collect/fill-missing.js";
 import { ghFetch } from "./collect/github.js";
 import {
@@ -44,6 +45,39 @@ import {
 const GH_OWNER = "frostbyte-lab";
 const GH_REPO = "frostbyte-lab-game--collector";
 const GH_WORKFLOW = "collect.yml";
+
+
+/** Deteksi paket collect tidak usable (kosong / halaman blokir) */
+function detectCollectFailure(html, manifest, gameCount) {
+  const h = String(html || "");
+  const hl = h.toLowerCase();
+  const blocked =
+    /\b403\s*forbidden\b/i.test(h) ||
+    /request forbidden by administrative rules/i.test(h) ||
+    /\b401\s*unauthorized\b/i.test(h) ||
+    /\baccess denied\b/i.test(h) ||
+    /\bcaptcha\b/i.test(hl) && /\b(challenge|verify|robot|cloudflare)\b/i.test(hl) ||
+    /attention required|enable javascript and cookies/i.test(hl) ||
+    /just a moment/i.test(hl) && /cloudflare/i.test(hl);
+  const empty = !manifest || manifest.length === 0 || (gameCount !== undefined && gameCount === 0 && (manifest.length || 0) < 3);
+  // index only meta without real assets
+  const onlyShell = (manifest || []).length === 0 && h.length < 500;
+  let reason = null;
+  if (blocked) reason = "TARGET_BLOCKED";
+  else if (empty || onlyShell) reason = "EMPTY_PACKAGE";
+  return {
+    failed: Boolean(reason),
+    reason,
+    blocked: Boolean(blocked),
+    empty: Boolean(empty || onlyShell),
+    message:
+      reason === "TARGET_BLOCKED"
+        ? "Situs memblokir akses collect (403/challenge). Tidak ada asset game yang bisa diambil."
+        : reason === "EMPTY_PACKAGE"
+          ? "Collect selesai tapi 0 asset game. Paket tidak usable untuk preview offline."
+          : null
+  };
+}
 
 export default {
   async fetch(request, env) {
@@ -982,6 +1016,74 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
           });
         }
       } catch {}
+
+
+      // QUALITY_GATE_APPLIED — jangan klaim sukses jika paket kosong / halaman diblokir
+      const quality = detectCollectFailure(html, manifest, gameCount);
+      if (quality.failed) {
+        try {
+          zipFiles["COLLECT_FAILED.json"] = strToU8(JSON.stringify({
+            ok: false,
+            reason: quality.reason,
+            message: quality.message,
+            target: target.href,
+            files: manifest.length,
+            gameFiles: gameCount,
+            apiFiles: apiCount,
+            serverFiles: serverCount,
+            at: new Date().toISOString()
+          }, null, 2));
+        } catch {}
+        await report(100, "failed", quality.message || "Collect gagal (paket tidak usable)", {
+          files: manifest.length,
+          done: true,
+          failed: true,
+          reason: quality.reason
+        });
+        try {
+          if (hasKV(env)) {
+            await putHistory(env, {
+              id,
+              url: target.href,
+              status: quality.reason === "TARGET_BLOCKED" ? "blocked" : "empty",
+              files: manifest.length,
+              zipSize: 0,
+              totals: { game: gameCount, api: apiCount, server: serverCount },
+              message: quality.message
+            });
+          }
+        } catch {}
+        try { if (browser) await browser.close(); } catch {}
+        return Response.json(
+          {
+            ok: false,
+            error: quality.reason,
+            code: quality.reason,
+            message: quality.message,
+            id,
+            files: manifest.length,
+            gameFiles: gameCount,
+            apiFiles: apiCount,
+            serverFiles: serverCount,
+            suggest: quality.reason === "TARGET_BLOCKED"
+              ? "Situs menolak bot/datacenter. Coba Collect via GitHub (IP beda) atau target yang tidak memblokir. Offline penuh tidak dijamin untuk slot server-side."
+              : "Tidak ada asset game. Pastikan URL langsung ke halaman game (bukan landing) dan tunggu resource termuat."
+          },
+          {
+            status: 422,
+            headers: {
+              "X-GC-Ok": "0",
+              "X-GC-Error": quality.reason,
+              "X-GC-Id": id,
+              "X-GC-Files": String(manifest.length),
+              "X-GC-Game-Files": String(gameCount),
+              "X-GC-Api-Files": String(apiCount),
+              "X-GC-Server-Files": String(serverCount),
+              "X-GC-Message": quality.message || "Collect gagal"
+            }
+          }
+        );
+      }
 
       await report(100, "done", "Selesai", { files: manifest.length, done: true });
 

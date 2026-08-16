@@ -1,6 +1,6 @@
 # Progress — Game Collector Pro
 
-Update terakhir: 2026-08-16 (UI Split View + Workspace repair interaktif)
+Update terakhir: 2026-08-16 (P0: quality gate kosong/403 + fix mapAssetRelations)
 
 Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector  
 Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
@@ -166,3 +166,11 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - Mode classic (sidebar) tetap ada saat Split View OFF
 - Helper `esc()` + `log()` dilengkapi (sebelumnya dipakai tapi belum terdefinisi di bundle UI)
 
+## Catatan teknis P0 — Quality gate + relations fix (2026-08-16)
+
+- Import mapAssetRelations di src/index.js (sebelumnya ReferenceError)
+- detectCollectFailure: 403/blocked/empty -> HTTP 422, X-GC-Ok: 0, history status blocked/empty
+- UI: tampilkan COLLECT GAGAL, jangan tombol Preview seolah sukses
+- loadZip: deteksi COLLECT_FAILED.json / index 403
+- scripts/collect.js: exit 2 jika blocked atau 0 resource
+- Bukan bypass WAF/403 situs pihak ketiga — hanya deteksi + gagal jujur

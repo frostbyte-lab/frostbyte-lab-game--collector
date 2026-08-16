@@ -1049,6 +1049,32 @@
         if (!res.ok || ct.includes('application/json')) {
           const data = await res.json().catch(() => ({}));
 
+          // === Gagal kualitas: kosong / diblokir (422) ===
+          if (data.error === 'TARGET_BLOCKED' || data.code === 'TARGET_BLOCKED' ||
+              data.error === 'EMPTY_PACKAGE' || data.code === 'EMPTY_PACKAGE' ||
+              res.status === 422) {
+            stopProgress(false);
+            statusEl.className = 'error';
+            const reason = data.error || data.code || 'COLLECT_FAILED';
+            statusEl.textContent =
+              '✗ COLLECT GAGAL — paket tidak usable\n\n' +
+              'Alasan: ' + reason + '\n' +
+              (data.message || '') + '\n\n' +
+              'Game files: ' + (data.gameFiles ?? res.headers.get('X-GC-Game-Files') ?? '?') + '\n' +
+              'Total files: ' + (data.files ?? res.headers.get('X-GC-Files') ?? '?') + '\n\n' +
+              (data.suggest || 'Coba URL game yang tidak memblokir bot, atau Collect via GitHub (IP berbeda). Offline penuh tidak dijamin untuk slot yang logic-nya di server.');
+            addHistory({
+              url,
+              status: reason === 'TARGET_BLOCKED' ? 'blocked' : 'empty',
+              files: data.files || 0,
+              message: data.message || reason
+            });
+            notifyDone('Collect gagal', reason);
+            btnCollect.disabled = false;
+            setStopButtonVisible(false);
+            return;
+          }
+
           // === Sukses via R2 (ZIP besar) ===
           if (res.ok && data.ok && data.via === 'r2' && data.downloadUrl) {
             stopProgress(true);
@@ -1553,6 +1579,28 @@ async function downloadGitHubArtifact(artifactId, runId) {
         document.getElementById('btn-ai').disabled = false;
         document.getElementById('btn-ai-fix').disabled = false;
         resetEditorState();
+        // Deteksi paket gagal / 403 dari isi ZIP
+        let collectFailed = null;
+        try {
+          if (zipFS['COLLECT_FAILED.json']) {
+            collectFailed = JSON.parse(new TextDecoder().decode(zipFS['COLLECT_FAILED.json']));
+          }
+        } catch {}
+        let indexBlocked = false;
+        try {
+          if (zipFS['index.html']) {
+            const ih = new TextDecoder().decode(zipFS['index.html']).slice(0, 2000);
+            if (/403\s*Forbidden|Request forbidden by administrative rules/i.test(ih)) indexBlocked = true;
+          }
+        } catch {}
+        if (collectFailed || indexBlocked) {
+          const why = collectFailed?.message || (indexBlocked ? 'index.html = 403 Forbidden (situs memblokir collect)' : 'paket tidak usable');
+          log('⚠ PAKET GAGAL: ' + why);
+          const st = document.getElementById('preview-status');
+          if (st) { st.textContent = 'Paket gagal'; st.className = 'badge badge-err'; }
+          alert('ZIP ini bukan game yang bisa di-preview.\n\n' + why + '\n\nCollect ulang ke target yang tidak memblokir, atau gunakan Hybrid hanya jika ada asset.');
+        }
+
         log('ZIP loaded · ' + paths.length + ' file' + (hasIndex ? '' : ' · peringatan: index.html tidak ketemu'));
         analyzeCompleteness();
         document.getElementById('preview-status').textContent = hasIndex ? 'ZIP Ready' : 'No index';
