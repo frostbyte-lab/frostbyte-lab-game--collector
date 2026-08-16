@@ -48,10 +48,11 @@ const GH_WORKFLOW = "collect.yml";
 
 
 /** Deteksi paket collect tidak usable (kosong / halaman blokir) */
-function detectCollectFailure(html, manifest, gameCount) {
+function detectCollectFailure(html, manifest, gameCount, mainDocStatus = 0) {
   const h = String(html || "");
   const hl = h.toLowerCase();
   const blocked =
+    (Number(mainDocStatus) >= 400) ||
     /\b403\s*forbidden\b/i.test(h) ||
     /request forbidden by administrative rules/i.test(h) ||
     /\b401\s*unauthorized\b/i.test(h) ||
@@ -620,7 +621,36 @@ export default {
       });
 
       // Navigate
-      await page.goto(target.href, { waitUntil: "domcontentloaded", timeout: 40000 });
+            // Navigate + catat status dokumen utama (struktur blokir)
+      let mainDocStatus = 0;
+      let mainDocUrl = target.href;
+      try {
+        const nav = await page.goto(target.href, { waitUntil: "domcontentloaded", timeout: 40000 });
+        if (nav) {
+          mainDocStatus = nav.status();
+          mainDocUrl = nav.url() || target.href;
+        }
+      } catch (navErr) {
+        // Coba sekali lagi tanpa hash fragment (kadang landing vs demo path)
+        const bare = target.href.split("#")[0];
+        if (bare && bare !== target.href) {
+          const nav2 = await page.goto(bare, { waitUntil: "domcontentloaded", timeout: 40000 });
+          if (nav2) {
+            mainDocStatus = nav2.status();
+            mainDocUrl = nav2.url() || bare;
+          }
+        } else {
+          throw navErr;
+        }
+      }
+      // Jika dokumen utama 401/403/451, tetap lanjut capture sebentar lalu quality gate yang menolak
+      if (mainDocStatus >= 400) {
+        await report(25, "blocked_doc", "Dokumen utama HTTP " + mainDocStatus + " — struktur diblokir", {
+          files: manifest.length,
+          mainDocStatus,
+          mainDocUrl
+        });
+      }
       {
         const shot = await snap(page);
         await report(22, "loaded", "Halaman termuat, capture network...", { screenshot: shot, files: manifest.length });
@@ -1019,7 +1049,7 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
 
 
       // QUALITY_GATE_APPLIED — jangan klaim sukses jika paket kosong / halaman diblokir
-      const quality = detectCollectFailure(html, manifest, gameCount);
+      const quality = detectCollectFailure(html, manifest, gameCount, typeof mainDocStatus === "number" ? mainDocStatus : 0);
       if (quality.failed) {
         try {
           zipFiles["COLLECT_FAILED.json"] = strToU8(JSON.stringify({

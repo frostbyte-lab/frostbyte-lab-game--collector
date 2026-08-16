@@ -1056,22 +1056,29 @@
             stopProgress(false);
             statusEl.className = 'error';
             const reason = data.error || data.code || 'COLLECT_FAILED';
+            const isBlocked = reason === 'TARGET_BLOCKED';
             statusEl.textContent =
               '✗ COLLECT GAGAL — paket tidak usable\n\n' +
               'Alasan: ' + reason + '\n' +
               (data.message || '') + '\n\n' +
               'Game files: ' + (data.gameFiles ?? res.headers.get('X-GC-Game-Files') ?? '?') + '\n' +
               'Total files: ' + (data.files ?? res.headers.get('X-GC-Files') ?? '?') + '\n\n' +
-              (data.suggest || 'Coba URL game yang tidak memblokir bot, atau Collect via GitHub (IP berbeda). Offline penuh tidak dijamin untuk slot yang logic-nya di server.');
+              (isBlocked
+                ? 'Struktur: halaman utama diblokir (403/challenge), hampir tidak ada asset tertangkap.\nMencoba jalur alternatif: Collect via GitHub (IP/server berbeda)...'
+                : (data.suggest || 'Tidak ada asset game. Coba URL langsung ke canvas game, bukan landing.'));
             addHistory({
               url,
-              status: reason === 'TARGET_BLOCKED' ? 'blocked' : 'empty',
+              status: isBlocked ? 'blocked' : 'empty',
               files: data.files || 0,
               message: data.message || reason
             });
             notifyDone('Collect gagal', reason);
-            btnCollect.disabled = false;
             setStopButtonVisible(false);
+            if (isBlocked) {
+              setTimeout(() => runGitHubCollect({ reason: 'TARGET_BLOCKED', auto: true }), 700);
+              return;
+            }
+            btnCollect.disabled = false;
             return;
           }
 
@@ -1238,7 +1245,9 @@
         ? 'Paket terlalu besar untuk Worker — dialihkan ke GitHub (tanpa R2).'
         : (opts.reason === 'LIMIT_BROWSER'
           ? 'Limit browser Cloudflare — dialihkan ke GitHub.'
-          : 'Memicu GitHub Actions...');
+          : (opts.reason === 'TARGET_BLOCKED'
+            ? 'Worker kena 403/blok — coba GitHub Actions (IP/server beda). Bukan jaminan tembus WAF.'
+            : 'Memicu GitHub Actions...'));
       statusEl.textContent = (opts.auto ? '↻ Auto-failover\n' : '') + why +
         '\nTidak perlu buka GitHub manual. Menunggu artifact...';
 
