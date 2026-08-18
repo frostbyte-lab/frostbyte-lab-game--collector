@@ -1713,6 +1713,7 @@
     }
 
     // ========== Collect via Cloudflare (Playwright) ==========
+    // Semua status & unduhan tetap di web ini — tidak buka tab GitHub.
     async function runCollect() {
       const urlInput = document.getElementById('url');
       const statusEl = document.getElementById('status');
@@ -1730,11 +1731,24 @@
       statusEl.textContent = 'Status: Collecting (Cloudflare)...';
       try {
         const progressId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        // Optional: poll progress di web
+        const progressTimer = setInterval(async () => {
+          try {
+            const pr = await fetch('/api/progress?id=' + encodeURIComponent(progressId));
+            const pd = await pr.json();
+            if (pd && (pd.label || pd.phase)) {
+              statusEl.textContent = 'Status: ' + (pd.phase || '') + (pd.label ? ' — ' + pd.label : '') + (pd.pct != null ? ' (' + pd.pct + '%)' : '');
+            }
+            if (pd && pd.done) clearInterval(progressTimer);
+          } catch (_) {}
+        }, 800);
+
         const res = await fetch('/api/collect', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: gameUrl, progressId })
         });
+        clearInterval(progressTimer);
 
         if (!res.ok) {
           let errMsg = res.statusText;
@@ -1743,7 +1757,6 @@
             errMsg = err.error || err.message || errMsg;
           } catch (_) {}
           statusEl.textContent = 'Status: Gagal — ' + errMsg;
-          alert('Collect gagal: ' + errMsg);
           return;
         }
 
@@ -1757,21 +1770,38 @@
           a.click();
           a.remove();
           URL.revokeObjectURL(a.href);
-          statusEl.textContent = 'Status: Selesai — ZIP diunduh';
+          statusEl.textContent = 'Status: Selesai — ZIP diunduh (tetap di web ini)';
           return;
         }
 
+        // JSON response (mis. too large → failover GitHub, atau R2 link)
         const data = await res.json();
-        statusEl.textContent = 'Status: ' + (data.message || JSON.stringify(data).slice(0, 80));
-        if (data.downloadUrl) window.open(data.downloadUrl, '_blank');
-        if (data.run_url) window.open(data.run_url, '_blank');
+        if (data.downloadUrl) {
+          statusEl.textContent = 'Status: Mengunduh ZIP...';
+          const a = document.createElement('a');
+          a.href = data.downloadUrl;
+          a.download = 'game-package.zip';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          statusEl.textContent = 'Status: Selesai — ZIP diunduh';
+          return;
+        }
+        // Failover ke GitHub dari server — lanjut poll di web ini
+        if (data.run_id) {
+          statusEl.textContent = 'Status: Paket besar → lanjut via GitHub (tetap di web)...';
+          pollGitHubStatus(data.run_id);
+          return;
+        }
+        statusEl.textContent = 'Status: ' + (data.message || 'Selesai');
       } catch (e) {
         statusEl.textContent = 'Status: Error — ' + e.message;
-        alert('Error: ' + e.message);
       }
     }
 
-    // ========== Collect via GitHub Actions ==========
+    // ========== Collect via GitHub Actions (semua di web, tanpa buka GitHub) ==========
+    let _ghPollTimer = null;
+
     async function runGitHubCollect() {
       const urlInput = document.getElementById('url');
       const statusEl = document.getElementById('status');
@@ -1786,7 +1816,12 @@
         return;
       }
 
-      statusEl.textContent = 'Status: Trigger GitHub Actions...';
+      if (_ghPollTimer) {
+        clearInterval(_ghPollTimer);
+        _ghPollTimer = null;
+      }
+
+      statusEl.textContent = 'Status: Memulai Collect via GitHub...';
 
       try {
         const res = await fetch('/api/github/collect', {
@@ -1799,57 +1834,70 @@
         if (!res.ok || !data.ok) {
           const msg = data.error || (data.detail && JSON.stringify(data.detail)) || res.status;
           statusEl.textContent = 'Status: Gagal trigger — ' + msg;
-          alert('Gagal trigger GitHub Actions:\n' + msg);
           return;
         }
 
-        statusEl.textContent = 'Status: GitHub Actions dimulai' + (data.run_id ? ' (run #' + data.run_id + ')' : '');
-        if (data.run_url) window.open(data.run_url, '_blank');
-
+        // TIDAK buka window.open ke GitHub — semua status di web
+        statusEl.textContent = 'Status: queued — Menunggu runner GitHub...';
         if (data.run_id) {
           pollGitHubStatus(data.run_id);
         } else {
-          statusEl.textContent += ' — cek manual di GitHub Actions';
+          statusEl.textContent = 'Status: Trigger OK tapi run_id belum siap. Coba lagi beberapa detik.';
         }
       } catch (e) {
         statusEl.textContent = 'Status: Error — ' + e.message;
-        alert('Error: ' + e.message);
       }
     }
 
     async function pollGitHubStatus(runId) {
       const statusEl = document.getElementById('status');
       let tries = 0;
-      const maxTries = 48; // ~4 menit @ 5s
+      const maxTries = 60; // ~5 menit @ 5s
 
-      const timer = setInterval(async () => {
+      if (_ghPollTimer) clearInterval(_ghPollTimer);
+
+      _ghPollTimer = setInterval(async () => {
         tries++;
         try {
           const res = await fetch('/api/github/status?run_id=' + encodeURIComponent(runId));
           const data = await res.json();
           if (!data.ok) {
-            statusEl.textContent = 'Status: Gagal cek status run';
-            clearInterval(timer);
+            statusEl.textContent = 'Status: Gagal cek status';
+            clearInterval(_ghPollTimer);
+            _ghPollTimer = null;
             return;
           }
 
-          const phase = data.phase || data.current_step || data.status || '';
-          statusEl.textContent = 'Status: ' + data.status + (phase ? ' — ' + phase : '');
+          const phase = data.phase || data.current_step || '';
+          const label = phase || data.status || '';
+          statusEl.textContent = 'Status: ' + data.status + (label ? ' — ' + label : '');
 
           if (data.status === 'completed') {
-            clearInterval(timer);
+            clearInterval(_ghPollTimer);
+            _ghPollTimer = null;
+
             if (data.conclusion === 'success' && data.artifact && data.artifact.id) {
-              statusEl.textContent = 'Status: Selesai! Mengunduh artifact ZIP...';
-              const a = document.createElement('a');
-              a.href = '/api/github/artifact?artifact_id=' + encodeURIComponent(data.artifact.id);
-              a.download = 'game-resources.zip';
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-              statusEl.textContent = 'Status: ZIP artifact siap diunduh';
+              statusEl.textContent = 'Status: Selesai — mengunduh ZIP...';
+              try {
+                const zipRes = await fetch('/api/github/artifact?artifact_id=' + encodeURIComponent(data.artifact.id));
+                if (!zipRes.ok) {
+                  statusEl.textContent = 'Status: Selesai tapi gagal unduh artifact (' + zipRes.status + ')';
+                  return;
+                }
+                const blob = await zipRes.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'game-resources.zip';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(a.href);
+                statusEl.textContent = 'Status: Selesai — ZIP diunduh (tetap di web ini)';
+              } catch (dlErr) {
+                statusEl.textContent = 'Status: Selesai tapi unduh gagal — ' + dlErr.message;
+              }
             } else {
-              statusEl.textContent = 'Status: Selesai (conclusion: ' + (data.conclusion || '?') + ')';
-              if (data.html_url) window.open(data.html_url, '_blank');
+              statusEl.textContent = 'Status: Selesai (conclusion: ' + (data.conclusion || '?') + ') — tidak ada artifact';
             }
           }
         } catch (e) {
@@ -1857,13 +1905,18 @@
         }
 
         if (tries >= maxTries) {
-          clearInterval(timer);
-          statusEl.textContent += ' (timeout, cek manual di GitHub Actions)';
+          clearInterval(_ghPollTimer);
+          _ghPollTimer = null;
+          statusEl.textContent += ' (timeout — proses terlalu lama)';
         }
       }, 5000);
     }
 
     function clearStatus() {
+      if (_ghPollTimer) {
+        clearInterval(_ghPollTimer);
+        _ghPollTimer = null;
+      }
       const el = document.getElementById('status');
       if (el) el.textContent = 'Status: Ready';
     }
