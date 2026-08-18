@@ -339,17 +339,46 @@
     .file-panel-footer {
       flex: 0 0 auto;
       display: flex;
+      flex-direction: column;
       gap: 6px;
       padding: 8px;
-      border-top: 1px solid var(--border);
-      background: var(--surface-alt);
+      border-top: 1px solid #1e1e1e;
+      background: #2d2d2d;
     }
-    .file-panel-footer .btn {
+    .file-panel-footer-row {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+    }
+    .file-panel-footer-row .btn {
       flex: 1 1 0;
       justify-content: center;
       min-width: 0;
       font-size: 11px !important;
-      padding: 6px 8px !important;
+      padding: 7px 6px !important;
+    }
+    .fb-labb-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .fb-labb-name {
+      margin: 0;
+      font-size: 18px !important;
+      font-weight: 800 !important;
+      letter-spacing: 0.02em;
+      color: #fff;
+    }
+    .fb-labb-explorer-btn {
+      flex-shrink: 0;
+      min-width: 36px;
+      justify-content: center;
+    }
+    .workspace-header {
+      padding: 10px 14px !important;
+      background: #252526 !important;
+      border-bottom: 1px solid #1e1e1e !important;
     }
     .file-tree {
       flex: 1 1 0;
@@ -1398,15 +1427,13 @@
     <section id="panel-workspace" class="panel">
       <!-- Workspace Header -->
       <div class="workspace-header">
-        <h2 style="font-size: 16px; font-weight: 700;">Game Workspace</h2>
+        <div class="fb-labb-title">
+          <button type="button" class="btn btn-secondary btn-sm fb-labb-explorer-btn" onclick="toggleFilePanel()" title="Buka Explorer">☰</button>
+          <h2 class="fb-labb-name">fb-labb</h2>
+        </div>
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
-          <button type="button" class="btn btn-primary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="1 Load ZIP">Load File</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFilePanel()" title="2 Panel file">Files</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="openAnalysisPanel()" title="3 Analysis">Analysis</button>
-          <button type="button" class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="4 Run / Preview">Run File</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan edit">Save</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="closeSidePanels()" title="Tampilkan editor penuh">Editor</button>
+          <button type="button" class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
 
@@ -1445,12 +1472,19 @@
           </div>
           <div class="file-tree" id="file-tree" role="tree"></div>
           <div class="file-panel-footer" id="file-panel-footer">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Custom">
-              <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom
-            </button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi AI">
-              <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI
-            </button>
+            <div class="file-panel-footer-row">
+              <button type="button" class="btn btn-primary btn-sm" onclick="saveFile()" title="Save">Save</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="openAnalysisPanel()" title="Analysis">Analysis</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="Load File">Load File</button>
+            </div>
+            <div class="file-panel-footer-row">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Custom">
+                <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi AI">
+                <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1859,6 +1893,15 @@
           const projectName = file.name.replace(/\.zip$/i, '');
           if (projectNameEl) projectNameEl.textContent = projectName + ' (' + paths.length + ' file)';
           if (typeof appendLog === 'function') appendLog('ZIP dimuat: ' + file.name + ' — ' + paths.length + ' file', 'ok');
+          // Tampilkan Explorer agar tree + tombol Save/Load terlihat
+          (function() {
+            var fp = document.getElementById('file-panel');
+            if (fp && fp.classList.contains('collapsed')) {
+              if (typeof toggleFilePanel === 'function') toggleFilePanel();
+              else fp.classList.remove('collapsed');
+            }
+            if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 100);
+          })();
         } else {
           // Single file (html/js/css/...) — bungkus sebagai ZIP virtual
           const content = await file.text();
