@@ -513,6 +513,155 @@
     .badge-sol  { background: #626890; color: #fff; }
     .badge-gd   { background: #478cbf; color: #fff; }
     .badge-default { background: #6b7280; color: #fff; }
+
+    /* Collect panel scroll so About footer reachable */
+    #panel-collect.active {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .collect-wrapper {
+      padding-bottom: 24px;
+    }
+    .fb-about {
+      margin: 20px 12px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .fb-about-card {
+      border-radius: 16px;
+      padding: 18px 16px;
+      background: linear-gradient(160deg, #0c4a6e 0%, #1e3a8a 45%, #0f766e 100%);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      color: #e2e8f0;
+    }
+    .fb-about-hero {
+      text-align: center;
+    }
+    .fb-about-logo-wrap {
+      display: inline-flex;
+      background: #fff;
+      border-radius: 14px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+    }
+    .fb-about-logo {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+      display: block;
+    }
+    .fb-about-powered {
+      font-size: 15px;
+      margin: 0 0 6px;
+      color: #f1f5f9;
+    }
+    .fb-about-powered strong {
+      color: #5eead4;
+      font-weight: 700;
+    }
+    .fb-about-tag {
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      font-weight: 700;
+      color: #a5f3fc;
+      margin: 0 0 6px;
+    }
+    .fb-about-sub {
+      font-size: 12px;
+      color: rgba(226,232,240,0.85);
+      margin: 0;
+    }
+    .fb-about-body {
+      font-size: 13px;
+      line-height: 1.65;
+      margin: 0;
+      color: #e2e8f0;
+    }
+    .fb-about-contact-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #67e8f9;
+      margin: 0 0 10px;
+    }
+    .fb-about-contact-line {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+    .fb-about-contact-line a {
+      color: #f8fafc;
+      text-decoration: none;
+    }
+    .fb-about-contact-line a:hover {
+      text-decoration: underline;
+    }
+    .fb-ic { margin-right: 6px; opacity: 0.9; }
+
+    /* Tutorial tip on workspace buttons */
+    .ws-btn-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .ws-help {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--border-light);
+      background: var(--surface-alt);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ws-help:hover {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    #tutorial-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.55);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    #tutorial-modal .tut-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: min(440px, 94vw);
+      max-height: 80vh;
+      overflow: auto;
+      padding: 18px 16px;
+    }
+    #tutorial-modal h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+    #tutorial-modal .tut-body {
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+    }
+    #tutorial-modal .tut-steps {
+      margin: 12px 0 0;
+      padding-left: 18px;
+      font-size: 13px;
+      color: var(--text);
+    }
+
     .name-vue { color: #42b883; }
     .name-swift { color: #f05138; }
     .name-sh { color: #4eaa25; }
@@ -1307,6 +1456,26 @@
             <div class="desc">Perbaiki dependency otomatis</div>
           </div>
         </div>
+
+        <!-- About / Contact — FrostByte Technologies -->
+        <div class="fb-about" id="fb-about">
+          <div class="fb-about-card fb-about-hero">
+            <div class="fb-about-logo-wrap">
+              <img src="/frostbyte-logo.png" alt="FrostByte Technologies" class="fb-about-logo">
+            </div>
+            <p class="fb-about-powered">Powered by <strong>FrostByte Technologies Ltd.</strong></p>
+            <p class="fb-about-tag">INNOVATE · BUILD · CONNECT</p>
+            <p class="fb-about-sub">Professional Technology &amp; Digital Solutions</p>
+          </div>
+          <div class="fb-about-card">
+            <p class="fb-about-body">FrostByte Technologies Ltd. is committed to delivering innovative, secure, and high-quality digital solutions. We specialize in software development, web and mobile applications, cloud services, UI/UX design, system integration, and IT consulting. Our mission is to help businesses and individuals achieve digital transformation through reliable technology and continuous innovation.</p>
+          </div>
+          <div class="fb-about-card fb-about-contact">
+            <p class="fb-about-contact-title">Contact Us</p>
+            <p class="fb-about-contact-line"><span class="fb-ic">☎</span> <a href="tel:+66975842024">+66 97 584 2024</a></p>
+            <p class="fb-about-contact-line"><span class="fb-ic">✉</span> <a href="mailto:FrostByte@gmail.com">FrostByte@gmail.com</a></p>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1315,17 +1484,38 @@
       <!-- Workspace Header -->
       <div class="workspace-header">
         <h2 style="font-size: 16px; font-weight: 700;">Game Workspace</h2>
-        <div class="workspace-actions">
+                <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,text/html,.html,.htm,.js,.css,.json" style="display: none;" multiple>
-          <button class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()" title="Load ZIP / file dari HP atau komputer">📁 Load File</button>
-          <button class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan file yang sedang diedit">💾 Save</button>
-          <button class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="Analisis file & deteksi error">🔍 Analysis</button>
-          <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Jalankan / preview game">▶ Run File</button>
-          <button class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi error & saran perbaikan oleh AI"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI</button>
-          <button class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Pengaturan custom / filter / opsi user"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom</button>
-          <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()">📂 Files</button>
+          <span class="ws-btn-wrap">
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()" title="Load ZIP / file dari HP atau komputer">📁 Load File</button>
+            <button type="button" class="ws-help" onclick="showTutorial('load')" title="Tutorial Load File">?</button>
+          </span>
+          <span class="ws-btn-wrap">
+            <button class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan file yang sedang diedit">💾 Save</button>
+            <button type="button" class="ws-help" onclick="showTutorial('save')" title="Tutorial Save">?</button>
+          </span>
+          <span class="ws-btn-wrap">
+            <button class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="Analisis file & deteksi error">🔍 Analysis</button>
+            <button type="button" class="ws-help" onclick="showTutorial('analysis')" title="Tutorial Analysis">?</button>
+          </span>
+          <span class="ws-btn-wrap">
+            <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Jalankan / preview game">▶ Run File</button>
+            <button type="button" class="ws-help" onclick="showTutorial('run')" title="Tutorial Run File">?</button>
+          </span>
+          <span class="ws-btn-wrap">
+            <button class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi error & saran perbaikan oleh AI"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI</button>
+            <button type="button" class="ws-help" onclick="showTutorial('ai')" title="Tutorial Deteksi AI">?</button>
+          </span>
+          <span class="ws-btn-wrap">
+            <button class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Pengaturan custom / filter / opsi user"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom</button>
+            <button type="button" class="ws-help" onclick="showTutorial('custom')" title="Tutorial Custom">?</button>
+          </span>
+          <span class="ws-btn-wrap">
+            <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()">📂 Files</button>
+            <button type="button" class="ws-help" onclick="showTutorial('files')" title="Tutorial Files">?</button>
+          </span>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="showTutorial('workspace')" title="Tutorial Workspace">📖 Tutorial</button>
         </div>
-      </div>
 
       <!-- Full Preview Mode (split: game | log/error) — tetap di Workspace -->
       <div id="preview-mode" style="display:none; flex-direction:column; flex:1; overflow:hidden; background:var(--bg);">
@@ -1448,6 +1638,18 @@
       </div>
     </section>
 
+
+    <!-- Tutorial modal -->
+    <div id="tutorial-modal" onclick="if(event.target===this)closeTutorial()">
+      <div class="tut-box">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <h3 id="tutorial-title">Tutorial</h3>
+          <button class="btn btn-secondary btn-sm" onclick="closeTutorial()">Tutup</button>
+        </div>
+        <div class="tut-body" id="tutorial-body"></div>
+        <ol class="tut-steps" id="tutorial-steps"></ol>
+      </div>
+    </div>
 
     <!-- Custom settings panel (modal sederhana) -->
     <div id="custom-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; align-items:center; justify-content:center;">
@@ -1958,6 +2160,107 @@
       }, 400);
     }
 
+
+
+    const TUTORIALS = {
+      workspace: {
+        title: 'Tutorial Workspace',
+        body: 'Workspace dipakai untuk membuka, mengedit, menganalisis, dan menjalankan paket game (ZIP) tanpa harus Collect dulu.',
+        steps: [
+          'Klik Load File → pilih ZIP hasil collect atau file HTML/JS/CSS.',
+          'Di panel Files (kiri), klik file untuk dibuka di editor (syntax highlight).',
+          'Edit kode → Save untuk menyimpan ke memori/ZIP.',
+          'Analysis / Deteksi AI untuk mencari error.',
+          'Run File untuk preview game (kolom kiri game, kanan log error).',
+          'Kembali ke Editor lewat tombol di atas preview.'
+        ]
+      },
+      load: {
+        title: 'Tutorial: Load File',
+        body: 'Mengambil file dari HP, flashdisk, atau komputer ke Workspace.',
+        steps: [
+          'Ketuk tombol Load File.',
+          'Pilih file .zip (paket game) atau file tunggal (.html / .js / .css).',
+          'Struktur ZIP muncul di panel Files kiri.',
+          'Klik nama file untuk membuka isinya di editor.'
+        ]
+      },
+      save: {
+        title: 'Tutorial: Save',
+        body: 'Menyimpan perubahan file yang sedang diedit.',
+        steps: [
+          'Buka file dari panel Files.',
+          'Edit di editor Monaco.',
+          'Klik Save — perubahan tersimpan di sesi dan ke objek ZIP.',
+          'Pakai Pack Game (panel Analysis) untuk mengunduh ZIP yang sudah diedit.'
+        ]
+      },
+      analysis: {
+        title: 'Tutorial: Analysis',
+        body: 'Memeriksa file aktif untuk error umum (path absolut, frame-buster, kurung tidak seimbang, dll.).',
+        steps: [
+          'Load ZIP dan buka salah satu file kode.',
+          'Klik Analysis.',
+          'Hasil muncul di log / panel Analysis.',
+          'Perbaiki manual atau coba Auto Repair / Deteksi AI.'
+        ]
+      },
+      run: {
+        title: 'Tutorial: Run File',
+        body: 'Menjalankan preview game dari ZIP di dalam web (tanpa pindah ke GitHub).',
+        steps: [
+          'Pastikan ZIP sudah di-Load.',
+          'Klik Run File.',
+          'Kolom kiri: tampilan game. Kolom kanan: log & error (teks merah).',
+          'Gunakan Reload jika perlu, atau Kembali ke Editor untuk lanjut mengedit.'
+        ]
+      },
+      ai: {
+        title: 'Tutorial: Deteksi AI',
+        body: 'Memindai banyak file di ZIP untuk pola bermasalah, opsional memanggil AI online jika API key diisi di Custom.',
+        steps: [
+          'Load ZIP terlebih dahulu.',
+          'Klik Deteksi AI.',
+          'Baca temuan di log dan panel AI.',
+          'Untuk saran AI online: buka Custom → isi API key (mis. Groq) → Simpan → Deteksi AI lagi.'
+        ]
+      },
+      custom: {
+        title: 'Tutorial: Custom',
+        body: 'Pengaturan Workspace: filter ekstensi, opsi repair, tampil binary, dan API key AI.',
+        steps: [
+          'Klik Custom.',
+          'Atur filter ekstensi (contoh: html,css,js).',
+          'Centang opsi sesuai kebutuhan.',
+          'Isi API key jika ingin Deteksi AI online.',
+          'Simpan Custom.'
+        ]
+      },
+      files: {
+        title: 'Tutorial: Files',
+        body: 'Panel kiri menampilkan struktur ZIP (HTML, CSS, JS, asset).',
+        steps: [
+          'Tombol Files menampilkan/menyembunyikan panel tree.',
+          'Gunakan kotak Search untuk mencari nama file.',
+          'Klik file teks untuk edit; file binary ditandai dan tidak dibuka sebagai teks.',
+          'Di bawah panel ada pintasan Custom dan Deteksi AI.'
+        ]
+      }
+    };
+
+    function showTutorial(key) {
+      const t = TUTORIALS[key] || TUTORIALS.workspace;
+      document.getElementById('tutorial-title').textContent = t.title;
+      document.getElementById('tutorial-body').textContent = t.body;
+      const ol = document.getElementById('tutorial-steps');
+      ol.innerHTML = (t.steps || []).map(s => '<li>' + s.replace(/</g,'&lt;') + '</li>').join('');
+      const m = document.getElementById('tutorial-modal');
+      if (m) m.style.display = 'flex';
+    }
+    function closeTutorial() {
+      const m = document.getElementById('tutorial-modal');
+      if (m) m.style.display = 'none';
+    }
 
     // ===== Custom panel =====
     function openCustomPanel() {
