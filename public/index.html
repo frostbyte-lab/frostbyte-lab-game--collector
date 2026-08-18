@@ -1288,6 +1288,8 @@
           <button class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan file yang sedang diedit">💾 Save</button>
           <button class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="Analisis file & deteksi error">🔍 Analysis</button>
           <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Jalankan / preview game">▶ Run File</button>
+          <button class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi error & saran perbaikan oleh AI">🤖 Deteksi AI</button>
+          <button class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Pengaturan custom / filter / opsi user">⚙ Custom</button>
           <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()">📂 Files</button>
         </div>
       </div>
@@ -1325,6 +1327,10 @@
             <input type="search" id="file-search" placeholder="Search files..." oninput="filterFiles()">
           </div>
           <div class="file-tree" id="file-tree"></div>
+          <div id="file-panel-footer" style="padding:8px; border-top:1px solid var(--border); display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openCustomPanel()">⚙ Custom</button>
+            <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="runDeteksiAI()">🤖 Deteksi AI</button>
+          </div>
         </div>
 
         <!-- Handle to open/close the Files panel sideways -->
@@ -1408,6 +1414,28 @@
         </div>
       </div>
     </section>
+
+
+    <!-- Custom settings panel (modal sederhana) -->
+    <div id="custom-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; align-items:center; justify-content:center;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; width:min(420px,92vw); max-height:80vh; overflow:auto; padding:16px 18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <strong>⚙ Custom</strong>
+          <button class="btn btn-secondary btn-sm" onclick="closeCustomPanel()">Tutup</button>
+        </div>
+        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Filter ekstensi file tree (pisah koma)</label>
+        <input id="custom-ext-filter" type="text" placeholder="html,css,js,json" style="width:100%; padding:8px; margin-bottom:12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+        <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13px;">
+          <input type="checkbox" id="custom-auto-repair" checked> Auto-repair frame-buster saat Analysis
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13px;">
+          <input type="checkbox" id="custom-show-binary"> Tampilkan file binary di tree
+        </label>
+        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">API key AI (opsional, Groq/OpenAI-compatible)</label>
+        <input id="custom-ai-key" type="password" placeholder="sk-... atau gsk_..." style="width:100%; padding:8px; margin-bottom:12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+        <button class="btn btn-primary btn-sm" style="width:100%;" onclick="saveCustomSettings()">Simpan Custom</button>
+      </div>
+    </div>
 
     <!-- History Panel -->
     <section id="panel-history" class="panel">
@@ -1895,6 +1923,160 @@
           '\nIssues: ' + (issues.length || 0) +
           (issues.length ? '\n\n' + issues.map(i => '• ' + i).join('\n') : '\nTidak ada issue jelas.');
       }, 400);
+    }
+
+
+    // ===== Custom panel =====
+    function openCustomPanel() {
+      const m = document.getElementById('custom-modal');
+      if (!m) return;
+      try {
+        const s = JSON.parse(localStorage.getItem('gc_custom') || '{}');
+        const ext = document.getElementById('custom-ext-filter');
+        const ar = document.getElementById('custom-auto-repair');
+        const bin = document.getElementById('custom-show-binary');
+        const key = document.getElementById('custom-ai-key');
+        if (ext) ext.value = s.extFilter || '';
+        if (ar) ar.checked = s.autoRepair !== false;
+        if (bin) bin.checked = !!s.showBinary;
+        if (key) key.value = s.aiKey || '';
+      } catch (_) {}
+      m.style.display = 'flex';
+    }
+    function closeCustomPanel() {
+      const m = document.getElementById('custom-modal');
+      if (m) m.style.display = 'none';
+    }
+    function saveCustomSettings() {
+      const s = {
+        extFilter: (document.getElementById('custom-ext-filter') || {}).value || '',
+        autoRepair: !!(document.getElementById('custom-auto-repair') || {}).checked,
+        showBinary: !!(document.getElementById('custom-show-binary') || {}).checked,
+        aiKey: (document.getElementById('custom-ai-key') || {}).value || ''
+      };
+      localStorage.setItem('gc_custom', JSON.stringify(s));
+      if (typeof appendLog === 'function') appendLog('Custom settings disimpan.', 'ok');
+      closeCustomPanel();
+      // Apply filter if tree exists
+      if (s.extFilter && typeof filterFiles === 'function') {
+        const q = document.getElementById('file-search');
+        // simple: re-filter by showing only matching extensions
+        const allowed = s.extFilter.split(/[,\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+        document.querySelectorAll('.file-tree-item').forEach(item => {
+          const nameEl = item.querySelector('.file-tree-name');
+          const name = (nameEl ? nameEl.textContent : item.textContent).toLowerCase();
+          if (!allowed.length) { item.style.display = ''; return; }
+          const ext = name.split('.').pop();
+          item.style.display = allowed.includes(ext) ? '' : 'none';
+        });
+      }
+      alert('Custom disimpan.');
+    }
+
+    // ===== Deteksi AI =====
+    async function runDeteksiAI() {
+      // Buka preview log panel area / error log
+      const logEl = document.getElementById('error-log');
+      const pm = document.getElementById('preview-mode');
+      const main = document.getElementById('workspace-main');
+
+      if (!currentFile && !currentZip) {
+        alert('Load File / buka file dulu, lalu Deteksi AI.');
+        return;
+      }
+
+      // Pastikan area log terlihat: jika belum preview mode, tampilkan log di analysis side atau buat ringkas di alert+appendLog
+      if (typeof appendLog === 'function') {
+        // clear soft
+      }
+      if (logEl) logEl.innerHTML = '';
+      appendLog('🤖 Deteksi AI dimulai...', 'ok');
+
+      const issues = typeof analyzeCurrentCode === 'function' ? analyzeCurrentCode() : [];
+      let report = [];
+
+      // Scan beberapa file teks di ZIP (max 20)
+      const paths = Object.keys(zipFileMap || {}).filter(p => {
+        const ext = p.split('.').pop().toLowerCase();
+        return ['html','htm','js','mjs','css','json','ts','tsx','jsx'].includes(ext);
+      }).slice(0, 20);
+
+      for (const p of paths) {
+        try {
+          let code = openFiles.has(p) ? openFiles.get(p) : await zipFileMap[p].async('string');
+          if (!code || code.length > 500000) continue;
+          if (/top\.location|parent\.location|frameElement/i.test(code))
+            report.push({ file: p, level: 'err', msg: 'Frame-buster / anti-embed terdeteksi' });
+          if (/eval\s*\(|new Function\s*\(/i.test(code))
+            report.push({ file: p, level: 'warn', msg: 'Penggunaan eval/Function dinamis' });
+          if (/https?:\/\/(?!localhost)/i.test(code) && /\.(js|html?|css)$/i.test(p))
+            report.push({ file: p, level: 'warn', msg: 'URL absolut eksternal (offline mungkin putus)' });
+          if (/\bTODO\b|\bFIXME\b|\bXXX\b/.test(code))
+            report.push({ file: p, level: 'warn', msg: 'Ada TODO/FIXME di kode' });
+          const o = (code.match(/\{/g) || []).length, c = (code.match(/\}/g) || []).length;
+          if (/\.(js|css)$/i.test(p) && o !== c)
+            report.push({ file: p, level: 'err', msg: 'Kurung kurawal tidak seimbang {' + o + '} vs }' + c });
+        } catch (e) {
+          report.push({ file: p, level: 'warn', msg: 'Gagal baca: ' + e.message });
+        }
+      }
+
+      issues.forEach(i => report.push({ file: currentFile || '(aktif)', level: 'err', msg: i }));
+
+      // Optional: call external AI if key set
+      let aiExtra = '';
+      try {
+        const s = JSON.parse(localStorage.getItem('gc_custom') || '{}');
+        if (s.aiKey && currentFile && editor) {
+          appendLog('Memanggil AI API (custom key)...', 'ok');
+          const snippet = (editor.getValue() || '').slice(0, 6000);
+          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + s.aiKey
+            },
+            body: JSON.stringify({
+              model: 'llama-3.1-8b-instant',
+              messages: [
+                { role: 'system', content: 'Anda analis kode game web. Jawaban singkat bahasa Indonesia: daftar error + cara perbaikan.' },
+                { role: 'user', content: 'File: ' + currentFile + '\n\n' + snippet }
+              ],
+              max_tokens: 500
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            aiExtra = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+          } else {
+            appendLog('AI API gagal: HTTP ' + res.status + ' (pakai deteksi lokal saja)', 'warn');
+          }
+        }
+      } catch (e) {
+        appendLog('AI API error: ' + e.message + ' — lanjut deteksi lokal', 'warn');
+      }
+
+      if (!report.length && !aiExtra) {
+        appendLog('Deteksi AI: tidak ada temuan mencolok.', 'ok');
+      } else {
+        report.forEach(r => appendLog('[' + r.file + '] ' + r.msg, r.level === 'err' ? 'err' : 'warn'));
+        if (aiExtra) appendLog('— Saran AI —\n' + aiExtra, 'ok');
+      }
+
+      // Tunjukkan di preview log jika user mau
+      if (logEl && (report.length || aiExtra)) {
+        // already filled via appendLog
+      }
+      // Buka AI panel juga
+      const aiPanel = document.getElementById('ai-panel');
+      if (aiPanel) aiPanel.classList.remove('hidden');
+      const aiResp = document.getElementById('ai-response');
+      if (aiResp) {
+        aiResp.style.display = 'block';
+        aiResp.textContent = (report.map(r => '• [' + r.file + '] ' + r.msg).join('\n') || 'Tidak ada temuan lokal.') +
+          (aiExtra ? '\n\n— AI —\n' + aiExtra : '\n\n(Isi API key di Custom untuk saran AI online)');
+      }
+      alert('Deteksi AI selesai. Lihat log / panel AI untuk detail.');
     }
 
     function analyzeCurrentCode() {
