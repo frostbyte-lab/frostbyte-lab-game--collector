@@ -373,9 +373,16 @@
     }
     #monaco-editor {
       flex: 1 1 0 !important;
-      min-height: 0 !important;
-      width: 100%;
-      height: auto;
+      min-height: 240px !important;
+      width: 100% !important;
+      height: 100% !important;
+      position: relative;
+      overflow: hidden;
+    }
+    #monaco-editor .monaco-editor,
+    #monaco-editor .overflow-guard {
+      width: 100% !important;
+      height: 100% !important;
     }
 
     .preview-panel {
@@ -1128,7 +1135,8 @@
       }
       #monaco-editor {
         flex: 1 1 0 !important;
-        min-height: 200px !important;
+        min-height: 45vh !important;
+        height: 100% !important;
       }
       /* Files = drawer kiri */
       .file-panel {
@@ -1197,9 +1205,7 @@
 
     /* ===== SYNTAX HIGHLIGHT THEME ===== */
     .monaco-editor {
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace !important;
-      font-size: 13px !important;
-      line-height: 1.6 !important;
+      font-family: 'Menlo', 'Monaco', 'Ubuntu Mono', monospace !important;
     }
 
     /* ===== UTILITY ===== */
@@ -1579,16 +1585,23 @@
       require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs' }});
 
       require(['vs/editor/editor.main'], function() {
-        editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+        const host = document.getElementById('monaco-editor');
+        if (host) {
+          host.style.minHeight = '240px';
+          host.style.height = '100%';
+          host.style.width = '100%';
+        }
+        editor = monaco.editor.create(host, {
           value: '// Load a file to start editing\n',
           language: 'plaintext',
           theme: 'vs-dark',
-          fontSize: 13,
-          lineHeight: 1.6,
-          fontFamily: "'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
-          minimap: { enabled: true },
+          fontSize: 14,
+          lineHeight: 22,
+          fontFamily: "'Menlo', 'Monaco', 'Ubuntu Mono', monospace",
+          minimap: { enabled: window.innerWidth > 768 },
           scrollBeyondLastLine: false,
           wordWrap: 'on',
+          automaticLayout: true,
           formatOnPaste: true,
           autoClosingBrackets: 'always',
           autoClosingQuotes: 'always',
@@ -1596,11 +1609,28 @@
           bracketPairColorization: { enabled: true }
         });
 
-        // Update position indicator
         editor.onDidChangeCursorPosition(e => {
-          document.getElementById('editor-line').textContent = e.position.lineNumber;
-          document.getElementById('editor-col').textContent = e.position.column;
+          const ln = document.getElementById('editor-line');
+          const col = document.getElementById('editor-col');
+          if (ln) ln.textContent = e.position.lineNumber;
+          if (col) col.textContent = e.position.column;
         });
+
+        // Jika user sudah buka file sebelum Monaco siap
+        if (window.__pendingEditorContent) {
+          try {
+            const p = window.__pendingEditorContent;
+            const model = editor.getModel();
+            if (model && p.language && window.monaco) {
+              monaco.editor.setModelLanguage(model, p.language);
+            }
+            editor.setValue(p.content || '');
+            editor.layout();
+            editor.focus();
+          } catch (err) { console.warn(err); }
+          window.__pendingEditorContent = null;
+        }
+        setTimeout(function() { try { editor.layout(); } catch(_){} }, 100);
       });
     } else {
       console.warn('Monaco loader tidak termuat (mungkin tidak ada koneksi internet). Editor kode tidak akan tersedia, tapi navigasi panel tetap berfungsi.');
@@ -1906,31 +1936,59 @@
       if (base.endsWith('.env') || base === '.env') language = 'ini';
       if (base === '.gitignore' || base === '.editorconfig') language = 'ini';
 
-      // Pastikan model Monaco memakai language id yang valid
-      if (editor && window.monaco) {
-        const model = editor.getModel && editor.getModel();
-        if (model) {
-          monaco.editor.setModelLanguage(model, language);
-        } else {
-          try { editor.setLanguage(language); } catch (_) {}
+      // Tulis ke Monaco (atau antre jika belum siap)
+      const textContent = content == null ? '' : String(content);
+      if (editor) {
+        try {
+          if (window.monaco) {
+            const model = editor.getModel && editor.getModel();
+            if (model) monaco.editor.setModelLanguage(model, language);
+          }
+          // File sangat besar: matikan minimap supaya HP tidak freeze
+          if (textContent.length > 400000) {
+            try { editor.updateOptions({ minimap: { enabled: false } }); } catch (_) {}
+          }
+          editor.setValue(textContent);
+          // Paksa layout — tanpa ini di HP tinggi editor bisa 0px
+          const host = document.getElementById('monaco-editor');
+          if (host) {
+            const h = Math.max(host.clientHeight, Math.floor(window.innerHeight * 0.45));
+            if (host.clientHeight < 120) {
+              host.style.minHeight = h + 'px';
+              host.style.height = h + 'px';
+            }
+          }
+          editor.layout();
+          setTimeout(function() {
+            try { editor.layout(); editor.focus(); } catch (_) {}
+          }, 50);
+          setTimeout(function() {
+            try { editor.layout(); } catch (_) {}
+          }, 300);
+        } catch (err) {
+          console.error('openFile editor error', err);
+          alert('Editor error: ' + err.message);
         }
-        editor.setValue(content);
-      } else if (editor) {
-        try { editor.setLanguage(language); } catch (_) {}
-        editor.setValue(content);
+      } else {
+        window.__pendingEditorContent = { content: textContent, language: language, filename: filename };
+        console.warn('Monaco belum siap — konten diantre');
       }
-      
-      document.getElementById('editor-lang').textContent = language;
-      document.getElementById('breadcrumb-file').textContent = filename;
-      document.getElementById('breadcrumb').classList.add('active');
 
-      const size = sizeBytes != null ? sizeBytes : content.length;
-      document.getElementById('editor-size').textContent = size + ' bytes';
-      document.getElementById('status-info').textContent = filename;
-      document.getElementById('file-info').textContent =
-        'path: ' + filename + '\nlanguage: ' + language + '\nsize: ' + size + ' bytes';
+      const elLang = document.getElementById('editor-lang');
+      const elBf = document.getElementById('breadcrumb-file');
+      const elBc = document.getElementById('breadcrumb');
+      const elSz = document.getElementById('editor-size');
+      const elSt = document.getElementById('status-info');
+      const elFi = document.getElementById('file-info');
+      if (elLang) elLang.textContent = language;
+      if (elBf) elBf.textContent = filename;
+      if (elBc) elBc.classList.add('active');
+      const size = sizeBytes != null ? sizeBytes : textContent.length;
+      if (elSz) elSz.textContent = size + ' bytes';
+      if (elSt) elSt.textContent = filename;
+      if (elFi) elFi.textContent = 'path: ' + filename + '\nlanguage: ' + language + '\nsize: ' + size + ' bytes';
 
-      openFiles.set(filename, content);
+      openFiles.set(filename, textContent);
     }
 
     function layoutEditor() {
