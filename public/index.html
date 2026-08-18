@@ -214,25 +214,35 @@
     #panel-workspace {
       background: var(--bg);
       flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
     }
     #panel-workspace.active {
       display: flex;
+      flex: 1;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
     }
 
     .workspace-header {
-      padding: 16px 20px;
+      padding: 10px 12px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .workspace-header h2 {
+      margin: 0;
+      font-size: 15px !important;
     }
 
     .workspace-actions {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
       flex-wrap: wrap;
     }
@@ -297,15 +307,18 @@
     /* ===== WORKSPACE CONTENT ===== */
     .workspace-main {
       display: flex;
-      flex: 1;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow: hidden;
       gap: 0;
       position: relative;
+      height: 100%;
     }
 
     /* File Tree Panel */
     .file-panel {
       width: 260px;
+      min-width: 0;
       background: var(--surface);
       border-right: 1px solid var(--border);
       display: flex;
@@ -313,6 +326,8 @@
       overflow: hidden;
       transition: width 0.3s ease;
       flex-shrink: 0;
+      height: 100%;
+      max-height: 100%;
     }
 
     .file-panel.collapsed {
@@ -324,7 +339,7 @@
     .file-panel-handle {
       position: absolute;
       top: 50%;
-      left: 0;
+      left: 260px;
       transform: translateY(-50%);
       width: 18px;
       height: 44px;
@@ -337,10 +352,14 @@
       justify-content: center;
       cursor: pointer;
       z-index: 5;
-      transition: background 0.2s ease;
+      transition: left 0.3s ease, background 0.2s ease;
       color: var(--text-secondary);
       font-size: 11px;
       user-select: none;
+    }
+    .file-panel.collapsed ~ .file-panel-handle,
+    .file-panel-handle.collapsed {
+      left: 0;
     }
 
     .file-panel-handle:hover {
@@ -386,9 +405,12 @@
     }
 
     .file-tree {
-      flex: 1;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 8px;
+      -webkit-overflow-scrolling: touch;
     }
 
     .file-tree-item {
@@ -700,10 +722,12 @@
 
     /* Editor Panel */
     .editor-panel {
-      flex: 1;
+      flex: 1 1 auto;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      min-width: 0;
+      min-height: 0;
       background: var(--bg-secondary);
     }
 
@@ -1486,35 +1510,14 @@
         <h2 style="font-size: 16px; font-weight: 700;">Game Workspace</h2>
                 <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,text/html,.html,.htm,.js,.css,.json" style="display: none;" multiple>
-          <span class="ws-btn-wrap">
-            <button class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()" title="Load ZIP / file dari HP atau komputer">📁 Load File</button>
-            <button type="button" class="ws-help" onclick="showTutorial('load')" title="Tutorial Load File">?</button>
-          </span>
-          <span class="ws-btn-wrap">
-            <button class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan file yang sedang diedit">💾 Save</button>
-            <button type="button" class="ws-help" onclick="showTutorial('save')" title="Tutorial Save">?</button>
-          </span>
-          <span class="ws-btn-wrap">
-            <button class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="Analisis file & deteksi error">🔍 Analysis</button>
-            <button type="button" class="ws-help" onclick="showTutorial('analysis')" title="Tutorial Analysis">?</button>
-          </span>
-          <span class="ws-btn-wrap">
-            <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Jalankan / preview game">▶ Run File</button>
-            <button type="button" class="ws-help" onclick="showTutorial('run')" title="Tutorial Run File">?</button>
-          </span>
-          <span class="ws-btn-wrap">
-            <button class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi error & saran perbaikan oleh AI"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI</button>
-            <button type="button" class="ws-help" onclick="showTutorial('ai')" title="Tutorial Deteksi AI">?</button>
-          </span>
-          <span class="ws-btn-wrap">
-            <button class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Pengaturan custom / filter / opsi user"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom</button>
-            <button type="button" class="ws-help" onclick="showTutorial('custom')" title="Tutorial Custom">?</button>
-          </span>
-          <span class="ws-btn-wrap">
-            <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()">📂 Files</button>
-            <button type="button" class="ws-help" onclick="showTutorial('files')" title="Tutorial Files">?</button>
-          </span>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="showTutorial('workspace')" title="Tutorial Workspace">📖 Tutorial</button>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()" title="Load ZIP / file dari HP atau komputer">Load File</button>
+          <button class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan file yang sedang diedit">Save</button>
+          <button class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="Analisis file & deteksi error">Analysis</button>
+          <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Jalankan / preview game">Run File</button>
+          <button class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi error & saran perbaikan oleh AI"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI</button>
+          <button class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Pengaturan custom"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()" title="Tampilkan / sembunyikan panel file">Files</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="showTutorial('workspace')" title="Tutorial Workspace">Tutorial</button>
         </div>
 
       <!-- Full Preview Mode (split: game | log/error) — tetap di Workspace -->
@@ -1550,10 +1553,6 @@
             <input type="search" id="file-search" placeholder="Search files..." oninput="filterFiles()">
           </div>
           <div class="file-tree" id="file-tree"></div>
-          <div id="file-panel-footer" style="padding:8px; border-top:1px solid var(--border); display:flex; gap:6px; flex-wrap:wrap;">
-            <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openCustomPanel()"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom</button>
-            <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="runDeteksiAI()"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI</button>
-          </div>
         </div>
 
         <!-- Handle to open/close the Files panel sideways -->
@@ -2115,12 +2114,22 @@
     }
 
     function filterFiles() {
-      const query = document.getElementById('file-search').value.toLowerCase();
-      document.querySelectorAll('.file-tree-item').forEach(item => {
+      const input = document.getElementById('file-search');
+      const query = (input && input.value || '').toLowerCase().trim();
+      const items = document.querySelectorAll('#file-tree .file-tree-item');
+      items.forEach(item => {
         const nameEl = item.querySelector('.file-tree-name');
-        const name = (nameEl ? nameEl.textContent : item.textContent).toLowerCase();
-        item.style.display = name.includes(query) ? '' : 'none';
+        const path = (item.dataset.path || '').toLowerCase();
+        const name = (nameEl ? nameEl.textContent : item.textContent || '').toLowerCase();
+        const show = !query || name.includes(query) || path.includes(query);
+        item.style.display = show ? '' : 'none';
       });
+      // Keep folder rows visible if any child matches — simple: show all folders when querying
+      if (query) {
+        document.querySelectorAll('#file-tree .file-tree-item[data-folder]').forEach(folder => {
+          folder.style.display = '';
+        });
+      }
     }
 
     function formatCode() {
