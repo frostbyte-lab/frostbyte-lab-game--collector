@@ -1,18 +1,24 @@
 {
-  "name": "Game Collector Pro",
-  "short_name": "GC Pro",
-  "description": "Collect, repair, and play web games offline",
+  "name": "Game Collector Pro — Frostbyte Technologies",
+  "short_name": "Frostbyte GC",
+  "description": "Collect, repair, and play web games offline. Powered by Frostbyte Technologies.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b0d12",
-  "theme_color": "#3b82f6",
+  "theme_color": "#1e40af",
   "orientation": "any",
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%233b82f6'/%3E%3Ctext x='64' y='82' font-size='64' text-anchor='middle' fill='white' font-family='system-ui'%3EGC%3C/text%3E%3C/svg%3E",
-      "sizes": "128x128",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/frostbyte-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/frostbyte-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

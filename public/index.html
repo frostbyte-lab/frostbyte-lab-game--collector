@@ -7,7 +7,9 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="/manifest.json">
-  <title>Game Collector Pro — Enterprise Edition</title>
+  <link rel="icon" type="image/png" href="/frostbyte-logo.png">
+  <link rel="apple-touch-icon" href="/frostbyte-logo.png">
+  <title>Game Collector Pro — Frostbyte Technologies</title>
   
   <!-- Monaco Editor CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs/loader.min.js"></script>
@@ -93,13 +95,14 @@
     }
 
     .logo-img {
-      height: 40px;
-      width: 40px;
+      height: 42px;
+      width: 42px;
       object-fit: contain;
-      border-radius: 8px;
+      border-radius: 10px;
       background: #fff;
-      padding: 3px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      padding: 2px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+      flex-shrink: 0;
     }
 
     .logo-text {
@@ -1230,8 +1233,10 @@
     <header>
       <div class="header-left">
         <div class="logo">
+          <img src="/frostbyte-logo.png" alt="Frostbyte Technologies" class="logo-img" width="40" height="40">
           <div class="logo-text">
-            <div class="brand">C-Game</div>
+            <div class="brand">Frost<span>byte</span></div>
+            <div class="sub">Game Collector Pro</div>
           </div>
         </div>
         <div class="breadcrumb" id="breadcrumb">
@@ -1250,7 +1255,7 @@
     <section id="panel-collect" class="panel active">
       <div class="collect-wrapper">
         <div class="collect-hero">
-          <img src="frostbyte-logo.png" alt="Frostbyte" class="hero-logo">
+          <img src="/frostbyte-logo.png" alt="Frostbyte" class="hero-logo">
           <h2>Game Collector Pro</h2>
           <p>Collect game resources from web browsers and preview them offline. Powered by Frostbyte Technologies.</p>
         </div>
