@@ -214,9 +214,14 @@
     #panel-workspace {
       background: var(--bg);
       flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
     }
     #panel-workspace.active {
       display: flex;
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .workspace-header {
@@ -297,7 +302,8 @@
     /* ===== WORKSPACE CONTENT ===== */
     .workspace-main {
       display: flex;
-      flex: 1;
+      flex: 1 1 0;
+      min-height: 0;
       overflow: hidden;
       gap: 0;
       position: relative;
@@ -312,12 +318,36 @@
       flex-direction: column;
       overflow: hidden;
       transition: width 0.3s ease;
-      flex-shrink: 0;
+      flex: 0 0 260px;
+      align-self: stretch;
+      min-height: 0;
     }
 
     .file-panel.collapsed {
       width: 0;
+      flex-basis: 0;
+      min-width: 0;
       border-right: none;
+      overflow: hidden;
+    }
+
+    .file-panel-header,
+    .file-search {
+      flex: 0 0 auto;
+    }
+
+    .file-panel-footer {
+      flex: 0 0 auto;
+      display: flex;
+      gap: 6px;
+      padding: 8px;
+      border-top: 1px solid var(--border);
+      background: var(--surface-alt);
+    }
+    .file-panel-footer .btn {
+      flex: 1 1 0;
+      justify-content: center;
+      min-width: 0;
     }
 
     /* Handle tab — always flush left (mepet kiri) */
@@ -386,9 +416,12 @@
     }
 
     .file-tree {
-      flex: 1;
+      flex: 1 1 0;
+      min-height: 0;
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 8px;
+      -webkit-overflow-scrolling: touch;
     }
 
     .file-tree-item {
@@ -551,7 +584,7 @@
 
     /* Editor Panel */
     .editor-panel {
-      flex: 1;
+      flex: 1 1 0; min-width: 0; min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -672,8 +705,9 @@
     }
 
     #monaco-editor {
-      flex: 1;
-      overflow: hidden;
+      flex: 1 1 0;
+      min-height: 0;
+      width: 100%;
     }
 
     /* Preview Panel */
@@ -1316,14 +1350,12 @@
       <div class="workspace-header">
         <h2 style="font-size: 16px; font-weight: 700;">Game Workspace</h2>
         <div class="workspace-actions">
-          <input type="file" id="zip-input" accept=".zip,application/zip,text/html,.html,.htm,.js,.css,.json" style="display: none;" multiple>
-          <button class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()" title="Load ZIP / file dari HP atau komputer">📁 Load File</button>
-          <button class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan file yang sedang diedit">💾 Save</button>
-          <button class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="Analisis file & deteksi error">🔍 Analysis</button>
-          <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Jalankan / preview game">▶ Run File</button>
-          <button class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi error & saran perbaikan oleh AI"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI</button>
-          <button class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Pengaturan custom / filter / opsi user"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom</button>
-          <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()">📂 Files</button>
+          <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
+          <button type="button" class="btn btn-primary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="1 Load ZIP">Load File</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFilePanel()" title="2 Panel file">Files</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="3 Analysis">Analysis</button>
+          <button type="button" class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="4 Run / Preview">Run File</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan edit">Save</button>
         </div>
       </div>
 
@@ -1359,10 +1391,14 @@
           <div class="file-search">
             <input type="search" id="file-search" placeholder="Search files..." oninput="filterFiles()">
           </div>
-          <div class="file-tree" id="file-tree"></div>
-          <div id="file-panel-footer" style="padding:8px; border-top:1px solid var(--border); display:flex; gap:6px; flex-wrap:wrap;">
-            <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openCustomPanel()"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom</button>
-            <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="runDeteksiAI()"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI</button>
+          <div class="file-tree" id="file-tree" role="tree"></div>
+          <div class="file-panel-footer" id="file-panel-footer">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Custom">
+              <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi AI">
+              <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI
+            </button>
           </div>
         </div>
 
@@ -1681,19 +1717,24 @@
       } finally {
         e.target.value = '';
       }
-    });;
+    });
 
     function renderFileTree(paths) {
       // Build a nested tree object from flat zip paths
       const treeRoot = {};
       paths.slice().sort().forEach(path => {
-        const parts = path.split('/');
+        if (!path || path.endsWith('/')) return;
+        const parts = path.split('/').filter(Boolean);
         let node = treeRoot;
         parts.forEach((part, idx) => {
-          if (idx === parts.length - 1) {
+          const isFile = idx === parts.length - 1;
+          if (isFile) {
             node[part] = { __file: true, __path: path };
           } else {
-            node[part] = node[part] || { __children: {} };
+            if (!node[part] || node[part].__file) {
+              node[part] = { __children: {} };
+            }
+            if (!node[part].__children) node[part].__children = {};
             node = node[part].__children;
           }
         });
