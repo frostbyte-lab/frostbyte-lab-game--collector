@@ -318,16 +318,33 @@
     /* File Tree Panel */
     .file-panel {
       width: 260px;
-      min-width: 0;
+      min-width: 200px;
+      max-width: 320px;
       background: var(--surface);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      transition: width 0.3s ease;
+      transition: width 0.3s ease, min-width 0.3s ease;
+      flex: 0 0 260px;
+      align-self: stretch;
+    }
+    .file-panel-header,
+    .file-search {
       flex-shrink: 0;
-      height: 100%;
-      max-height: 100%;
+    }
+    .file-panel-footer {
+      flex-shrink: 0;
+      display: flex;
+      gap: 6px;
+      padding: 8px;
+      border-top: 1px solid var(--border);
+      background: var(--surface-alt);
+    }
+    .file-panel-footer .btn {
+      flex: 1;
+      justify-content: center;
+      min-width: 0;
     }
 
     .file-panel.collapsed {
@@ -405,8 +422,8 @@
     }
 
     .file-tree {
-      flex: 1 1 auto;
-      min-height: 0;
+      flex: 1 1 0;
+      min-height: 120px;
       overflow-y: auto;
       overflow-x: hidden;
       padding: 8px;
@@ -845,8 +862,9 @@
     }
 
     #monaco-editor {
-      flex: 1;
-      overflow: hidden;
+      flex: 1 1 0;
+      min-height: 0;
+      width: 100%;
     }
 
     /* Preview Panel */
@@ -1211,69 +1229,51 @@
       }
     }
 
+    
     @media (max-width: 768px) {
-      /* Files & Analysis panels become slide-over overlays on mobile,
-         so the editor never gets squeezed into a thin column. */
-      .file-panel,
+      .file-panel {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: min(280px, 85vw) !important;
+        max-width: 85vw;
+        min-width: 0;
+        flex: none;
+        height: auto !important;
+        z-index: 20;
+        box-shadow: 0 0 16px rgba(0,0,0,0.45);
+      }
+      .file-panel.collapsed {
+        display: none;
+      }
+      .file-panel-handle {
+        left: 0 !important;
+        z-index: 25;
+      }
+      .file-panel:not(.collapsed) ~ .file-panel-handle {
+        left: min(280px, 85vw) !important;
+      }
       .preview-panel {
         position: absolute;
         top: 0;
         bottom: 0;
-        z-index: 20;
-        box-shadow: 0 0 16px rgba(0, 0, 0, 0.5);
-        box-sizing: border-box;
-        transition: width 0.3s ease, left 0.3s ease, right 0.3s ease;
-      }
-      .file-panel {
-        left: 0;
-        width: 82%;
-        max-width: 280px;
-      }
-      .preview-panel {
         right: 0;
-        width: 82%;
-        max-width: 320px;
+        width: min(320px, 85vw);
+        z-index: 20;
+        box-shadow: 0 0 16px rgba(0,0,0,0.45);
       }
-      .file-panel.collapsed,
       .preview-panel.collapsed {
         display: none;
       }
-
-      /* Kalau panel Files & Analysis dibuka BERSAMAAN, jangan biarkan
-         keduanya rebutan 82% dari sisi berlawanan (itu penyebab numpuk).
-         Bagi layar proporsional: 29% Files + 2% garis batas + 69% Analysis. */
-      .workspace-main.both-panels-open .file-panel {
-        width: 29%;
-        max-width: none;
-        border-right: 3px solid var(--border);
-      }
-      .workspace-main.both-panels-open .preview-panel {
-        left: 31%;   /* 29% panel + 2% garis batas */
-        right: 0;
-        width: auto; /* otomatis jadi 69% sisanya */
-        max-width: none;
-        border-left: none;
-      }
-
-      /* Kalau panel Files DITUTUP, panel Analysis rata/rapat ke kiri
-         dan melebar penuh. Begitu Files dibuka lagi, class collapsed
-         hilang -> aturan ini tidak berlaku lagi, Analysis balik ke
-         ukuran semula (overlay 82% / atau split 29-69 di atas). */
-      .file-panel.collapsed ~ .preview-panel:not(.collapsed) {
-        left: 0;
-        right: 0;
-        width: auto;
-        max-width: none;
-        border-left: none;
-      }
-
-      /* Handle must float above the panel itself, otherwise it gets
-         covered and the close button disappears when the panel opens. */
-      .file-panel-handle {
-        z-index: 25;
-      }
       .editor-panel {
         width: 100%;
+        flex: 1;
+        min-width: 0;
+      }
+      .workspace-main {
+        min-height: 0;
+        flex: 1 1 0;
       }
     }
 
@@ -1508,16 +1508,14 @@
       <!-- Workspace Header -->
       <div class="workspace-header">
         <h2 style="font-size: 16px; font-weight: 700;">Game Workspace</h2>
-                <div class="workspace-actions">
+        <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,text/html,.html,.htm,.js,.css,.json" style="display: none;" multiple>
-          <button class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()" title="Load ZIP / file dari HP atau komputer">Load File</button>
-          <button class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan file yang sedang diedit">Save</button>
-          <button class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="Analisis file & deteksi error">Analysis</button>
-          <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Jalankan / preview game">Run File</button>
-          <button class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi error & saran perbaikan oleh AI"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI</button>
-          <button class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Pengaturan custom"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom</button>
-          <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()" title="Tampilkan / sembunyikan panel file">Files</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="showTutorial('workspace')" title="Tutorial Workspace">Tutorial</button>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()" title="Load ZIP / file">Load File</button>
+          <button class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan file">Save</button>
+          <button class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="Analisis">Analysis</button>
+          <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Preview game">Run File</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()" title="Panel file">Files</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="showTutorial('workspace')" title="Tutorial">Tutorial</button>
         </div>
 
       <!-- Full Preview Mode (split: game | log/error) — tetap di Workspace -->
@@ -1553,6 +1551,14 @@
             <input type="search" id="file-search" placeholder="Search files..." oninput="filterFiles()">
           </div>
           <div class="file-tree" id="file-tree"></div>
+          <div class="file-panel-footer" id="file-panel-footer">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Custom">
+              <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi AI">
+              <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI
+            </button>
+          </div>
         </div>
 
         <!-- Handle to open/close the Files panel sideways -->
