@@ -1073,68 +1073,82 @@
     }
 
     @media (max-width: 768px) {
-      /* Files & Analysis panels become slide-over overlays on mobile,
-         so the editor never gets squeezed into a thin column. */
+      /* Editor SELALU penuh — side panel = overlay, bukan bagi layar */
+      .workspace-main {
+        position: relative;
+        display: flex;
+        flex: 1 1 0;
+        min-height: 0;
+      }
+      .editor-panel {
+        flex: 1 1 0 !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 0;
+        position: relative;
+        z-index: 1;
+      }
+      #monaco-editor {
+        flex: 1 1 0 !important;
+        min-height: 180px !important;
+      }
+
       .file-panel,
       .preview-panel {
         position: absolute;
         top: 0;
         bottom: 0;
-        z-index: 20;
-        box-shadow: 0 0 16px rgba(0, 0, 0, 0.5);
+        z-index: 30;
+        box-shadow: 0 0 24px rgba(0,0,0,0.55);
         box-sizing: border-box;
-        transition: width 0.3s ease, left 0.3s ease, right 0.3s ease;
       }
       .file-panel {
         left: 0;
-        width: 82%;
-        max-width: 280px;
+        width: min(300px, 88vw);
+        max-width: 88vw;
+        flex: none !important;
       }
       .preview-panel {
         right: 0;
-        width: 82%;
-        max-width: 320px;
+        left: auto;
+        width: min(340px, 90vw);
+        max-width: 90vw;
+        flex: none !important;
       }
       .file-panel.collapsed,
       .preview-panel.collapsed {
-        display: none;
+        display: none !important;
       }
 
-      /* Kalau panel Files & Analysis dibuka BERSAMAAN, jangan biarkan
-         keduanya rebutan 82% dari sisi berlawanan (itu penyebab numpuk).
-         Bagi layar proporsional: 29% Files + 2% garis batas + 69% Analysis. */
-      .workspace-main.both-panels-open .file-panel {
-        width: 29%;
-        max-width: none;
-        border-right: 3px solid var(--border);
-      }
+      /* Hapus aturan lama both-panels yang menutupi editor */
+      .workspace-main.both-panels-open .file-panel,
       .workspace-main.both-panels-open .preview-panel {
-        left: 31%;   /* 29% panel + 2% garis batas */
-        right: 0;
-        width: auto; /* otomatis jadi 69% sisanya */
-        max-width: none;
-        border-left: none;
+        /* tetap overlay terpisah — jangan split penuh layar */
+        width: min(300px, 88vw);
+        left: auto;
+        right: auto;
       }
+      .workspace-main.both-panels-open .file-panel { left: 0; }
+      .workspace-main.both-panels-open .preview-panel { right: 0; left: auto; }
 
-      /* Kalau panel Files DITUTUP, panel Analysis rata/rapat ke kiri
-         dan melebar penuh. Begitu Files dibuka lagi, class collapsed
-         hilang -> aturan ini tidak berlaku lagi, Analysis balik ke
-         ukuran semula (overlay 82% / atau split 29-69 di atas). */
-      .file-panel.collapsed ~ .preview-panel:not(.collapsed) {
-        left: 0;
-        right: 0;
-        width: auto;
-        max-width: none;
-        border-left: none;
-      }
-
-      /* Handle must float above the panel itself, otherwise it gets
-         covered and the close button disappears when the panel opens. */
       .file-panel-handle {
+        z-index: 35;
+        left: 0 !important;
+      }
+      .file-panel:not(.collapsed) ~ .file-panel-handle {
+        left: min(300px, 88vw) !important;
+      }
+
+      /* Backdrop gelap di belakang overlay */
+      .ws-backdrop {
+        display: none;
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.45);
         z-index: 25;
       }
-      .editor-panel {
-        width: 100%;
+      .ws-backdrop.show {
+        display: block;
       }
     }
 
@@ -1353,9 +1367,10 @@
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
           <button type="button" class="btn btn-primary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="1 Load ZIP">Load File</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="toggleFilePanel()" title="2 Panel file">Files</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="3 Analysis">Analysis</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openAnalysisPanel()" title="3 Analysis">Analysis</button>
           <button type="button" class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="4 Run / Preview">Run File</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan edit">Save</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="closeSidePanels()" title="Tampilkan editor penuh">Editor</button>
         </div>
       </div>
 
@@ -1385,6 +1400,7 @@
 
       <!-- Main Workspace -->
       <div class="workspace-main" id="workspace-main">
+        <div class="ws-backdrop" id="ws-backdrop" onclick="closeSidePanels()"></div>
         <!-- File Tree -->
         <div class="file-panel" id="file-panel">
           <div class="file-panel-header"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-folder"></use></svg> Files</div>
@@ -1453,7 +1469,7 @@
         </div>
 
         <!-- Preview / Analysis -->
-        <div class="preview-panel" id="preview-panel">
+        <div class="preview-panel collapsed" id="preview-panel">
           <div class="preview-header"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-eye"></use></svg> Preview & Analysis</div>
           <div class="preview-content">
             <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
@@ -1808,6 +1824,10 @@
     // File operations
     function openFile(filename, content, sizeBytes) {
       currentFile = filename;
+      // Di HP: tutup overlay supaya Monaco editor terlihat dan bisa diedit
+      if (window.innerWidth <= 768 && typeof closeSidePanels === 'function') {
+        closeSidePanels();
+      }
       
       // Get language from extension
       const ext = filename.split('.').pop().toLowerCase();
@@ -1895,17 +1915,32 @@
       const workspaceMain = document.querySelector('.workspace-main');
       const filePanel = document.getElementById('file-panel');
       const previewPanel = document.getElementById('preview-panel');
+      const backdrop = document.getElementById('ws-backdrop');
       if (!workspaceMain || !filePanel || !previewPanel) return;
 
       const isMobile = window.innerWidth <= 768;
       const fileOpen = !filePanel.classList.contains('collapsed');
       const previewOpen = !previewPanel.classList.contains('collapsed');
 
-      workspaceMain.classList.toggle(
-        'both-panels-open',
-        isMobile && fileOpen && previewOpen
-      );
+      workspaceMain.classList.toggle('both-panels-open', isMobile && fileOpen && previewOpen);
+      if (backdrop) {
+        backdrop.classList.toggle('show', isMobile && (fileOpen || previewOpen));
+      }
     }
+
+    function closeSidePanels() {
+      const filePanel = document.getElementById('file-panel');
+      const previewPanel = document.getElementById('preview-panel');
+      const handle = document.getElementById('file-panel-handle');
+      if (filePanel) filePanel.classList.add('collapsed');
+      if (previewPanel) previewPanel.classList.add('collapsed');
+      if (handle) {
+        handle.classList.add('collapsed');
+        handle.innerHTML = '<svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>';
+      }
+      updateMobilePanelLayout();
+    }
+
 
     // On mobile, keep Files & Analysis panels closed by default so the
     // editor toolbar isn't squeezed. They open as overlays on demand.
@@ -1935,17 +1970,35 @@
     function toggleFilePanel() {
       const panel = document.getElementById('file-panel');
       const handle = document.getElementById('file-panel-handle');
+      const previewPanel = document.getElementById('preview-panel');
+      if (!panel) return;
       const isCollapsed = panel.classList.toggle('collapsed');
+      // Di HP: buka Files → tutup Analysis agar editor tidak tertutup
+      if (!isCollapsed && window.innerWidth <= 768 && previewPanel) {
+        previewPanel.classList.add('collapsed');
+      }
       if (handle) {
         handle.classList.toggle('collapsed', isCollapsed);
-        handle.innerHTML = `<svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-${isCollapsed ? 'chevron-right' : 'chevron-left'}"></use></svg>`;
+        handle.innerHTML = '<svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-' + (isCollapsed ? 'chevron-right' : 'chevron-left') + '"></use></svg>';
       }
       updateMobilePanelLayout();
     }
 
     function togglePreviewPanel() {
       const panel = document.getElementById('preview-panel');
+      const filePanel = document.getElementById('file-panel');
+      const handle = document.getElementById('file-panel-handle');
+      if (!panel) return;
+      const willOpen = panel.classList.contains('collapsed');
       panel.classList.toggle('collapsed');
+      // Di HP: buka Analysis → tutup Files
+      if (willOpen && window.innerWidth <= 768 && filePanel) {
+        filePanel.classList.add('collapsed');
+        if (handle) {
+          handle.classList.add('collapsed');
+          handle.innerHTML = '<svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>';
+        }
+      }
       updateMobilePanelLayout();
     }
 
@@ -2177,6 +2230,22 @@
       }
       if (!code.trim()) issues.push('File kosong');
       return issues;
+    }
+
+    function openAnalysisPanel() {
+      const panel = document.getElementById('preview-panel');
+      const filePanel = document.getElementById('file-panel');
+      const handle = document.getElementById('file-panel-handle');
+      if (panel) panel.classList.remove('collapsed');
+      if (window.innerWidth <= 768 && filePanel) {
+        filePanel.classList.add('collapsed');
+        if (handle) {
+          handle.classList.add('collapsed');
+          handle.innerHTML = '<svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>';
+        }
+      }
+      updateMobilePanelLayout();
+      runAnalysis();
     }
 
     function runAnalysis() {
