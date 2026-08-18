@@ -210,6 +210,10 @@
     /* ===== WORKSPACE PANEL ===== */
     #panel-workspace {
       background: var(--bg);
+      flex-direction: column;
+    }
+    #panel-workspace.active {
+      display: flex;
     }
 
     .workspace-header {
@@ -1251,16 +1255,41 @@
       <div class="workspace-header">
         <h2 style="font-size: 16px; font-weight: 700;">Game Workspace</h2>
         <div class="workspace-actions">
-          <input type="file" id="zip-input" accept=".zip,application/zip" style="display: none;">
-          <button class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-folder-open"></use></svg> Load ZIP</button>
-          <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-chevron-left"></use></svg> Files</button>
-          <button class="btn btn-secondary btn-sm" onclick="togglePreviewPanel()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-chevron-right"></use></svg> Analysis</button>
-          <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-terminal"></use></svg> Run Game</button>
+          <input type="file" id="zip-input" accept=".zip,application/zip,text/html,.html,.htm,.js,.css,.json" style="display: none;" multiple>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()" title="Load ZIP / file dari HP atau komputer">📁 Load File</button>
+          <button class="btn btn-secondary btn-sm" onclick="saveFile()" title="Simpan file yang sedang diedit">💾 Save</button>
+          <button class="btn btn-secondary btn-sm" onclick="runAnalysis()" title="Analisis file & deteksi error">🔍 Analysis</button>
+          <button class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Jalankan / preview game">▶ Run File</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleFilePanel()">📂 Files</button>
+        </div>
+      </div>
+
+      <!-- Full Preview Mode (split: game | log/error) — tetap di Workspace -->
+      <div id="preview-mode" style="display:none; flex-direction:column; flex:1; overflow:hidden; background:var(--bg);">
+        <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--surface); border-bottom:1px solid var(--border);">
+          <button class="btn btn-secondary btn-sm" onclick="exitPreviewMode()">← Kembali ke Editor</button>
+          <strong style="flex:1;">Preview Game / ZIP</strong>
+          <button class="btn btn-secondary btn-sm" onclick="startPreview('sandbox')">Reload</button>
+          <button class="btn btn-secondary btn-sm" onclick="runAnalysis()">Scan Error</button>
+        </div>
+        <div style="display:flex; flex:1; overflow:hidden; min-height:0;">
+          <div style="flex:1.4; border-right:1px solid var(--border); display:flex; flex-direction:column; min-width:0;">
+            <div style="padding:6px 10px; font-size:11px; color:var(--text-muted); background:var(--surface-alt);">Kolom 1 — Preview Game</div>
+            <iframe id="preview-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups" style="flex:1; width:100%; border:0; background:#111;"></iframe>
+          </div>
+          <div style="flex:1; display:flex; flex-direction:column; min-width:0; background:var(--surface);">
+            <div style="padding:6px 10px; font-size:11px; color:var(--text-muted); background:var(--surface-alt); display:flex; justify-content:space-between; align-items:center;">
+              <span>Kolom 2 — Log &amp; Error</span>
+              <button class="btn btn-secondary btn-sm" onclick="copyErrorLog()" style="padding:2px 8px; font-size:11px;">Copy Error</button>
+            </div>
+            <div id="preview-file-running" style="padding:8px 12px; font-size:12px; border-bottom:1px solid var(--border); color:var(--text-secondary);">File: —</div>
+            <pre id="error-log" style="flex:1; margin:0; padding:12px; overflow:auto; font-family:ui-monospace,monospace; font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-word; color:var(--text);"></pre>
+          </div>
         </div>
       </div>
 
       <!-- Main Workspace -->
-      <div class="workspace-main">
+      <div class="workspace-main" id="workspace-main">
         <!-- File Tree -->
         <div class="file-panel" id="file-panel">
           <div class="file-panel-header"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-folder"></use></svg> Files</div>
@@ -1462,38 +1491,57 @@
       if (projectNameEl) projectNameEl.textContent = 'Memuat ' + file.name + ' ...';
 
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        const zip = await JSZip.loadAsync(arrayBuffer);
-        currentZip = zip;
-        zipFileMap = {};
-
-        const paths = [];
-        zip.forEach((relativePath, zipEntry) => {
-          if (!zipEntry.dir) {
-            paths.push(relativePath);
-            zipFileMap[relativePath] = zipEntry;
-          }
-        });
-
-        renderFileTree(paths);
-
-        const projectName = file.name.replace(/\.zip$/i, '');
-        if (projectNameEl) projectNameEl.textContent = projectName + ' (' + paths.length + ' file)';
-
-        // Reset editor state for the new project
+        const nameLower = file.name.toLowerCase();
         openFiles.clear();
         currentFile = null;
-        document.getElementById('breadcrumb-file').textContent = '—';
-        document.getElementById('breadcrumb').classList.remove('active');
-        document.getElementById('file-info').textContent = 'No file selected';
+
+        if (nameLower.endsWith('.zip') || file.type === 'application/zip') {
+          const arrayBuffer = await file.arrayBuffer();
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          currentZip = zip;
+          zipFileMap = {};
+          const paths = [];
+          zip.forEach((relativePath, zipEntry) => {
+            if (!zipEntry.dir) {
+              paths.push(relativePath);
+              zipFileMap[relativePath] = zipEntry;
+            }
+          });
+          renderFileTree(paths);
+          const projectName = file.name.replace(/\.zip$/i, '');
+          if (projectNameEl) projectNameEl.textContent = projectName + ' (' + paths.length + ' file)';
+          if (typeof appendLog === 'function') appendLog('ZIP dimuat: ' + file.name + ' — ' + paths.length + ' file', 'ok');
+        } else {
+          // Single file (html/js/css/...) — bungkus sebagai ZIP virtual
+          const content = await file.text();
+          currentZip = new JSZip();
+          currentZip.file(file.name, content);
+          zipFileMap = {};
+          // Fake zip entry compatible with async('string')
+          zipFileMap[file.name] = {
+            async: async (type) => type === 'string' ? content : new TextEncoder().encode(content).buffer
+          };
+          openFiles.set(file.name, content);
+          renderFileTree([file.name]);
+          if (projectNameEl) projectNameEl.textContent = file.name + ' (1 file)';
+          if (typeof openFile === 'function') openFile(file.name, content, content.length);
+          if (typeof appendLog === 'function') appendLog('File dimuat: ' + file.name, 'ok');
+        }
+
+        const bf = document.getElementById('breadcrumb-file');
+        if (bf) bf.textContent = '—';
+        const bc = document.getElementById('breadcrumb');
+        if (bc) bc.classList.remove('active');
+        const fi = document.getElementById('file-info');
+        if (fi) fi.textContent = 'No file selected';
       } catch (err) {
-        if (projectNameEl) projectNameEl.textContent = 'Gagal memuat ZIP';
+        if (projectNameEl) projectNameEl.textContent = 'Gagal memuat';
         console.error(err);
-        alert('Gagal membuka ZIP: ' + err.message);
+        alert('Gagal membuka file: ' + err.message);
       } finally {
         e.target.value = '';
       }
-    });
+    });;
 
     function renderFileTree(paths) {
       // Build a nested tree object from flat zip paths
@@ -1690,28 +1738,289 @@
     }
 
     function saveFile() {
-      if (currentFile && editor) {
-        const content = editor.getValue();
-        openFiles.set(currentFile, content);
-        alert('File saved: ' + currentFile);
+      if (!currentFile || !editor) {
+        appendLog('Tidak ada file aktif untuk disimpan.', 'warn');
+        alert('Tidak ada file aktif. Buka file dari struktur ZIP dulu.');
+        return;
       }
+      const content = editor.getValue();
+      openFiles.set(currentFile, content);
+      // Update in JSZip if present
+      if (currentZip && zipFileMap[currentFile]) {
+        currentZip.file(currentFile, content);
+      }
+      appendLog('Saved: ' + currentFile, 'ok');
+      const el = document.getElementById('status-info');
+      if (el) el.textContent = 'Saved: ' + currentFile;
     }
 
     function askAI() {
       const prompt = document.getElementById('ai-prompt').value;
       const response = document.getElementById('ai-response');
-      
       if (!prompt) return;
-      
       response.style.display = 'block';
-      response.textContent = 'Calling AI...';
-      
-      // Simulate AI response (replace with real API call)
+      response.textContent = 'Menganalisis...';
       setTimeout(() => {
-        response.textContent = `AI Analysis:\n- File: ${currentFile}\n- Language: detected\n- Suggestions: Improve error handling`;
-      }, 1000);
+        const issues = analyzeCurrentCode();
+        response.textContent = 'AI Analysis:\nFile: ' + (currentFile || '—') +
+          '\nIssues: ' + (issues.length || 0) +
+          (issues.length ? '\n\n' + issues.map(i => '• ' + i).join('\n') : '\nTidak ada issue jelas.');
+      }, 400);
     }
 
+    function analyzeCurrentCode() {
+      const issues = [];
+      if (!editor) return issues;
+      const code = editor.getValue() || '';
+      const file = (currentFile || '').toLowerCase();
+      if (file.endsWith('.html') || file.endsWith('.htm')) {
+        if (!/<html[\s>]/i.test(code) && code.length > 50) issues.push('HTML: tag <html> tidak ditemukan');
+        if (/src=["']https?:\/\//i.test(code)) issues.push('HTML: ada resource absolut (online) — offline mungkin gagal');
+        if (/frame-bust|top\.location|parent\.location/i.test(code)) issues.push('HTML/JS: frame-buster terdeteksi — bisa di-neutralize');
+      }
+      if (file.endsWith('.js') || file.endsWith('.mjs')) {
+        if (/\bundefined is not a function\b/i.test(code)) issues.push('JS: pola error umum di kode');
+        if (/fetch\s*\(\s*['"]https?:\/\//i.test(code)) issues.push('JS: fetch ke URL absolut — butuh Hybrid mode jika API live');
+        const open = (code.match(/\{/g) || []).length;
+        const close = (code.match(/\}/g) || []).length;
+        if (open !== close) issues.push('JS: jumlah { dan } tidak seimbang (' + open + ' vs ' + close + ')');
+      }
+      if (file.endsWith('.css')) {
+        const open = (code.match(/\{/g) || []).length;
+        const close = (code.match(/\}/g) || []).length;
+        if (open !== close) issues.push('CSS: jumlah { dan } tidak seimbang');
+      }
+      if (!code.trim()) issues.push('File kosong');
+      return issues;
+    }
+
+    function runAnalysis() {
+      const issues = analyzeCurrentCode();
+      const box = document.getElementById('error-log') || document.getElementById('file-info');
+      let html = '';
+      if (!currentZip && !currentFile) {
+        appendLog('Belum ada file. Klik Load File dulu (ZIP dari HP/komputer).', 'warn');
+        alert('Load File dulu (ZIP atau file), baru Analysis.');
+        return;
+      }
+      if (issues.length === 0) {
+        appendLog('Analysis: tidak ada issue jelas di file aktif.', 'ok');
+        if (box && box.id === 'error-log') box.innerHTML = '<span style="color:#4ade80">✓ Tidak ada error jelas pada file aktif.</span>';
+        else if (document.getElementById('file-info')) document.getElementById('file-info').textContent = 'Analysis OK — no clear issues';
+      } else {
+        appendLog('Analysis: ' + issues.length + ' issue ditemukan', 'err');
+        issues.forEach(i => appendLog(i, 'err'));
+        if (box && box.id === 'error-log') {
+          box.innerHTML = issues.map(i => '<div style="color:#f87171; margin-bottom:6px;">✗ ' + escapeHtml(i) + '</div>').join('') +
+            '<div style="margin-top:10px;color:var(--text-muted)">Saran: Auto Repair / perbaiki path absolut / cek kurung kurawal.</div>';
+        }
+      }
+      // Show analysis side panel
+      const panel = document.getElementById('preview-panel');
+      if (panel) panel.classList.remove('collapsed');
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function appendLog(msg, level) {
+      const el = document.getElementById('error-log');
+      const color = level === 'err' ? '#f87171' : level === 'warn' ? '#fbbf24' : level === 'ok' ? '#4ade80' : 'inherit';
+      const line = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+      if (el) {
+        const div = document.createElement('div');
+        div.style.color = color;
+        div.style.marginBottom = '4px';
+        div.textContent = line;
+        el.appendChild(div);
+        el.scrollTop = el.scrollHeight;
+      }
+      console.log(line);
+    }
+
+    function copyErrorLog() {
+      const el = document.getElementById('error-log');
+      if (!el) return;
+      const text = el.innerText || el.textContent || '';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => appendLog('Error log di-copy.', 'ok'));
+      } else {
+        alert(text.slice(0, 1500));
+      }
+    }
+
+    function exitPreviewMode() {
+      const pm = document.getElementById('preview-mode');
+      const main = document.getElementById('workspace-main');
+      if (pm) pm.style.display = 'none';
+      if (main) main.style.display = '';
+      const frame = document.getElementById('preview-frame');
+      if (frame) frame.src = 'about:blank';
+    }
+
+    async function startPreview(mode) {
+      mode = mode || 'sandbox';
+      if (!currentZip) {
+        alert('Load File (ZIP) dulu sebelum Run / Preview.');
+        appendLog('Preview dibatalkan: belum ada ZIP.', 'warn');
+        return;
+      }
+
+      // Masuk mode preview split (tetap di Workspace, tidak pindah tab browser)
+      const pm = document.getElementById('preview-mode');
+      const main = document.getElementById('workspace-main');
+      if (main) main.style.display = 'none';
+      if (pm) pm.style.display = 'flex';
+
+      const logEl = document.getElementById('error-log');
+      if (logEl) logEl.innerHTML = '';
+      appendLog('Menyiapkan preview (' + mode + ')...', 'ok');
+
+      const running = document.getElementById('preview-file-running');
+      if (running) running.textContent = 'File: mencari index.html / entry...';
+
+      try {
+        // Cari entry HTML
+        let entryPath = null;
+        const preferred = ['index.html', 'index.htm', 'game.html', 'main.html', 'play.html'];
+        const names = Object.keys(zipFileMap || {});
+        for (const p of preferred) {
+          const hit = names.find(n => n === p || n.endsWith('/' + p));
+          if (hit) { entryPath = hit; break; }
+        }
+        if (!entryPath) {
+          entryPath = names.find(n => /\.html?$/i.test(n));
+        }
+        if (!entryPath) {
+          appendLog('Tidak ada file HTML di ZIP.', 'err');
+          if (running) running.textContent = 'File: (tidak ada HTML)';
+          return;
+        }
+        if (running) running.textContent = 'File: ' + entryPath;
+
+        // Build blob map for relative assets (simple offline sandbox)
+        const blobUrls = {};
+        const textExt = /\.(html?|js|mjs|css|json|svg|xml|txt|md)$/i;
+        for (const [p, entry] of Object.entries(zipFileMap)) {
+          try {
+            if (textExt.test(p)) {
+              let content = openFiles.has(p) ? openFiles.get(p) : await entry.async('string');
+              // For HTML/CSS/JS we may rewrite later; first store
+              const mime = p.endsWith('.css') ? 'text/css' : p.endsWith('.js') || p.endsWith('.mjs') ? 'text/javascript' :
+                p.endsWith('.html') || p.endsWith('.htm') ? 'text/html' : p.endsWith('.json') ? 'application/json' : 'text/plain';
+              blobUrls[p] = URL.createObjectURL(new Blob([content], { type: mime }));
+            } else {
+              const buf = await entry.async('arraybuffer');
+              const ext = p.split('.').pop().toLowerCase();
+              const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp',
+                mp3:'audio/mpeg', ogg:'audio/ogg', wav:'audio/wav', woff:'font/woff', woff2:'font/woff2', ttf:'font/ttf' };
+              blobUrls[p] = URL.createObjectURL(new Blob([buf], { type: mimeMap[ext] || 'application/octet-stream' }));
+            }
+          } catch (e) {
+            appendLog('Gagal baca asset: ' + p + ' — ' + e.message, 'warn');
+          }
+        }
+
+        let html = openFiles.has(entryPath) ? openFiles.get(entryPath) : await zipFileMap[entryPath].async('string');
+
+        // Rewrite relative src/href to blob URLs (best-effort)
+        const baseDir = entryPath.includes('/') ? entryPath.slice(0, entryPath.lastIndexOf('/') + 1) : '';
+        function resolvePath(rel) {
+          if (!rel || /^(https?:|data:|blob:|javascript:)/i.test(rel)) return null;
+          let path = rel.split('?')[0].split('#')[0];
+          if (path.startsWith('/')) path = path.slice(1);
+          else path = baseDir + path;
+          // normalize ./ ../
+          const parts = [];
+          for (const seg of path.split('/')) {
+            if (seg === '.' || seg === '') continue;
+            if (seg === '..') parts.pop();
+            else parts.push(seg);
+          }
+          return parts.join('/');
+        }
+        html = html.replace(/(src|href)=["']([^"']+)["']/gi, (m, attr, url) => {
+          const resolved = resolvePath(url);
+          if (resolved && blobUrls[resolved]) return attr + '="' + blobUrls[resolved] + '"';
+          // try basename match
+          if (resolved) {
+            const base = resolved.split('/').pop();
+            const hit = Object.keys(blobUrls).find(k => k === resolved || k.endsWith('/' + base));
+            if (hit) return attr + '="' + blobUrls[hit] + '"';
+          }
+          return m;
+        });
+
+        const pageBlob = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        const frame = document.getElementById('preview-frame');
+        frame.src = pageBlob;
+        appendLog('Preview dimuat: ' + entryPath, 'ok');
+
+        // Capture iframe errors
+        frame.onload = () => {
+          try {
+            const w = frame.contentWindow;
+            if (w) {
+              w.addEventListener('error', (ev) => {
+                appendLog('Runtime error: ' + (ev.message || ev) + (ev.filename ? ' @ ' + ev.filename + ':' + ev.lineno : ''), 'err');
+              });
+              w.addEventListener('unhandledrejection', (ev) => {
+                appendLog('Promise rejection: ' + (ev.reason && ev.reason.message || ev.reason || ev), 'err');
+              });
+            }
+          } catch (e) {
+            appendLog('Catatan: partial sandbox — beberapa error runtime mungkin tidak tertangkap.', 'warn');
+          }
+        };
+      } catch (e) {
+        appendLog('Preview gagal: ' + e.message, 'err');
+      }
+    }
+
+    function runAutoRepair() {
+      if (!editor || !currentFile) {
+        alert('Buka file dulu di editor.');
+        return;
+      }
+      let code = editor.getValue();
+      let changes = 0;
+      // Neutralize simple frame-busters
+      const before = code;
+      code = code.replace(/top\.location\s*=\s*self\.location/gi, '/* frame-buster neutralized */');
+      code = code.replace(/if\s*\(\s*top\s*!==\s*self\s*\)/gi, 'if(false)');
+      if (code !== before) changes++;
+      // Balance note only
+      editor.setValue(code);
+      openFiles.set(currentFile, code);
+      appendLog('Auto Repair (dasar) pada ' + currentFile + (changes ? ' — frame-buster dinetralisir' : ' — tidak ada patch otomatis'), changes ? 'ok' : 'warn');
+      alert('Auto Repair dasar selesai. Cek Analysis untuk issue tersisa.');
+    }
+
+    function scanIssues() {
+      runAnalysis();
+    }
+
+    async function repackage() {
+      if (!currentZip) {
+        alert('Load ZIP dulu.');
+        return;
+      }
+      // Apply openFiles edits into zip
+      for (const [p, content] of openFiles.entries()) {
+        currentZip.file(p, content);
+      }
+      const blob = await currentZip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'game-repacked.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      appendLog('Pack Game: ZIP diunduh (game-repacked.zip)', 'ok');
+    }
+
+    // ========== Collect via Cloudflare (Playwright) ==========
     // ========== Collect via Cloudflare (Playwright) ==========
     // Semua status & unduhan tetap di web ini — tidak buka tab GitHub.
     async function runCollect() {
@@ -1921,18 +2230,6 @@
       if (el) el.textContent = 'Status: Ready';
     }
 
-    function startPreview() {
-      alert('Load ZIP dulu di tab Workspace, lalu gunakan tombol Preview di sana.');
-    }
-    function runAutoRepair() {
-      alert('Auto Repair: load ZIP di Workspace terlebih dahulu.');
-    }
-    function scanIssues() {
-      alert('Scan Issues: load ZIP di Workspace terlebih dahulu.');
-    }
-    function repackage() {
-      alert('Pack Game: load ZIP di Workspace terlebih dahulu.');
-    }
   </script>
 </body>
 </html>
