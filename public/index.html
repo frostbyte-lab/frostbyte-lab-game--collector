@@ -299,43 +299,43 @@
       transform: none !important;
     }
 
-    /* ===== WORKSPACE CONTENT ===== */
+    /* ===== WORKSPACE CONTENT (struktur kolom tunggal) =====
+       Desktop: [Files 260] [Editor flex] [Analysis 300]
+       Mobile:  Editor penuh; Files/Analysis = overlay
+    */
     .workspace-main {
       display: flex;
       flex: 1 1 0;
       min-height: 0;
       overflow: hidden;
-      gap: 0;
       position: relative;
+      width: 100%;
     }
 
-    /* File Tree Panel */
     .file-panel {
+      flex: 0 0 260px;
       width: 260px;
+      max-width: 260px;
       background: var(--surface);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      transition: width 0.3s ease;
-      flex: 0 0 260px;
-      align-self: stretch;
       min-height: 0;
+      z-index: 2;
     }
-
     .file-panel.collapsed {
-      width: 0;
-      flex-basis: 0;
-      min-width: 0;
+      flex-basis: 0 !important;
+      width: 0 !important;
+      max-width: 0 !important;
       border-right: none;
       overflow: hidden;
+      pointer-events: none;
     }
-
     .file-panel-header,
     .file-search {
       flex: 0 0 auto;
     }
-
     .file-panel-footer {
       flex: 0 0 auto;
       display: flex;
@@ -348,13 +348,72 @@
       flex: 1 1 0;
       justify-content: center;
       min-width: 0;
+      font-size: 11px !important;
+      padding: 6px 8px !important;
+    }
+    .file-tree {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .editor-panel {
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-secondary);
+      position: relative;
+      z-index: 1;
+    }
+    #monaco-editor {
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      width: 100%;
+      height: auto;
+    }
+
+    .preview-panel {
+      flex: 0 0 300px;
+      width: 300px;
+      max-width: 300px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+      z-index: 2;
+    }
+    .preview-panel.collapsed {
+      flex-basis: 0 !important;
+      width: 0 !important;
+      max-width: 0 !important;
+      border-left: none;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .preview-content {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .ws-backdrop {
+      display: none;
     }
 
     /* Handle tab — always flush left (mepet kiri) */
     .file-panel-handle {
       position: absolute;
       top: 50%;
-      left: 0;
+      left: 260px;
       transform: translateY(-50%);
       width: 18px;
       height: 44px;
@@ -366,20 +425,19 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      z-index: 5;
-      transition: background 0.2s ease;
+      z-index: 6;
+      transition: left 0.2s ease, background 0.2s ease;
       color: var(--text-secondary);
       font-size: 11px;
       user-select: none;
     }
-
+    .file-panel.collapsed ~ .file-panel-handle,
+    .file-panel-handle.collapsed {
+      left: 0;
+    }
     .file-panel-handle:hover {
       background: var(--accent);
       color: #fff;
-    }
-
-    .file-panel-handle.collapsed {
-      left: 0;
     }
 
     .file-panel-header {
@@ -582,16 +640,7 @@
     .name-txt  { color: #9ca3af; }
     .name-default { color: var(--text-muted); }
 
-    /* Editor Panel */
-    .editor-panel {
-      flex: 1 1 0; min-width: 0; min-height: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: var(--bg-secondary);
-    }
-
-    .editor-tabs {
+.editor-tabs {
       display: flex;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
@@ -704,28 +753,6 @@
       display: block;
     }
 
-    #monaco-editor {
-      flex: 1 1 0;
-      min-height: 0;
-      width: 100%;
-    }
-
-    /* Preview Panel */
-    .preview-panel {
-      width: 360px;
-      background: var(--surface);
-      border-left: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      transition: width 0.3s ease;
-    }
-
-    .preview-panel.collapsed {
-      width: 0;
-      border-left: none;
-    }
-
     .preview-header {
       padding: 12px;
       border-bottom: 1px solid var(--border);
@@ -734,6 +761,7 @@
       font-size: 12px;
       color: var(--text-secondary);
       text-transform: uppercase;
+      flex: 0 0 auto;
     }
 
     .preview-content {
@@ -1063,89 +1091,86 @@
     }
 
     /* ===== RESPONSIVE ===== */
-    @media (max-width: 1024px) {
-      .file-panel {
+    @media (max-width: 1024px) and (min-width: 769px) {
+      .file-panel:not(.collapsed) {
+        flex-basis: 200px;
         width: 200px;
+        max-width: 200px;
       }
-      .preview-panel {
-        width: 280px;
+      .preview-panel:not(.collapsed) {
+        flex-basis: 260px;
+        width: 260px;
+        max-width: 260px;
+      }
+      .file-panel:not(.collapsed) ~ .file-panel-handle {
+        left: 200px;
       }
     }
 
     @media (max-width: 768px) {
-      /* Editor SELALU penuh — side panel = overlay, bukan bagi layar */
+      .workspace-header {
+        padding: 10px 12px;
+      }
       .workspace-main {
-        position: relative;
         display: flex;
         flex: 1 1 0;
         min-height: 0;
+        position: relative;
       }
+      /* Editor SELALU mengisi layar */
       .editor-panel {
         flex: 1 1 0 !important;
         width: 100% !important;
+        max-width: none !important;
         min-width: 0 !important;
-        min-height: 0;
-        position: relative;
+        min-height: 0 !important;
         z-index: 1;
       }
       #monaco-editor {
         flex: 1 1 0 !important;
-        min-height: 180px !important;
+        min-height: 200px !important;
       }
-
-      .file-panel,
-      .preview-panel {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        z-index: 30;
-        box-shadow: 0 0 24px rgba(0,0,0,0.55);
-        box-sizing: border-box;
-      }
+      /* Files = drawer kiri */
       .file-panel {
-        left: 0;
-        width: min(300px, 88vw);
-        max-width: 88vw;
+        position: absolute !important;
+        top: 0; bottom: 0; left: 0;
         flex: none !important;
+        width: min(300px, 86vw) !important;
+        max-width: 86vw !important;
+        z-index: 40;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.45);
+        pointer-events: auto;
       }
+      .file-panel.collapsed {
+        display: none !important;
+      }
+      /* Analysis = drawer kanan */
       .preview-panel {
-        right: 0;
-        left: auto;
-        width: min(340px, 90vw);
-        max-width: 90vw;
+        position: absolute !important;
+        top: 0; bottom: 0; right: 0; left: auto !important;
         flex: none !important;
+        width: min(320px, 90vw) !important;
+        max-width: 90vw !important;
+        z-index: 40;
+        box-shadow: -4px 0 24px rgba(0,0,0,0.45);
+        pointer-events: auto;
       }
-      .file-panel.collapsed,
       .preview-panel.collapsed {
         display: none !important;
       }
-
-      /* Hapus aturan lama both-panels yang menutupi editor */
-      .workspace-main.both-panels-open .file-panel,
-      .workspace-main.both-panels-open .preview-panel {
-        /* tetap overlay terpisah — jangan split penuh layar */
-        width: min(300px, 88vw);
-        left: auto;
-        right: auto;
-      }
-      .workspace-main.both-panels-open .file-panel { left: 0; }
-      .workspace-main.both-panels-open .preview-panel { right: 0; left: auto; }
-
       .file-panel-handle {
-        z-index: 35;
+        z-index: 45;
         left: 0 !important;
       }
       .file-panel:not(.collapsed) ~ .file-panel-handle {
-        left: min(300px, 88vw) !important;
+        left: min(300px, 86vw) !important;
       }
-
-      /* Backdrop gelap di belakang overlay */
       .ws-backdrop {
         display: none;
         position: absolute;
         inset: 0;
-        background: rgba(0,0,0,0.45);
-        z-index: 25;
+        background: rgba(0,0,0,0.5);
+        z-index: 35;
       }
       .ws-backdrop.show {
         display: block;
@@ -1443,7 +1468,7 @@
           </div>
 
           <!-- Monaco Editor -->
-          <div id="monaco-editor" style="flex: 1;"></div>
+          <div id="monaco-editor"></div>
 
           <!-- AI Panel -->
           <div class="ai-panel hidden" id="ai-panel">
@@ -1908,9 +1933,14 @@
       openFiles.set(filename, content);
     }
 
-    // Cek apakah panel Files & Analysis lagi kebuka DUA-DUANYA di layar
-    // sempit (mobile). Kalau iya, kasih class supaya CSS membagi lebar
-    // secara proporsional (29% / 69%) alih-alih numpuk (overlap).
+    function layoutEditor() {
+      try {
+        if (editor && typeof editor.layout === 'function') {
+          requestAnimationFrame(function() { editor.layout(); });
+        }
+      } catch (_) {}
+    }
+
     function updateMobilePanelLayout() {
       const workspaceMain = document.querySelector('.workspace-main');
       const filePanel = document.getElementById('file-panel');
@@ -1926,6 +1956,7 @@
       if (backdrop) {
         backdrop.classList.toggle('show', isMobile && (fileOpen || previewOpen));
       }
+      layoutEditor();
     }
 
     function closeSidePanels() {
@@ -1941,42 +1972,32 @@
       updateMobilePanelLayout();
     }
 
-
-    // On mobile, keep Files & Analysis panels closed by default so the
-    // editor toolbar isn't squeezed. They open as overlays on demand.
     function collapsePanelsOnMobile() {
       if (window.innerWidth > 768) {
         updateMobilePanelLayout();
         return;
       }
-      const filePanel = document.getElementById('file-panel');
-      const fileHandle = document.getElementById('file-panel-handle');
-      const previewPanel = document.getElementById('preview-panel');
-      if (filePanel && !filePanel.classList.contains('collapsed')) {
-        filePanel.classList.add('collapsed');
-        if (fileHandle) {
-          fileHandle.classList.add('collapsed');
-          fileHandle.innerHTML = '<svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>';
-        }
-      }
-      if (previewPanel && !previewPanel.classList.contains('collapsed')) {
-        previewPanel.classList.add('collapsed');
-      }
-      updateMobilePanelLayout();
+      closeSidePanels();
     }
     document.addEventListener('DOMContentLoaded', collapsePanelsOnMobile);
-    window.addEventListener('resize', collapsePanelsOnMobile);
+    window.addEventListener('resize', function() {
+      collapsePanelsOnMobile();
+      layoutEditor();
+    });
 
     function toggleFilePanel() {
       const panel = document.getElementById('file-panel');
       const handle = document.getElementById('file-panel-handle');
       const previewPanel = document.getElementById('preview-panel');
       if (!panel) return;
-      const isCollapsed = panel.classList.toggle('collapsed');
-      // Di HP: buka Files → tutup Analysis agar editor tidak tertutup
-      if (!isCollapsed && window.innerWidth <= 768 && previewPanel) {
-        previewPanel.classList.add('collapsed');
+      const opening = panel.classList.contains('collapsed');
+      if (opening) {
+        panel.classList.remove('collapsed');
+        if (window.innerWidth <= 768 && previewPanel) previewPanel.classList.add('collapsed');
+      } else {
+        panel.classList.add('collapsed');
       }
+      const isCollapsed = panel.classList.contains('collapsed');
       if (handle) {
         handle.classList.toggle('collapsed', isCollapsed);
         handle.innerHTML = '<svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-' + (isCollapsed ? 'chevron-right' : 'chevron-left') + '"></use></svg>';
@@ -1989,15 +2010,18 @@
       const filePanel = document.getElementById('file-panel');
       const handle = document.getElementById('file-panel-handle');
       if (!panel) return;
-      const willOpen = panel.classList.contains('collapsed');
-      panel.classList.toggle('collapsed');
-      // Di HP: buka Analysis → tutup Files
-      if (willOpen && window.innerWidth <= 768 && filePanel) {
-        filePanel.classList.add('collapsed');
-        if (handle) {
-          handle.classList.add('collapsed');
-          handle.innerHTML = '<svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>';
+      const opening = panel.classList.contains('collapsed');
+      if (opening) {
+        panel.classList.remove('collapsed');
+        if (window.innerWidth <= 768 && filePanel) {
+          filePanel.classList.add('collapsed');
+          if (handle) {
+            handle.classList.add('collapsed');
+            handle.innerHTML = '<svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>';
+          }
         }
+      } else {
+        panel.classList.add('collapsed');
       }
       updateMobilePanelLayout();
     }
