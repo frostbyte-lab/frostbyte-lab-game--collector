@@ -162,21 +162,25 @@
     /* ===== NAVIGATION ===== */
     nav {
       display: flex;
-      gap: 4px;
+      gap: 6px;
       margin-left: auto;
+      flex-shrink: 0;
+      align-items: center;
     }
 
     .nav-btn {
-      padding: 8px 16px;
+      padding: 8px 14px;
       background: rgba(255, 255, 255, 0.1);
       border: 1px solid rgba(255, 255, 255, 0.2);
-      color: rgba(255, 255, 255, 0.9);
+      color: rgba(255, 255, 255, 0.95);
       border-radius: 8px;
       cursor: pointer;
       font-weight: 600;
       font-size: 13px;
       transition: var(--transition);
       backdrop-filter: blur(10px);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .nav-btn:hover {
@@ -185,9 +189,27 @@
     }
 
     .nav-btn.active {
-      background: rgba(255, 255, 255, 0.25);
-      border-color: rgba(255, 255, 255, 0.4);
-      box-shadow: 0 0 20px rgba(96, 165, 250, 0.3);
+      background: rgba(255, 255, 255, 0.28);
+      border-color: rgba(255, 255, 255, 0.45);
+      box-shadow: 0 0 16px rgba(96, 165, 250, 0.35);
+    }
+
+    /* Breadcrumb di header sering numpuk dengan nav di HP → sembunyikan di layar sempit */
+    @media (max-width: 900px) {
+      .breadcrumb {
+        display: none !important;
+      }
+      .logo-text .sub {
+        display: none;
+      }
+      .nav-btn {
+        padding: 7px 10px;
+        font-size: 12px;
+      }
+      header {
+        gap: 8px;
+        padding: 10px 12px;
+      }
     }
 
     /* ===== MAIN LAYOUT ===== */
@@ -1353,7 +1375,6 @@
           </div>
         </div>
         <div class="breadcrumb" id="breadcrumb">
-          <span>Workspace</span>
           <span id="breadcrumb-file">—</span>
         </div>
       </div>
@@ -1641,28 +1662,42 @@
           host.style.height = '100%';
           host.style.width = '100%';
         }
-        // Tema mendekati VS Code Dark+ — tag/atribut/string berwarna
+        // Warna token HTML/CSS/JS (tag, class, atribut, string, keyword)
         monaco.editor.defineTheme('fb-vscode-dark', {
           base: 'vs-dark',
           inherit: true,
           rules: [
             { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
+            { token: 'comment.content', foreground: '6A9955', fontStyle: 'italic' },
             { token: 'string', foreground: 'CE9178' },
-            { token: 'keyword', foreground: '569CD6' },
+            { token: 'string.html', foreground: 'CE9178' },
+            { token: 'string.css', foreground: 'CE9178' },
+            { token: 'keyword', foreground: 'C586C0' },
+            { token: 'keyword.css', foreground: 'C586C0' },
             { token: 'number', foreground: 'B5CEA8' },
             { token: 'regexp', foreground: 'D16969' },
             { token: 'type', foreground: '4EC9B0' },
             { token: 'class', foreground: '4EC9B0' },
             { token: 'tag', foreground: '569CD6' },
+            { token: 'tag.html', foreground: '569CD6' },
             { token: 'metatag', foreground: '569CD6' },
+            { token: 'metatag.content', foreground: '569CD6' },
+            { token: 'metatag.html', foreground: '569CD6' },
             { token: 'attribute.name', foreground: '9CDCFE' },
+            { token: 'attribute.name.html', foreground: '9CDCFE' },
             { token: 'attribute.value', foreground: 'CE9178' },
+            { token: 'attribute.value.html', foreground: 'CE9178' },
+            { token: 'attribute.value.css', foreground: 'CE9178' },
+            { token: 'attribute.value.number.css', foreground: 'B5CEA8' },
+            { token: 'attribute.value.unit.css', foreground: 'B5CEA8' },
             { token: 'delimiter', foreground: 'D4D4D4' },
             { token: 'delimiter.html', foreground: '808080' },
-            { token: 'tag.identifier', foreground: '569CD6' },
+            { token: 'delimiter.xml', foreground: '808080' },
             { token: 'identifier', foreground: '9CDCFE' },
             { token: 'variable', foreground: '9CDCFE' },
-            { token: 'variable.predefined', foreground: '4FC1FF' }
+            { token: 'variable.predefined', foreground: '4FC1FF' },
+            { token: 'emphasis', fontStyle: 'italic' },
+            { token: 'strong', fontStyle: 'bold' }
           ],
           colors: {
             'editor.background': '#1e1e1e',
@@ -1725,12 +1760,16 @@
         if (window.__pendingEditorContent) {
           try {
             const p = window.__pendingEditorContent;
-            const model = editor.getModel();
-            if (model && p.language && window.monaco) {
-              monaco.editor.setModelLanguage(model, p.language);
+            if (p.language && window.monaco) {
+              const oldModel = editor.getModel();
+              const newModel = monaco.editor.createModel(p.content || '', p.language);
+              editor.setModel(newModel);
+              if (oldModel) try { oldModel.dispose(); } catch (_) {}
+              monaco.editor.setTheme('fb-vscode-dark');
+            } else {
+              editor.setValue(p.content || '');
             }
-            editor.setValue(p.content || '');
-            editor.layout();
+            sizeMonacoHost();
             editor.focus();
           } catch (err) { console.warn(err); }
           window.__pendingEditorContent = null;
@@ -2084,22 +2123,28 @@
       const textContent = content == null ? '' : String(content);
       if (editor) {
         try {
+          // createModel + language = tokenizer HTML/CSS/JS aktif (warna tag/class)
           if (window.monaco) {
-            const model = editor.getModel && editor.getModel();
-            if (model) monaco.editor.setModelLanguage(model, language);
+            const oldModel = editor.getModel && editor.getModel();
+            const newModel = monaco.editor.createModel(textContent, language || 'plaintext');
+            editor.setModel(newModel);
+            if (oldModel && oldModel !== newModel) {
+              try { oldModel.dispose(); } catch (_) {}
+            }
+            monaco.editor.setTheme('fb-vscode-dark');
+          } else {
+            editor.setValue(textContent);
           }
-          // File sangat besar: matikan minimap supaya HP tidak freeze
           if (textContent.length > 400000) {
             try { editor.updateOptions({ minimap: { enabled: false } }); } catch (_) {}
           }
-          editor.setValue(textContent);
           sizeMonacoHost();
           try { editor.focus(); } catch (_) {}
           setTimeout(function() { sizeMonacoHost(); try { editor.focus(); } catch (_) {} }, 100);
           setTimeout(function() { sizeMonacoHost(); }, 400);
         } catch (err) {
           console.error('openFile editor error', err);
-          alert('Editor error: ' + err.message);
+          try { editor.setValue(textContent); } catch (_) {}
         }
       } else {
         window.__pendingEditorContent = { content: textContent, language: language, filename: filename };
