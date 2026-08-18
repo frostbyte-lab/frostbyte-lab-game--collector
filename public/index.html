@@ -119,7 +119,7 @@
     .logo-text .brand span {
       background: linear-gradient(135deg, #60a5fa, #06b6d4);
       -webkit-background-clip: text;
-      -webkit-text-fill-color: transTombol (-) buang dan tombol yg saya tandai garis merah untuk merapatkan ke kiri. Rata ke kiri mepet.parent;
+      -webkit-text-fill-color: transparent;
       background-clip: text;
       font-weight: 900;
     }
@@ -1712,14 +1712,175 @@
       }, 1000);
     }
 
-    // Stub functions
-    function runCollect() { alert('Collect feature'); }
-    function runGitHubCollect() { alert('GitHub Collect'); }
-    function clearStatus() { document.getElementById('status').textContent = 'Cleared'; }
-    function startPreview() { alert('Preview'); }
-    function runAutoRepair() { alert('Auto Repair'); }
-    function scanIssues() { alert('Scanning...'); }
-    function repackage() { alert('Repackaging...'); }
+    // ========== Collect via Cloudflare (Playwright) ==========
+    async function runCollect() {
+      const urlInput = document.getElementById('url');
+      const statusEl = document.getElementById('status');
+      const gameUrl = (urlInput && urlInput.value || '').trim();
+
+      if (!gameUrl) {
+        alert('Masukkan URL game dulu');
+        return;
+      }
+      try { new URL(gameUrl); } catch {
+        alert('URL tidak valid (harus http/https)');
+        return;
+      }
+
+      statusEl.textContent = 'Status: Collecting (Cloudflare)...';
+      try {
+        const progressId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        const res = await fetch('/api/collect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: gameUrl, progressId })
+        });
+
+        if (!res.ok) {
+          let errMsg = res.statusText;
+          try {
+            const err = await res.json();
+            errMsg = err.error || err.message || errMsg;
+          } catch (_) {}
+          statusEl.textContent = 'Status: Gagal — ' + errMsg;
+          alert('Collect gagal: ' + errMsg);
+          return;
+        }
+
+        const ct = res.headers.get('Content-Type') || '';
+        if (ct.includes('application/zip') || ct.includes('octet-stream')) {
+          const blob = await res.blob();
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'game-package.zip';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(a.href);
+          statusEl.textContent = 'Status: Selesai — ZIP diunduh';
+          return;
+        }
+
+        const data = await res.json();
+        statusEl.textContent = 'Status: ' + (data.message || JSON.stringify(data).slice(0, 80));
+        if (data.downloadUrl) window.open(data.downloadUrl, '_blank');
+        if (data.run_url) window.open(data.run_url, '_blank');
+      } catch (e) {
+        statusEl.textContent = 'Status: Error — ' + e.message;
+        alert('Error: ' + e.message);
+      }
+    }
+
+    // ========== Collect via GitHub Actions ==========
+    async function runGitHubCollect() {
+      const urlInput = document.getElementById('url');
+      const statusEl = document.getElementById('status');
+      const gameUrl = (urlInput && urlInput.value || '').trim();
+
+      if (!gameUrl) {
+        alert('Masukkan URL game dulu');
+        return;
+      }
+      try { new URL(gameUrl); } catch {
+        alert('URL tidak valid (harus http/https)');
+        return;
+      }
+
+      statusEl.textContent = 'Status: Trigger GitHub Actions...';
+
+      try {
+        const res = await fetch('/api/github/collect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: gameUrl, wait_seconds: '12' })
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          const msg = data.error || (data.detail && JSON.stringify(data.detail)) || res.status;
+          statusEl.textContent = 'Status: Gagal trigger — ' + msg;
+          alert('Gagal trigger GitHub Actions:\n' + msg);
+          return;
+        }
+
+        statusEl.textContent = 'Status: GitHub Actions dimulai' + (data.run_id ? ' (run #' + data.run_id + ')' : '');
+        if (data.run_url) window.open(data.run_url, '_blank');
+
+        if (data.run_id) {
+          pollGitHubStatus(data.run_id);
+        } else {
+          statusEl.textContent += ' — cek manual di GitHub Actions';
+        }
+      } catch (e) {
+        statusEl.textContent = 'Status: Error — ' + e.message;
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function pollGitHubStatus(runId) {
+      const statusEl = document.getElementById('status');
+      let tries = 0;
+      const maxTries = 48; // ~4 menit @ 5s
+
+      const timer = setInterval(async () => {
+        tries++;
+        try {
+          const res = await fetch('/api/github/status?run_id=' + encodeURIComponent(runId));
+          const data = await res.json();
+          if (!data.ok) {
+            statusEl.textContent = 'Status: Gagal cek status run';
+            clearInterval(timer);
+            return;
+          }
+
+          const phase = data.phase || data.current_step || data.status || '';
+          statusEl.textContent = 'Status: ' + data.status + (phase ? ' — ' + phase : '');
+
+          if (data.status === 'completed') {
+            clearInterval(timer);
+            if (data.conclusion === 'success' && data.artifact && data.artifact.id) {
+              statusEl.textContent = 'Status: Selesai! Mengunduh artifact ZIP...';
+              const a = document.createElement('a');
+              a.href = '/api/github/artifact?artifact_id=' + encodeURIComponent(data.artifact.id);
+              a.download = 'game-resources.zip';
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              statusEl.textContent = 'Status: ZIP artifact siap diunduh';
+            } else {
+              statusEl.textContent = 'Status: Selesai (conclusion: ' + (data.conclusion || '?') + ')';
+              if (data.html_url) window.open(data.html_url, '_blank');
+            }
+          }
+        } catch (e) {
+          statusEl.textContent = 'Status: Poll error — ' + e.message;
+        }
+
+        if (tries >= maxTries) {
+          clearInterval(timer);
+          statusEl.textContent += ' (timeout, cek manual di GitHub Actions)';
+        }
+      }, 5000);
+    }
+
+    function clearStatus() {
+      const el = document.getElementById('status');
+      if (el) el.textContent = 'Status: Ready';
+    }
+
+    function startPreview() {
+      alert('Load ZIP dulu di tab Workspace, lalu gunakan tombol Preview di sana.');
+    }
+    function runAutoRepair() {
+      alert('Auto Repair: load ZIP di Workspace terlebih dahulu.');
+    }
+    function scanIssues() {
+      alert('Scan Issues: load ZIP di Workspace terlebih dahulu.');
+    }
+    function repackage() {
+      alert('Pack Game: load ZIP di Workspace terlebih dahulu.');
+    }
   </script>
 </body>
 </html>
+
