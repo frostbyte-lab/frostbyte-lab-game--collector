@@ -316,8 +316,8 @@
       flex: 0 0 260px;
       width: 260px;
       max-width: 260px;
-      background: var(--surface);
-      border-right: 1px solid var(--border);
+      background: #252526;
+      border-right: 1px solid #1e1e1e;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -367,7 +367,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: var(--bg-secondary);
+      background: #1e1e1e;
       position: relative;
       z-index: 1;
     }
@@ -490,28 +490,30 @@
     }
 
     .file-tree-item {
-      padding: 6px 8px;
+      padding: 3px 8px;
       cursor: pointer;
-      border-radius: 6px;
-      margin-bottom: 2px;
-      font-size: 12px;
-      transition: var(--transition);
+      border-radius: 0;
+      margin-bottom: 0;
+      font-size: 13px;
+      transition: background 0.1s ease;
       display: flex;
       align-items: center;
       gap: 6px;
-      color: var(--text-muted);
+      color: #cccccc;
+      min-height: 22px;
     }
 
     .file-tree-item:hover {
-      background: var(--surface-alt);
-      color: var(--text);
+      background: #2a2d2e;
+      color: #fff;
     }
 
     .file-tree-item.active {
-      background: rgba(59, 130, 246, 0.15);
-      color: var(--accent);
-      border-left: 3px solid var(--accent);
-      padding-left: 5px;
+      background: #37373d;
+      color: #fff;
+      border-left: 0;
+      outline: 1px solid #007fd4;
+      outline-offset: -1px;
     }
 
     .file-tree-item::before {
@@ -693,8 +695,11 @@
       align-items: center;
       justify-content: center;
       border-radius: 3px;
-      opacity: 0;
+      opacity: 0.45;
       transition: var(--transition);
+      margin-left: 4px;
+      font-size: 14px;
+      line-height: 1;
     }
 
     .editor-tab:hover .close {
@@ -1434,7 +1439,7 @@
         <div class="ws-backdrop" id="ws-backdrop" onclick="closeSidePanels()"></div>
         <!-- File Tree -->
         <div class="file-panel" id="file-panel">
-          <div class="file-panel-header"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-folder"></use></svg> Files</div>
+          <div class="file-panel-header"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-folder"></use></svg> EXPLORER</div>
           <div class="file-search">
             <input type="search" id="file-search" placeholder="Search files..." oninput="filterFiles()">
           </div>
@@ -1602,22 +1607,77 @@
           host.style.height = '100%';
           host.style.width = '100%';
         }
+        // Tema mendekati VS Code Dark+ — tag/atribut/string berwarna
+        monaco.editor.defineTheme('fb-vscode-dark', {
+          base: 'vs-dark',
+          inherit: true,
+          rules: [
+            { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
+            { token: 'string', foreground: 'CE9178' },
+            { token: 'keyword', foreground: '569CD6' },
+            { token: 'number', foreground: 'B5CEA8' },
+            { token: 'regexp', foreground: 'D16969' },
+            { token: 'type', foreground: '4EC9B0' },
+            { token: 'class', foreground: '4EC9B0' },
+            { token: 'tag', foreground: '569CD6' },
+            { token: 'metatag', foreground: '569CD6' },
+            { token: 'attribute.name', foreground: '9CDCFE' },
+            { token: 'attribute.value', foreground: 'CE9178' },
+            { token: 'delimiter', foreground: 'D4D4D4' },
+            { token: 'delimiter.html', foreground: '808080' },
+            { token: 'tag.identifier', foreground: '569CD6' },
+            { token: 'identifier', foreground: '9CDCFE' },
+            { token: 'variable', foreground: '9CDCFE' },
+            { token: 'variable.predefined', foreground: '4FC1FF' }
+          ],
+          colors: {
+            'editor.background': '#1e1e1e',
+            'editor.foreground': '#d4d4d4',
+            'editorLineNumber.foreground': '#858585',
+            'editorLineNumber.activeForeground': '#c6c6c6',
+            'editor.selectionBackground': '#264f78',
+            'editor.lineHighlightBackground': '#2a2a2a',
+            'editorCursor.foreground': '#aeafad',
+            'editorIndentGuide.background': '#404040',
+            'editorIndentGuide.activeBackground': '#707070',
+            'editorBracketHighlight.foreground1': '#FFD700',
+            'editorBracketHighlight.foreground2': '#DA70D6',
+            'editorBracketHighlight.foreground3': '#179FFF'
+          }
+        });
+        monaco.editor.setTheme('fb-vscode-dark');
+
         editor = monaco.editor.create(host, {
-          value: '// Load a file to start editing\n',
-          language: 'plaintext',
-          theme: 'vs-dark',
+          value: '// Load a file to start editing\n// HTML / CSS / JS — syntax berwarna seperti VS Code\n',
+          language: 'javascript',
+          theme: 'fb-vscode-dark',
           fontSize: 14,
           lineHeight: 22,
-          fontFamily: "'Menlo', 'Monaco', 'Ubuntu Mono', monospace",
-          minimap: { enabled: window.innerWidth > 768 },
+          fontFamily: "'Cascadia Code', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', monospace",
+          fontLigatures: true,
+          minimap: { enabled: window.innerWidth > 900 },
           scrollBeyondLastLine: false,
           wordWrap: 'on',
           automaticLayout: true,
           formatOnPaste: true,
           autoClosingBrackets: 'always',
           autoClosingQuotes: 'always',
-          renderWhitespace: 'none',
-          bracketPairColorization: { enabled: true }
+          autoIndent: 'full',
+          renderWhitespace: 'selection',
+          renderLineHighlight: 'line',
+          lineNumbers: 'on',
+          glyphMargin: false,
+          folding: true,
+          matchBrackets: 'always',
+          bracketPairColorization: { enabled: true },
+          guides: {
+            bracketPairs: true,
+            indentation: true
+          },
+          padding: { top: 8 },
+          smoothScrolling: true,
+          cursorBlinking: 'smooth',
+          mouseWheelZoom: true
         });
 
         editor.onDidChangeCursorPosition(e => {
@@ -2018,6 +2078,58 @@
       if (elFi) elFi.textContent = 'path: ' + filename + '\nlanguage: ' + language + '\nsize: ' + size + ' bytes';
 
       openFiles.set(filename, textContent);
+      updateEditorTabs(filename);
+    }
+
+    function updateEditorTabs(activePath) {
+      const bar = document.getElementById('editor-tabs');
+      if (!bar) return;
+      bar.innerHTML = '';
+      const paths = Array.from(openFiles.keys());
+      if (!paths.length) {
+        bar.innerHTML = '<div class="editor-tab active" style="opacity:0.7">No file open</div>';
+        return;
+      }
+      paths.forEach(function(p) {
+        const name = p.split('/').pop();
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'editor-tab' + (p === activePath ? ' active' : '');
+        tab.title = p;
+        const label = document.createElement('span');
+        label.textContent = name;
+        tab.appendChild(label);
+        const close = document.createElement('span');
+        close.className = 'close';
+        close.textContent = '×';
+        close.title = 'Close';
+        close.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openFiles.delete(p);
+          if (currentFile === p) {
+            const next = openFiles.keys().next().value;
+            if (next) {
+              openFile(next, openFiles.get(next), openFiles.get(next).length);
+            } else {
+              currentFile = null;
+              if (editor) editor.setValue('// No file open\n');
+              updateEditorTabs(null);
+            }
+          } else {
+            updateEditorTabs(currentFile);
+          }
+        });
+        tab.appendChild(close);
+        tab.addEventListener('click', function() {
+          if (p === currentFile) return;
+          // simpan edit file aktif dulu
+          if (currentFile && editor && openFiles.has(currentFile)) {
+            openFiles.set(currentFile, editor.getValue());
+          }
+          openFile(p, openFiles.get(p), openFiles.get(p).length);
+        });
+        bar.appendChild(tab);
+      });
     }
 
     function sizeMonacoHost() {
