@@ -495,7 +495,35 @@
     .badge-xml  { background: #e37933; color: #fff; }
     .badge-yml  { background: #cb171e; color: #fff; }
     .badge-txt  { background: #6b7280; color: #fff; }
+    .badge-vue  { background: #42b883; color: #fff; }
+    .badge-swift{ background: #f05138; color: #fff; }
+    .badge-sh   { background: #4eaa25; color: #fff; }
+    .badge-sql  { background: #e38c00; color: #fff; }
+    .badge-lua  { background: #000080; color: #fff; }
+    .badge-r    { background: #276dc3; color: #fff; }
+    .badge-perl { background: #0073a1; color: #fff; }
+    .badge-dart { background: #0175c2; color: #fff; }
+    .badge-elixir { background: #6e4a7e; color: #fff; }
+    .badge-haskell { background: #5e5086; color: #fff; }
+    .badge-lisp { background: #3fb68b; color: #fff; }
+    .badge-docker { background: #2496ed; color: #fff; }
+    .badge-sol  { background: #626890; color: #fff; }
+    .badge-gd   { background: #478cbf; color: #fff; }
     .badge-default { background: #6b7280; color: #fff; }
+    .name-vue { color: #42b883; }
+    .name-swift { color: #f05138; }
+    .name-sh { color: #4eaa25; }
+    .name-sql { color: #e38c00; }
+    .name-lua { color: #6ea8fe; }
+    .name-r { color: #276dc3; }
+    .name-perl { color: #0073a1; }
+    .name-dart { color: #0175c2; }
+    .name-elixir { color: #b07cc6; }
+    .name-haskell { color: #9b8ec6; }
+    .name-lisp { color: #3fb68b; }
+    .name-docker { color: #2496ed; }
+    .name-sol { color: #9aa0c3; }
+    .name-gd { color: #478cbf; }
 
     /* File name text tinted to match its badge color */
     .file-tree-item .file-tree-name { color: inherit; }
@@ -1444,27 +1472,78 @@
     let currentZip = null;
     let zipFileMap = {}; // path -> JSZip file entry
 
+    // Badge + warna per ekstensi (syntax highlight pakai Monaco language id)
     const FILE_BADGES = {
+      // Web
       html: ['</>', 'badge-html', 'name-html'], htm: ['</>', 'badge-html', 'name-html'],
+      xhtml: ['</>', 'badge-html', 'name-html'], vue: ['V', 'badge-vue', 'name-vue'],
+      svelte: ['S', 'badge-vue', 'name-vue'], astro: ['A', 'badge-html', 'name-html'],
       css: ['#', 'badge-css', 'name-css'], scss: ['#', 'badge-css', 'name-css'], sass: ['#', 'badge-css', 'name-css'],
-      js: ['JS', 'badge-js', 'name-js'], mjs: ['JS', 'badge-js', 'name-js'], jsx: ['JSX', 'badge-js', 'name-js'],
-      ts: ['TS', 'badge-ts', 'name-ts'], tsx: ['TSX', 'badge-ts', 'name-ts'],
-      json: ['{}', 'badge-json', 'name-json'],
-      md: ['M', 'badge-md', 'name-md'],
-      png: ['IMG', 'badge-img', 'name-img'], jpg: ['IMG', 'badge-img', 'name-img'], jpeg: ['IMG', 'badge-img', 'name-img'],
-      gif: ['IMG', 'badge-img', 'name-img'], svg: ['IMG', 'badge-img', 'name-img'], webp: ['IMG', 'badge-img', 'name-img'], ico: ['IMG', 'badge-img', 'name-img'],
-      py: ['PY', 'badge-py', 'name-py'],
-      java: ['JV', 'badge-java', 'name-java'],
-      php: ['PHP', 'badge-php', 'name-php'],
-      rb: ['RB', 'badge-rb', 'name-rb'],
-      go: ['GO', 'badge-go', 'name-go'],
-      rs: ['RS', 'badge-rs', 'name-rs'],
-      c: ['C', 'badge-c', 'name-c'], cpp: ['C++', 'badge-c', 'name-c'], cs: ['C#', 'badge-c', 'name-c'],
-      xml: ['XML', 'badge-xml', 'name-xml'],
+      less: ['#', 'badge-css', 'name-css'], styl: ['#', 'badge-css', 'name-css'],
+      js: ['JS', 'badge-js', 'name-js'], mjs: ['JS', 'badge-js', 'name-js'], cjs: ['JS', 'badge-js', 'name-js'],
+      jsx: ['JSX', 'badge-js', 'name-js'], ts: ['TS', 'badge-ts', 'name-ts'], tsx: ['TSX', 'badge-ts', 'name-ts'],
+      json: ['{}', 'badge-json', 'name-json'], jsonc: ['{}', 'badge-json', 'name-json'],
+      json5: ['{}', 'badge-json', 'name-json'],
+      // Docs / data
+      md: ['MD', 'badge-md', 'name-md'], mdx: ['MDX', 'badge-md', 'name-md'],
+      txt: ['TXT', 'badge-txt', 'name-txt'], log: ['LOG', 'badge-txt', 'name-txt'],
+      xml: ['XML', 'badge-xml', 'name-xml'], svg: ['SVG', 'badge-img', 'name-img'],
       yaml: ['YML', 'badge-yml', 'name-yml'], yml: ['YML', 'badge-yml', 'name-yml'],
-      txt: ['TXT', 'badge-txt', 'name-txt']
+      toml: ['TM', 'badge-yml', 'name-yml'], ini: ['INI', 'badge-txt', 'name-txt'],
+      cfg: ['CFG', 'badge-txt', 'name-txt'], conf: ['CFG', 'badge-txt', 'name-txt'],
+      // Images / media (binary badge only)
+      png: ['IMG', 'badge-img', 'name-img'], jpg: ['IMG', 'badge-img', 'name-img'], jpeg: ['IMG', 'badge-img', 'name-img'],
+      gif: ['IMG', 'badge-img', 'name-img'], webp: ['IMG', 'badge-img', 'name-img'], ico: ['IMG', 'badge-img', 'name-img'],
+      bmp: ['IMG', 'badge-img', 'name-img'], avif: ['IMG', 'badge-img', 'name-img'],
+      mp3: ['AUD', 'badge-img', 'name-img'], ogg: ['AUD', 'badge-img', 'name-img'], wav: ['AUD', 'badge-img', 'name-img'],
+      mp4: ['VID', 'badge-img', 'name-img'], webm: ['VID', 'badge-img', 'name-img'],
+      // Systems / general purpose
+      py: ['PY', 'badge-py', 'name-py'], pyw: ['PY', 'badge-py', 'name-py'], pyi: ['PY', 'badge-py', 'name-py'],
+      java: ['JV', 'badge-java', 'name-java'], kt: ['KT', 'badge-java', 'name-java'], kts: ['KT', 'badge-java', 'name-java'],
+      scala: ['SC', 'badge-java', 'name-java'], groovy: ['GV', 'badge-java', 'name-java'],
+      php: ['PHP', 'badge-php', 'name-php'], rb: ['RB', 'badge-rb', 'name-rb'], erb: ['RB', 'badge-rb', 'name-rb'],
+      go: ['GO', 'badge-go', 'name-go'], rs: ['RS', 'badge-rs', 'name-rs'],
+      c: ['C', 'badge-c', 'name-c'], h: ['H', 'badge-c', 'name-c'],
+      cpp: ['C++', 'badge-c', 'name-c'], cxx: ['C++', 'badge-c', 'name-c'], cc: ['C++', 'badge-c', 'name-c'],
+      hpp: ['H++', 'badge-c', 'name-c'], hh: ['H++', 'badge-c', 'name-c'],
+      cs: ['C#', 'badge-c', 'name-c'], fs: ['F#', 'badge-c', 'name-c'], fsx: ['F#', 'badge-c', 'name-c'],
+      swift: ['SW', 'badge-swift', 'name-swift'], m: ['ObjC', 'badge-c', 'name-c'], mm: ['ObjC', 'badge-c', 'name-c'],
+      // Scripting / shell
+      sh: ['SH', 'badge-sh', 'name-sh'], bash: ['SH', 'badge-sh', 'name-sh'], zsh: ['SH', 'badge-sh', 'name-sh'],
+      fish: ['SH', 'badge-sh', 'name-sh'], ps1: ['PS', 'badge-sh', 'name-sh'], psm1: ['PS', 'badge-sh', 'name-sh'],
+      bat: ['BAT', 'badge-sh', 'name-sh'], cmd: ['CMD', 'badge-sh', 'name-sh'],
+      // Data / query
+      sql: ['SQL', 'badge-sql', 'name-sql'], mysql: ['SQL', 'badge-sql', 'name-sql'],
+      pgsql: ['SQL', 'badge-sql', 'name-sql'], graphql: ['GQL', 'badge-sql', 'name-sql'], gql: ['GQL', 'badge-sql', 'name-sql'],
+      // Functional / other
+      lua: ['LUA', 'badge-lua', 'name-lua'], r: ['R', 'badge-r', 'name-r'], jl: ['JL', 'badge-r', 'name-r'],
+      pl: ['PL', 'badge-perl', 'name-perl'], pm: ['PL', 'badge-perl', 'name-perl'],
+      dart: ['DT', 'badge-dart', 'name-dart'], ex: ['EX', 'badge-elixir', 'name-elixir'], exs: ['EX', 'badge-elixir', 'name-elixir'],
+      erl: ['ERL', 'badge-elixir', 'name-elixir'], hs: ['HS', 'badge-haskell', 'name-haskell'],
+      clj: ['CLJ', 'badge-lisp', 'name-lisp'], cljs: ['CLJ', 'badge-lisp', 'name-lisp'],
+      lisp: ['LSP', 'badge-lisp', 'name-lisp'], scm: ['SCM', 'badge-lisp', 'name-lisp'],
+      // Markup / templates
+      pug: ['PUG', 'badge-html', 'name-html'], jade: ['JDE', 'badge-html', 'name-html'],
+      hbs: ['HBS', 'badge-html', 'name-html'], handlebars: ['HBS', 'badge-html', 'name-html'],
+      ejs: ['EJS', 'badge-html', 'name-html'], njk: ['NJK', 'badge-html', 'name-html'],
+      twig: ['TWG', 'badge-html', 'name-html'], liquid: ['LQ', 'badge-html', 'name-html'],
+      razor: ['RZR', 'badge-html', 'name-html'], cshtml: ['RZR', 'badge-html', 'name-html'],
+      // Config / infra
+      dockerfile: ['DKR', 'badge-docker', 'name-docker'],
+      tf: ['TF', 'badge-docker', 'name-docker'], hcl: ['HCL', 'badge-docker', 'name-docker'],
+      proto: ['PBO', 'badge-xml', 'name-xml'], protobuf: ['PBO', 'badge-xml', 'name-xml'],
+      sol: ['SOL', 'badge-sol', 'name-sol'], move: ['MOV', 'badge-sol', 'name-sol'],
+      // Game / specialty
+      gd: ['GD', 'badge-gd', 'name-gd'], gdscript: ['GD', 'badge-gd', 'name-gd'],
+      hlsl: ['HLSL', 'badge-c', 'name-c'], glsl: ['GLSL', 'badge-c', 'name-c'], wgsl: ['WGSL', 'badge-c', 'name-c'],
+      vb: ['VB', 'badge-c', 'name-c'], vbs: ['VB', 'badge-c', 'name-c'],
+      coffee: ['COF', 'badge-js', 'name-js']
     };
-    const TEXT_EXTS = ['html','htm','css','scss','sass','js','mjs','ts','jsx','tsx','json','md','txt','xml','yaml','yml','py','java','c','cpp','cs','php','rb','go','rs'];
+    // Semua ekstensi yang dibuka sebagai teks di editor
+    const TEXT_EXTS = Object.keys(FILE_BADGES).filter(ext => {
+      const bin = new Set(['png','jpg','jpeg','gif','webp','ico','bmp','avif','mp3','ogg','wav','mp4','webm']);
+      return !bin.has(ext);
+    }).concat(['dockerfile','makefile','cmake','gradle','properties','env','gitignore','editorconfig','eslintrc','prettierrc','babelrc']);
 
     function fileIconHTML(name) {
       const ext = name.split('.').pop().toLowerCase();
@@ -1630,17 +1709,67 @@
       
       // Get language from extension
       const ext = filename.split('.').pop().toLowerCase();
+      // Monaco built-in languages (bukan 1000, tapi hampir semua bahasa populer)
       const langMap = {
-        'js': 'javascript', 'ts': 'typescript', 'jsx': 'javascript', 'tsx': 'typescript',
-        'html': 'html', 'css': 'css', 'scss': 'scss', 'json': 'json',
-        'py': 'python', 'go': 'go', 'rs': 'rust', 'java': 'java',
-        'cpp': 'cpp', 'c': 'c', 'java': 'java', 'cs': 'csharp',
-        'php': 'php', 'rb': 'ruby', 'xml': 'xml', 'yaml': 'yaml'
+        // Web
+        js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
+        ts: 'typescript', tsx: 'typescript',
+        html: 'html', htm: 'html', xhtml: 'html', vue: 'html', svelte: 'html', astro: 'html',
+        css: 'css', scss: 'scss', sass: 'scss', less: 'less', styl: 'scss',
+        json: 'json', jsonc: 'json', json5: 'json',
+        // Docs
+        md: 'markdown', mdx: 'markdown', txt: 'plaintext', log: 'plaintext',
+        xml: 'xml', svg: 'xml',
+        yaml: 'yaml', yml: 'yaml', toml: 'ini', ini: 'ini', cfg: 'ini', conf: 'ini',
+        // General
+        py: 'python', pyw: 'python', pyi: 'python',
+        java: 'java', kt: 'kotlin', kts: 'kotlin', scala: 'scala', groovy: 'java',
+        php: 'php', rb: 'ruby', erb: 'ruby',
+        go: 'go', rs: 'rust',
+        c: 'c', h: 'c', cpp: 'cpp', cxx: 'cpp', cc: 'cpp', hpp: 'cpp', hh: 'cpp',
+        cs: 'csharp', fs: 'fsharp', fsx: 'fsharp',
+        swift: 'swift', m: 'objective-c', mm: 'objective-c',
+        // Shell
+        sh: 'shell', bash: 'shell', zsh: 'shell', fish: 'shell',
+        ps1: 'powershell', psm1: 'powershell', bat: 'bat', cmd: 'bat',
+        // Data
+        sql: 'sql', mysql: 'mysql', pgsql: 'pgsql', graphql: 'graphql', gql: 'graphql',
+        // Other languages Monaco supports
+        lua: 'lua', r: 'r', jl: 'julia',
+        pl: 'perl', pm: 'perl',
+        dart: 'dart', ex: 'elixir', exs: 'elixir', erl: 'plaintext',
+        hs: 'plaintext', clj: 'clojure', cljs: 'clojure', lisp: 'scheme', scm: 'scheme',
+        pug: 'pug', jade: 'pug', hbs: 'handlebars', handlebars: 'handlebars',
+        ejs: 'html', njk: 'html', twig: 'twig', liquid: 'html',
+        razor: 'razor', cshtml: 'razor',
+        dockerfile: 'dockerfile', tf: 'hcl', hcl: 'hcl',
+        proto: 'protobuf', protobuf: 'protobuf',
+        sol: 'sol', coffee: 'coffee',
+        vb: 'vb', vbs: 'vb',
+        hlsl: 'c', glsl: 'c', wgsl: 'wgsl',
+        gd: 'plaintext', gdscript: 'plaintext',
+        // special filenames handled below
       };
-      
-      const language = langMap[ext] || 'plaintext';
-      if (editor) {
-        editor.setLanguage(language);
+
+      let language = langMap[ext] || 'plaintext';
+      const base = filename.split('/').pop().toLowerCase();
+      if (base === 'dockerfile' || base.startsWith('dockerfile.')) language = 'dockerfile';
+      if (base === 'makefile' || base === 'gnumakefile') language = 'plaintext';
+      if (base === 'cmakelists.txt') language = 'plaintext';
+      if (base.endsWith('.env') || base === '.env') language = 'ini';
+      if (base === '.gitignore' || base === '.editorconfig') language = 'ini';
+
+      // Pastikan model Monaco memakai language id yang valid
+      if (editor && window.monaco) {
+        const model = editor.getModel && editor.getModel();
+        if (model) {
+          monaco.editor.setModelLanguage(model, language);
+        } else {
+          try { editor.setLanguage(language); } catch (_) {}
+        }
+        editor.setValue(content);
+      } else if (editor) {
+        try { editor.setLanguage(language); } catch (_) {}
         editor.setValue(content);
       }
       
