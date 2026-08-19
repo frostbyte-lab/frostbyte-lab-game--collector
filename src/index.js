@@ -1,3 +1,4 @@
+import { analyzeGame, repairMetadata, recommendGames, chatAboutGames } from "./ai.js";
 /**
  * Game Collector Pro — Worker entry (modular Poin 5)
  */
@@ -368,7 +369,25 @@ export default {
       });
     }
 
-    // --- Progress collect (poll) ---
+    // --- AI Studio ---
+      if (request.method === "POST" && url.pathname === "/api/ai") {
+        let body = {};
+        try { body = await request.json(); } catch { return Response.json({ error: "JSON tidak valid" }, { status: 400 }); }
+        try {
+          const action = String(body.action || "");
+          let result;
+          if (action === "analyze") result = await analyzeGame(env, body.data);
+          else if (action === "repair") result = await repairMetadata(env, body.data);
+          else if (action === "recommend") result = await recommendGames(env, body.data);
+          else if (action === "chat" && body.question) result = await chatAboutGames(env, body.question, body.context);
+          else return Response.json({ error: "action harus analyze, repair, recommend, atau chat" }, { status: 400 });
+          return Response.json({ ok: true, action, result });
+        } catch (error) {
+          return Response.json({ ok: false, error: error?.message || "AI gagal memproses permintaan" }, { status: 503 });
+        }
+      }
+
+        // --- Progress collect (poll) ---
     if (request.method === "GET" && url.pathname === "/api/progress") {
       const id = url.searchParams.get("id");
       if (!id) return Response.json({ error: "id required" }, { status: 400 });
