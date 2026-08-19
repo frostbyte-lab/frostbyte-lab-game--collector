@@ -1600,6 +1600,7 @@
         <button class="nav-btn active" data-panel="collect">Collect</button>
         <button class="nav-btn" data-panel="workspace">Workspace</button>
         <button class="nav-btn" data-panel="history">History</button>
+        <button class="nav-btn" data-panel="ai">AI Studio</button>
       </nav>
     </header>
 
@@ -1662,6 +1663,25 @@
       </div>
     </section>
 
+
+      <!-- AI Studio Panel -->
+      <section id="panel-ai" class="panel">
+        <div class="collect-wrapper">
+          <div class="collect-hero"><h2>AI Studio</h2><p>Analisis, rapikan, rekomendasikan, dan tanyakan apa pun tentang hasil koleksi Anda.</p></div>
+          <div class="collect-card" style="padding:16px;">
+            <label for="ai-input">Data koleksi atau pertanyaan</label>
+            <textarea id="ai-input" rows="9" placeholder="Tempel JSON manifest/analisis, katalog game, atau tulis pertanyaan di sini..."></textarea>
+            <div class="collect-actions" style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
+              <button class="btn btn-primary" onclick="runAIStudio('analyze')">Analisis Game</button>
+              <button class="btn btn-secondary" onclick="runAIStudio('repair')">Perbaiki Metadata</button>
+              <button class="btn btn-success" onclick="runAIStudio('recommend')">Rekomendasi Game</button>
+              <button class="btn btn-secondary" onclick="runAIStudio('chat')">Tanya AI</button>
+            </div>
+          </div>
+          <div class="collect-card" style="padding:16px;"><div id="ai-status" class="status-box">AI siap digunakan</div><pre id="ai-output" style="white-space:pre-wrap; margin-top:12px; max-height:420px; overflow:auto;"></pre></div>
+        </div>
+      </section>
+    
     <!-- Workspace Panel -->
     <section id="panel-workspace" class="panel">
       <!-- Workspace Header -->
@@ -3360,7 +3380,25 @@
       }
     }
 
-    // ========== Collect via GitHub Actions (semua di web, tanpa buka GitHub) ==========
+    // ========== AI Studio ==========
+      async function runAIStudio(action) {
+        const input = document.getElementById('ai-input');
+        const status = document.getElementById('ai-status');
+        const output = document.getElementById('ai-output');
+        const value = (input && input.value || '').trim();
+        if (!value) { status.textContent = 'Masukkan data atau pertanyaan terlebih dahulu.'; return; }
+        status.textContent = 'AI sedang memproses...'; output.textContent = '';
+        try {
+          let data = value;
+          if (action !== 'chat') { try { data = JSON.parse(value); } catch {} }
+          const res = await fetch('/api/ai', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action, data, question: action === 'chat' ? value : undefined, context: window.currentManifest || window.currentAnalysis || '' }) });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok || !body.ok) throw new Error(body.error || 'AI tidak tersedia');
+          status.textContent = 'Selesai'; output.textContent = typeof body.result === 'string' ? body.result : JSON.stringify(body.result, null, 2);
+        } catch (error) { status.textContent = 'Gagal: ' + error.message; }
+      }
+
+        // ========== Collect via GitHub Actions (semua di web, tanpa buka GitHub) ==========
     let _ghPollTimer = null;
 
     async function runGitHubCollect() {
