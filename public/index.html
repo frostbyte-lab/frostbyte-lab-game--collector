@@ -1773,10 +1773,15 @@
 
           <!-- AI Panel -->
           <div class="ai-panel hidden" id="ai-panel">
-            <div class="ai-label"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-bot"></use></svg> AI Assistant</div>
+            <div class="ai-label"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-bot"></use></svg> AI Assistant <span style="font-weight:400;text-transform:none;color:var(--text-muted);">· no API key required</span></div>
             <div class="ai-input">
-              <input type="text" id="ai-prompt" placeholder="Ask AI to analyze or fix code..." />
+              <input type="text" id="ai-prompt" placeholder="Tanyakan penyebab error atau cara memperbaikinya..." />
               <button class="btn btn-primary btn-sm" onclick="askAI()">Send</button>
+            </div>
+            <div class="ai-buttons">
+              <button class="btn btn-secondary btn-sm" onclick="analyzeWithAI()">Analyze with AI</button>
+              <button class="btn btn-secondary btn-sm" onclick="repairWithAI()">Suggest Fix</button>
+              <button class="btn btn-success btn-sm" id="ai-apply-fix" onclick="applyAISuggestedFix()" hidden>Apply Fix</button>
             </div>
             <div class="ai-response" id="ai-response" style="display: none;"></div>
           </div>
@@ -2702,18 +2707,103 @@
       deleteFile(currentFile);
     }
 
-    function askAI() {
-      const prompt = document.getElementById('ai-prompt').value;
+    let aiSuggestedCode = null;
+
+    function activeAIContext() {
+      if (!currentFile || !editor) throw new Error('Buka file teks terlebih dahulu.');
+      return {
+        filename: currentFile,
+        language: document.getElementById('editor-lang')?.textContent || 'plaintext',
+        code: editor.getValue() || '',
+        staticIssues: analyzeCurrentCode()
+      };
+    }
+
+    function formatAIResult(result) {
+      const lines = [];
+      if (result.summary) lines.push(result.summary);
+      if (result.issues?.length) {
+        lines.push('', 'Temuan:');
+        result.issues.forEach(item => {
+          const line = item.line ? ' baris ' + item.line : '';
+          lines.push('• [' + (item.severity || 'info') + line + '] ' + item.message);
+        });
+      }
+      if (result.suggestions?.length) {
+        lines.push('', 'Saran perbaikan:');
+        result.suggestions.forEach(item => lines.push('• ' + item));
+      }
+      return lines.join('\n') || 'AI tidak menemukan penjelasan tambahan.';
+    }
+
+    async function requestAI(action, question) {
+      const context = activeAIContext();
       const response = document.getElementById('ai-response');
+      if (response) {
+        response.style.display = 'block';
+        response.textContent = 'AI sedang menganalisis ' + context.filename + '...';
+      }
+      const res = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...context, action, question: question || '' })
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi.');
+      aiSuggestedCode = result.repairedCode || null;
+      const applyButton = document.getElementById('ai-apply-fix');
+      if (applyButton) applyButton.hidden = !aiSuggestedCode;
+      if (response) {
+        response.style.display = 'block';
+        response.textContent = formatAIResult(result);
+      }
+      return result;
+    }
+
+    async function analyzeWithAI() {
+      try {
+        appendLog('AI: menganalisis error dan saran perbaikan...', 'ok');
+        await requestAI('analyze');
+        appendLog('AI: analisis selesai.', 'ok');
+      } catch (error) {
+        appendLog('AI: ' + error.message, 'err');
+      }
+    }
+
+    async function repairWithAI() {
+      try {
+        appendLog('AI: menyiapkan usulan perbaikan kode...', 'ok');
+        const result = await requestAI('repair');
+        if (!result.repairedCode) appendLog('AI belum memberikan kode perbaikan yang aman.', 'warn');
+        else appendLog('AI: usulan perbaikan siap ditinjau. Klik Apply Fix jika sesuai.', 'ok');
+      } catch (error) {
+        appendLog('AI: ' + error.message, 'err');
+      }
+    }
+
+    function applyAISuggestedFix() {
+      if (!aiSuggestedCode || !editor || !currentFile) return;
+      if (!window.confirm('Terapkan usulan perbaikan AI ke file aktif? Anda masih bisa meninjaunya sebelum Save.')) return;
+      editor.setValue(aiSuggestedCode);
+      openFiles.set(currentFile, aiSuggestedCode);
+      const applyButton = document.getElementById('ai-apply-fix');
+      if (applyButton) applyButton.hidden = true;
+      appendLog('AI: usulan perbaikan diterapkan ke editor. Klik Save untuk menyimpan ke ZIP.', 'ok');
+    }
+
+    async function askAI() {
+      const prompt = document.getElementById('ai-prompt').value;
       if (!prompt) return;
-      response.style.display = 'block';
-      response.textContent = 'Menganalisis...';
-      setTimeout(() => {
-        const issues = analyzeCurrentCode();
-        response.textContent = 'AI Analysis:\nFile: ' + (currentFile || '—') +
-          '\nIssues: ' + (issues.length || 0) +
-          (issues.length ? '\n\n' + issues.map(i => '• ' + i).join('\n') : '\nTidak ada issue jelas.');
-      }, 400);
+      try {
+        await requestAI('chat', prompt);
+      } catch (error) {
+        const response = document.getElementById('ai-response');
+        if (response) {
+          response.style.display = 'block';
+          response.textContent = 'AI: ' + error.message;
+        }
+        appendLog('AI: ' + error.message, 'err');
+      }
     }
 
 
@@ -2814,37 +2904,14 @@
 
       issues.forEach(i => report.push({ file: currentFile || '(aktif)', level: 'err', msg: i }));
 
-      // Optional: call external AI if key set
       let aiExtra = '';
-      try {
-        const s = JSON.parse(localStorage.getItem('gc_custom') || '{}');
-        if (s.aiKey && currentFile && editor) {
-          appendLog('Memanggil AI API (custom key)...', 'ok');
-          const snippet = (editor.getValue() || '').slice(0, 6000);
-          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + s.aiKey
-            },
-            body: JSON.stringify({
-              model: 'llama-3.1-8b-instant',
-              messages: [
-                { role: 'system', content: 'Anda analis kode game web. Jawaban singkat bahasa Indonesia: daftar error + cara perbaikan.' },
-                { role: 'user', content: 'File: ' + currentFile + '\n\n' + snippet }
-              ],
-              max_tokens: 500
-            })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            aiExtra = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-          } else {
-            appendLog('AI API gagal: HTTP ' + res.status + ' (pakai deteksi lokal saja)', 'warn');
-          }
+      if (currentFile && editor) {
+        try {
+          const aiResult = await requestAI('analyze');
+          aiExtra = formatAIResult(aiResult);
+        } catch (e) {
+          appendLog('AI online tidak tersedia: ' + e.message + ' — lanjut deteksi lokal', 'warn');
         }
-      } catch (e) {
-        appendLog('AI API error: ' + e.message + ' — lanjut deteksi lokal', 'warn');
       }
 
       if (!report.length && !aiExtra) {
@@ -2865,7 +2932,7 @@
       if (aiResp) {
         aiResp.style.display = 'block';
         aiResp.textContent = (report.map(r => '• [' + r.file + '] ' + r.msg).join('\n') || 'Tidak ada temuan lokal.') +
-          (aiExtra ? '\n\n— AI —\n' + aiExtra : '\n\n(Isi API key di Custom untuk saran AI online)');
+          (aiExtra ? '\n\n— AI —\n' + aiExtra : '\n\nAI online tidak tersedia; hanya deteksi lokal yang ditampilkan.');
       }
       alert('Deteksi AI selesai. Lihat log / panel AI untuk detail.');
     }
