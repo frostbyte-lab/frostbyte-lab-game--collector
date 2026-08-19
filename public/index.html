@@ -606,6 +606,10 @@
     .preview-frame-wrap.viewport-mobile {
       flex: 0 0 min(390px, 100%);
       width: min(390px, 100%);
+      height: auto;
+      min-height: 520px;
+      aspect-ratio: 9 / 16;
+      align-self: flex-start;
       margin: 0 auto;
     }
     .preview-frame {
@@ -3248,7 +3252,8 @@
     }
 
     let activePreviewMode = 'sandbox';
-    let activePreviewViewport = 'desktop';
+    // Pada layar HP, mulai dengan viewport portrait agar game tidak salah mendeteksi landscape.
+    let activePreviewViewport = window.matchMedia && window.matchMedia('(max-width: 768px)').matches ? 'mobile' : 'desktop';
     let previewReload = null;
     let activePreviewBlobUrls = [];
 
