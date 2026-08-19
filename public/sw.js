@@ -1,5 +1,5 @@
 /* Game Collector Pro — SW v4: shell cache + virtual ZIP assets under /__gc__/ */
-const SHELL = "gc-pro-shell-v5";
+const SHELL = "gc-pro-shell-v6";
 // Keep the ZIP cache name stable so an app update does not delete the user's
 // imported package and offline preview assets.
 const ZIP_CACHE = "gc-pro-zip-v4";
@@ -144,19 +144,16 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // App shell: cache-first
+  // App shell: network-first agar perubahan UI segera tampil setelah deploy.
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const net = fetch(e.request)
-        .then((res) => {
-          if (res && res.status === 200 && res.type === "basic") {
-            const clone = res.clone();
-            caches.open(SHELL).then((c) => c.put(e.request, clone));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || net;
-    })
+    fetch(e.request, { cache: "no-store" })
+      .then((res) => {
+        if (res && res.status === 200 && res.type === "basic") {
+          const clone = res.clone();
+          caches.open(SHELL).then((c) => c.put(e.request, clone));
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
