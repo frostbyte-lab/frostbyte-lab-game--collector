@@ -2184,18 +2184,25 @@
           const arrayBuffer = await file.arrayBuffer();
           const zip = await JSZip.loadAsync(arrayBuffer);
           currentZip = zip;
-          zipFileMap = {};
+          // Simpan setiap file dengan path yang konsisten. ZIP dari berbagai
+          // tool dapat memakai ./, backslash, atau entri direktori eksplisit.
+          // Normalisasi di sini mencegah file hilang dari Explorer/editor.
+          zipFileMap = Object.create(null);
           const paths = [];
           zip.forEach((relativePath, zipEntry) => {
-            if (!zipEntry.dir) {
-              paths.push(relativePath);
-              zipFileMap[relativePath] = zipEntry;
-            }
+            if (zipEntry.dir) return;
+            const normalizedPath = String(relativePath)
+              .replaceAll('\\', '/')
+              .replace(/^\.\//, '')
+              .replace(/^\/+/, '');
+            if (!normalizedPath) return;
+            paths.push(normalizedPath);
+            zipFileMap[normalizedPath] = zipEntry;
           });
+          paths.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
           renderFileTree(paths);
-          const projectName = file.name.replace(/\.zip$/i, '');
-          if (projectNameEl) projectNameEl.textContent = projectName + ' (' + paths.length + ' file)';
-          if (typeof appendLog === 'function') appendLog('ZIP dimuat: ' + file.name + ' — ' + paths.length + ' file', 'ok');
+          if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file)';
+          if (typeof appendLog === 'function') appendLog('ZIP dimuat lengkap: ' + file.name + ' — ' + paths.length + ' file', 'ok');
           // Tampilkan Explorer agar tree + tombol Save/Load terlihat
           (function() {
             var fp = document.getElementById('file-panel');
