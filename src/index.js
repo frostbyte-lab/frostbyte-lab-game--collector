@@ -45,7 +45,7 @@ import {
 const GH_OWNER = "frostbyte-lab";
 const GH_REPO = "frostbyte-lab-game--collector";
 const GH_WORKFLOW = "collect.yml";
-const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const AI_MODELS = { llama: "@cf/meta/llama-3.1-8b-instruct", "qwen3-coder": "@cf/qwen/qwen3-30b-a3b-fp8" };
 
 function cleanAiJson(text) {
   const raw = String(text || "").trim();
@@ -78,6 +78,8 @@ async function analyzeWithAI(env, body) {
   const staticIssues = Array.isArray(body.staticIssues) ? body.staticIssues.slice(0, 20) : [];
   const action = body.action === "repair" ? "repair" : body.action === "chat" ? "chat" : "analyze";
   const userQuestion = String(body.question || "").slice(0, 2000);
+  const modelKey = body.model === "qwen3-coder" ? "qwen3-coder" : "llama";
+  const model = AI_MODELS[modelKey];
 
   const outputSchema = action === "repair"
     ? `{"summary":"...","issues":[{"severity":"error|warning|info","line":1,"message":"..."}],"suggestions":["..."],"repairedCode":"FULL FILE CONTENT"}`
@@ -89,8 +91,9 @@ async function analyzeWithAI(env, body) {
     "Return valid JSON only. Keep explanations concise and actionable.",
     "Detect syntax errors, broken paths, unsafe browser assumptions, missing dependencies, and likely runtime errors.",
     "When a line is unknown, use null rather than guessing.",
+    modelKey === "qwen3-coder" ? "Work in Qwen3-Coder mode: prioritize precise code reasoning and safe complete repairs." : "",
     "The response schema is " + outputSchema
-  ].join(" ");
+  ].filter(Boolean).join(" ");
   const task = action === "repair"
     ? "Find the most important fixable problems and return the complete corrected file in repairedCode. Preserve behavior and formatting where possible."
     : action === "chat"
@@ -108,14 +111,14 @@ async function analyzeWithAI(env, body) {
   ].filter(Boolean).join("\n\n");
 
   try {
-    const result = await env.AI.run(AI_MODEL, {
+    const result = await env.AI.run(model, {
       messages: [
         { role: "system", content: system },
         { role: "user", content: user }
       ]
     });
     const parsed = cleanAiJson(result?.response || result?.result?.response || "");
-    return Response.json({ ok: true, model: AI_MODEL, ...parsed });
+    return Response.json({ ok: true, model, modelKey, modelLabel: modelKey === "qwen3-coder" ? "Qwen3-Coder" : "Llama 3.1", ...parsed });
   } catch (error) {
     return Response.json({
       ok: false,
