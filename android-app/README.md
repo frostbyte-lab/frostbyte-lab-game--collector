@@ -1,13 +1,40 @@
 # ZipScope Android APK
 
-Native Expo Android app for opening large ZIP archives without the old 12 MB failure mode. It lists nested files and previews HTML, CSS, JavaScript, Python, images, MP3, MP4, and other assets.
+ZipScope adalah aplikasi Android native untuk membuka ZIP besar, membaca folder bersarang, dan mempreview file di dalamnya.
 
-## Preview layout
+## Yang didukung
 
-The app keeps a 70/30 workspace: the main preview occupies the larger area and the error log stays visible beside it. The preview can be expanded to full screen for web pages or a second-screen experience.
+- ZIP besar dengan reader binary dan ekstraksi item secara lazy
+- HTML/HTM dijalankan sebagai preview web
+- JPG, JPEG, PNG, GIF, WebP, SVG
+- MP3 dengan kontrol putar/jeda
+- MP4 dengan kontrol video native
+- CSS, JavaScript, TypeScript, Python, JSON, Markdown, TXT, XML, YAML
+- Panel preview 70% dan log error 30%
+- Mode preview web layar penuh
 
-## Run
+## Pengujian ZIP
 
-From this folder, install the Expo dependencies and run the Android app with Expo Go or an Android development build. The ZIP reader loads the archive into a single async buffer, extracts entries lazily, and writes media previews to the native cache only when selected.
+Dari root repository jalankan:
 
-This folder is the mobile app source; the existing collector project remains untouched.
+pnpm --dir android-app test
+
+Smoke test membuat arsip sementara 12 MB dan 40 MB, membaca HTML dan gambar di dalamnya, lalu memastikan ZIP rusak ditolak.
+
+## Menjalankan aplikasi
+
+cd android-app
+pnpm install
+pnpm exec expo start
+
+## APK release lokal
+
+pnpm exec expo prebuild --platform android --non-interactive --clean
+cd android
+./gradlew assembleRelease
+
+APK berada di android/app/build/outputs/apk/release/app-release.apk.
+
+## Catatan
+
+ZIP terenkripsi memerlukan password dan saat ini ditolak dengan pesan error yang jelas; aplikasi tidak mencoba melewati enkripsi.
