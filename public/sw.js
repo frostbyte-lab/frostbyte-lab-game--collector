@@ -1,5 +1,7 @@
 /* Game Collector Pro — SW v4: shell cache + virtual ZIP assets under /__gc__/ */
-const SHELL = "gc-pro-shell-v4";
+const SHELL = "gc-pro-shell-v5";
+// Keep the ZIP cache name stable so an app update does not delete the user's
+// imported package and offline preview assets.
 const ZIP_CACHE = "gc-pro-zip-v4";
 const ASSETS = ["/", "/index.html", "/manifest.json"];
 

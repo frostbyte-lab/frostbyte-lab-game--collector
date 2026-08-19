@@ -18,6 +18,7 @@
     
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs/loader.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script type="module" src="https://unpkg.com/@google/model-viewer@4.0.0/dist/model-viewer.min.js"></script>
   
   <style>
     :root {
@@ -439,6 +440,40 @@
       width: 100% !important;
       height: 100% !important;
     }
+    #binary-preview {
+      display: none;
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 24px;
+      background: #111827;
+      color: var(--text);
+    }
+    #binary-preview.active { display: flex; align-items: center; justify-content: center; }
+    #binary-preview .asset-card {
+      width: min(760px, 100%);
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #1e293b;
+      text-align: center;
+    }
+    #binary-preview img, #binary-preview video, #binary-preview model-viewer {
+      display: block;
+      max-width: 100%;
+      max-height: 58vh;
+      border-radius: 8px;
+      background: #0b1020;
+    }
+    #binary-preview audio { width: min(560px, 100%); }
+    #binary-preview pre { width: 100%; max-height: 58vh; overflow: auto; text-align: left; white-space: pre-wrap; word-break: break-word; }
+    .workspace-main.editor-fullscreen .file-panel,
+    .workspace-main.editor-fullscreen .preview-panel,
+    .workspace-main.editor-fullscreen .file-panel-handle { display: none !important; }
+    .workspace-main.editor-fullscreen .editor-panel { width: 100%; }
 
     .preview-panel {
       flex: 0 0 300px;
@@ -1775,6 +1810,7 @@
         </div>
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditorFullscreen()" title="Editor layar penuh">Editor Fullscreen</button>
           <button type="button" class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -1874,6 +1910,7 @@
 
           <!-- Monaco Editor -->
           <div id="monaco-editor"></div>
+          <div id="binary-preview" aria-live="polite"></div>
 
           <!-- AI Panel -->
           <div class="ai-panel hidden" id="ai-panel">
@@ -2185,6 +2222,7 @@
     // ===== ZIP loading & file tree (like Spck Editor) =====
     let currentZip = null;
     let zipFileMap = {}; // path -> JSZip file entry
+    let activeAssetObjectUrl = null;
 
     // Badge + warna per ekstensi (syntax highlight pakai Monaco language id)
     const FILE_BADGES = {
@@ -2319,9 +2357,9 @@
         try {
           const nameLower = file.name.toLowerCase(); openFiles.clear(); currentFile = null; currentZip = null; zipFileMap = Object.create(null);
           if (nameLower.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
-            const arrayBuffer = await file.arrayBuffer(); setLoading(true, 'Membuka ZIP', 'Memvalidasi dan membaca daftar file...'); const zip = await JSZip.loadAsync(arrayBuffer, { checkCRC32: false, createFolders: false }); currentZip = zip;
+            setLoading(true, 'Membuka ZIP', 'Memvalidasi daftar file tanpa mengekstrak semuanya...'); const zip = await JSZip.loadAsync(file, { checkCRC32: false, createFolders: false }); currentZip = zip;
             const paths = []; zip.forEach((relativePath, zipEntry) => { if (zipEntry.dir) return; const normalizedPath = String(relativePath).replaceAll('\\', '/').replace(/^\.\//, '').replace(/^\/+/, ''); if (!normalizedPath) return; paths.push(normalizedPath); zipFileMap[normalizedPath] = zipEntry; });
-            paths.sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); renderFileTree(paths); if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file)'; appendLog('ZIP dimuat lengkap: ' + file.name + ' — ' + paths.length + ' file', 'ok');
+            paths.sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); renderFileTree(paths); if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file · ' + formatBytes(file.size) + ')'; appendLog('ZIP siap dibaca: ' + file.name + ' — ' + paths.length + ' file · ' + formatBytes(file.size) + ' (ekstraksi saat file dibuka)', 'ok');
             const fp = document.getElementById('file-panel'); if (fp && fp.classList.contains('collapsed')) toggleFilePanel(); if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 100); setLoading(true, 'ZIP siap diedit', paths.length + ' file ditemukan · klik file untuk membukanya'); setTimeout(() => setLoading(false), 550);
           } else {
             setLoading(true, 'Membuka file', file.name + ' · membaca isi...'); const content = await file.text(); currentZip = new JSZip(); currentZip.file(file.name, content); zipFileMap[file.name] = { async: async (type) => type === 'string' ? content : new Blob([content]) }; openFiles.set(file.name, content); renderFileTree([file.name]); if (projectNameEl) projectNameEl.textContent = file.name + ' (1 file)'; openFile(file.name, content, content.length); appendLog('File dimuat: ' + file.name, 'ok'); setLoading(false);
@@ -2400,7 +2438,7 @@
               try {
                 const ext = name.split('.').pop().toLowerCase();
                 if (TEXT_EXTS.includes(ext)) { const content = await zipEntry.async('string'); openFile(entry.__path, content, content.length); appendLog('File dibuka: ' + entry.__path, 'ok'); }
-                else { currentFile = entry.__path; document.getElementById('editor-lang').textContent = 'binary'; document.getElementById('breadcrumb-file').textContent = entry.__path; document.getElementById('breadcrumb').classList.add('active'); document.getElementById('file-info').textContent = entry.__path + '\ntype: binary · gunakan Download untuk menyimpan file'; document.getElementById('status-info').textContent = entry.__path; }
+                else { await openBinaryFile(entry.__path, zipEntry); }
               } catch (error) { appendLog('Gagal membuka ' + entry.__path + ': ' + (error.message || error), 'err'); alert('File gagal dibuka: ' + (error.message || error)); } finally { setLoading(false); }
             });
 
@@ -2411,8 +2449,86 @@
     }
 
     // File operations
+    async function openBinaryFile(filename, entry) {
+      currentFile = filename;
+      const preview = document.getElementById('binary-preview');
+      const host = document.getElementById('monaco-editor');
+      if (!preview || !entry) return;
+      if (activeAssetObjectUrl) URL.revokeObjectURL(activeAssetObjectUrl);
+      if (host) host.style.display = 'none';
+      preview.classList.add('active');
+      preview.innerHTML = '';
+      const card = document.createElement('div');
+      card.className = 'asset-card';
+      const title = document.createElement('strong');
+      title.textContent = filename;
+      card.appendChild(title);
+      const ext = filename.split('.').pop().toLowerCase();
+      const rawBlob = await entry.async('blob');
+      const mimeByExt = {
+        mp3:'audio/mpeg', ogg:'audio/ogg', wav:'audio/wav', m4a:'audio/mp4', aac:'audio/aac', flac:'audio/flac',
+        mp4:'video/mp4', webm:'video/webm', mov:'video/quicktime',
+        glb:'model/gltf-binary', gltf:'model/gltf+json',
+        png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp', avif:'image/avif', svg:'image/svg+xml'
+      };
+      const blob = rawBlob.type ? rawBlob : new Blob([rawBlob], { type: mimeByExt[ext] || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      activeAssetObjectUrl = url;
+      let viewer = null;
+      if (['png','jpg','jpeg','gif','webp','avif','svg'].includes(ext)) {
+        viewer = document.createElement('img'); viewer.src = url; viewer.alt = filename;
+      } else if (['mp3','ogg','wav','m4a','aac','flac'].includes(ext)) {
+        viewer = document.createElement('audio'); viewer.controls = true; viewer.src = url;
+      } else if (['mp4','webm','mov'].includes(ext)) {
+        viewer = document.createElement('video'); viewer.controls = true; viewer.src = url;
+      } else if (ext === 'glb' || ext === 'gltf') {
+        viewer = document.createElement('model-viewer');
+        viewer.setAttribute('camera-controls', '');
+        viewer.setAttribute('auto-rotate', '');
+        viewer.setAttribute('alt', filename);
+        viewer.src = url;
+      }
+      if (viewer) card.appendChild(viewer);
+      const note = document.createElement('span');
+      note.textContent = viewer ? 'Asset dapat dipreview langsung.' : 'Format biner siap diunduh atau dipakai pada preview game.';
+      card.appendChild(note);
+      const download = document.createElement('button');
+      download.className = 'btn btn-primary btn-sm';
+      download.textContent = 'Download asset';
+      download.onclick = () => downloadBlob(blob, filename.split('/').pop() || 'asset', 'Asset');
+      card.appendChild(download);
+      preview.appendChild(card);
+      document.getElementById('editor-lang').textContent = 'binary · ' + ext;
+      document.getElementById('editor-size').textContent = formatBytes(blob.size);
+      document.getElementById('breadcrumb-file').textContent = filename;
+      document.getElementById('breadcrumb').classList.add('active');
+      document.getElementById('file-info').textContent = filename + '\ntype: binary';
+      document.getElementById('status-info').textContent = filename;
+    }
+
+    function hideBinaryPreview() {
+      const preview = document.getElementById('binary-preview');
+      const host = document.getElementById('monaco-editor');
+      if (preview) { preview.classList.remove('active'); preview.innerHTML = ''; }
+      if (host) host.style.display = '';
+      if (activeAssetObjectUrl) {
+        URL.revokeObjectURL(activeAssetObjectUrl);
+        activeAssetObjectUrl = null;
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes)) return '—';
+      if (bytes < 1024) return bytes + ' B';
+      const units = ['KB','MB','GB'];
+      let value = bytes / 1024, i = 0;
+      while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+      return value.toFixed(value >= 10 ? 1 : 2) + ' ' + units[i];
+    }
+
     function openFile(filename, content, sizeBytes) {
       currentFile = filename;
+      hideBinaryPreview();
       // Di HP: tutup overlay supaya Monaco editor terlihat dan bisa diedit
       if (window.innerWidth <= 768 && typeof closeSidePanels === 'function') {
         closeSidePanels();
@@ -3110,6 +3226,7 @@
     }
 
     function exitPreviewMode() {
+      releasePreviewAssets();
       const pm = document.getElementById('preview-mode');
       const main = document.getElementById('workspace-main');
       if (pm) pm.style.display = 'none';
@@ -3121,9 +3238,26 @@
       }
     }
 
+    function toggleEditorFullscreen() {
+      const main = document.getElementById('workspace-main');
+      if (!main) return;
+      main.classList.toggle('editor-fullscreen');
+      const button = document.querySelector('[onclick="toggleEditorFullscreen()"]');
+      if (button) button.textContent = main.classList.contains('editor-fullscreen') ? 'Keluar Fullscreen' : 'Editor Fullscreen';
+      setTimeout(() => { if (typeof sizeMonacoHost === 'function') sizeMonacoHost(); }, 50);
+    }
+
     let activePreviewMode = 'sandbox';
     let activePreviewViewport = 'desktop';
     let previewReload = null;
+    let activePreviewBlobUrls = [];
+
+    function releasePreviewAssets() {
+      for (const url of activePreviewBlobUrls) {
+        try { URL.revokeObjectURL(url); } catch (_) {}
+      }
+      activePreviewBlobUrls = [];
+    }
 
     function switchPreviewMode(mode, shouldReload) {
       activePreviewMode = mode === 'web' ? 'web' : 'sandbox';
@@ -3163,6 +3297,7 @@
         appendLog('Preview dibatalkan: belum ada ZIP.', 'warn');
         return;
       }
+      releasePreviewAssets();
 
       // Masuk mode preview split (tetap di Workspace, tidak pindah tab browser)
       const pm = document.getElementById('preview-mode');
@@ -3209,12 +3344,16 @@
               const mime = p.endsWith('.css') ? 'text/css' : p.endsWith('.js') || p.endsWith('.mjs') ? 'text/javascript' :
                 p.endsWith('.html') || p.endsWith('.htm') ? 'text/html' : p.endsWith('.json') ? 'application/json' : 'text/plain';
               blobUrls[p] = URL.createObjectURL(new Blob([content], { type: mime }));
+              activePreviewBlobUrls.push(blobUrls[p]);
             } else {
               const buf = await entry.async('arraybuffer');
               const ext = p.split('.').pop().toLowerCase();
-              const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp',
-                mp3:'audio/mpeg', ogg:'audio/ogg', wav:'audio/wav', woff:'font/woff', woff2:'font/woff2', ttf:'font/ttf' };
+              const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp', avif:'image/avif', svg:'image/svg+xml',
+                mp3:'audio/mpeg', ogg:'audio/ogg', wav:'audio/wav', m4a:'audio/mp4', aac:'audio/aac', flac:'audio/flac',
+                mp4:'video/mp4', webm:'video/webm', mov:'video/quicktime', glb:'model/gltf-binary', gltf:'model/gltf+json',
+                woff:'font/woff', woff2:'font/woff2', ttf:'font/ttf', otf:'font/otf' };
               blobUrls[p] = URL.createObjectURL(new Blob([buf], { type: mimeMap[ext] || 'application/octet-stream' }));
+              activePreviewBlobUrls.push(blobUrls[p]);
             }
           } catch (e) {
             appendLog('Gagal baca asset: ' + p + ' — ' + e.message, 'warn');
