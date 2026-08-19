@@ -1371,6 +1371,62 @@
       }
     }
 
+
+      /* AI Studio mobile layout */
+      #panel-ai,
+      #panel-ai .collect-wrapper,
+      #panel-ai .collect-card {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+      #panel-ai .collect-card {
+        overflow: hidden;
+      }
+      #panel-ai #ai-input {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        min-height: 150px;
+        height: auto;
+        resize: vertical;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        line-height: 1.5;
+        font-family: inherit;
+        font-size: 14px;
+      }
+      #panel-ai .collect-actions {
+        width: 100%;
+        min-width: 0;
+      }
+      #panel-ai .collect-actions .btn {
+        min-width: 0;
+        white-space: normal;
+      }
+      #panel-ai #ai-output {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        min-height: 40px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        box-sizing: border-box;
+      }
+      @media (max-width: 640px) {
+        #panel-ai .collect-wrapper {
+          padding: 0 10px;
+        }
+        #panel-ai .collect-card {
+          padding: 14px !important;
+          border-radius: 14px;
+        }
+        #panel-ai #ai-input {
+          min-height: 170px;
+          font-size: 14px;
+        }
+      }
+    
     /* ===== RESPONSIVE ===== */
     @media (max-width: 1024px) and (min-width: 769px) {
       .file-panel:not(.collapsed) {
@@ -1668,7 +1724,7 @@
       <section id="panel-ai" class="panel">
         <div class="collect-wrapper">
           <div class="collect-hero"><h2>AI Studio</h2><p>Analisis, rapikan, rekomendasikan, dan tanyakan apa pun tentang hasil koleksi Anda.</p></div>
-          <div class="collect-card" style="padding:16px;">
+          <div class="collect-card ai-studio-card" style="padding:16px;">
             <label for="ai-input">Data koleksi atau pertanyaan</label>
             <textarea id="ai-input" rows="9" placeholder="Tempel JSON manifest/analisis, katalog game, atau tulis pertanyaan di sini..."></textarea>
             <div class="collect-actions" style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
@@ -3386,7 +3442,7 @@
         const status = document.getElementById('ai-status');
         const output = document.getElementById('ai-output');
         const value = (input && input.value || '').trim();
-        if (!value) { status.textContent = 'Masukkan data atau pertanyaan terlebih dahulu.'; return; }
+        if (!value) { status.textContent = action === 'chat' ? 'Tulis pertanyaan Anda di kolom input terlebih dahulu.' : 'Masukkan data terlebih dahulu.'; if (input) input.focus(); return; }
         status.textContent = 'AI sedang memproses...'; output.textContent = '';
         try {
           let data = value;
