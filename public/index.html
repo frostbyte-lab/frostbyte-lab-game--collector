@@ -456,6 +456,177 @@
       overflow: hidden;
       pointer-events: none;
     }
+
+    /* Full preview workspace: the frame owns the available viewport instead
+       of inheriting an arbitrary iframe height from the surrounding layout. */
+    #preview-mode {
+      min-height: 0;
+    }
+    .preview-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      flex: 0 0 auto;
+    }
+    .preview-toolbar-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1 1 180px;
+      min-width: 0;
+    }
+    .preview-toolbar-title strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .preview-mode-switch,
+    .preview-size-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, 0.16);
+    }
+    .preview-mode-switch button,
+    .preview-size-switch button {
+      border: 0;
+      border-radius: 4px;
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .preview-mode-switch button.active,
+    .preview-size-switch button.active {
+      background: var(--primary-light);
+      color: #fff;
+    }
+    .preview-workspace {
+      display: flex;
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .preview-stage-column {
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: #0b1020;
+      border-right: 1px solid var(--border);
+    }
+    .preview-stage-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 7px 12px;
+      color: var(--text-muted);
+      background: var(--surface-alt);
+      font-size: 11px;
+      flex: 0 0 auto;
+    }
+    .preview-stage {
+      flex: 1 1 0;
+      min-height: 0;
+      min-width: 0;
+      overflow: auto;
+      display: flex;
+      align-items: stretch;
+      justify-content: stretch;
+      padding: 12px;
+    }
+    .preview-frame-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+    .preview-frame-wrap.viewport-tablet {
+      flex: 0 0 min(768px, 100%);
+      width: min(768px, 100%);
+      margin: 0 auto;
+    }
+    .preview-frame-wrap.viewport-mobile {
+      flex: 0 0 min(390px, 100%);
+      width: min(390px, 100%);
+      margin: 0 auto;
+    }
+    .preview-frame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      border: 0;
+      background: #fff;
+    }
+    .preview-log-column {
+      flex: 0 0 clamp(260px, 31%, 390px);
+      min-width: 220px;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+    }
+    .preview-log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 6px 10px;
+      color: var(--text-muted);
+      background: var(--surface-alt);
+      font-size: 11px;
+      flex: 0 0 auto;
+    }
+    .preview-log {
+      flex: 1 1 0;
+      min-height: 0;
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      color: var(--text);
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    @media (max-width: 800px) {
+      .preview-workspace {
+        flex-direction: column;
+      }
+      .preview-stage-column {
+        flex: 1 1 62%;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .preview-log-column {
+        flex: 1 1 38%;
+        min-width: 0;
+      }
+      .preview-frame-wrap.viewport-tablet {
+        width: 100%;
+        flex-basis: 100%;
+      }
+    }
     .preview-content {
       flex: 1 1 0;
       min-height: 0;
@@ -1505,26 +1676,42 @@
         </div>
       </div>
 
-      <!-- Full Preview Mode (split: game | log/error) — tetap di Workspace -->
+      <!-- Full Preview Mode (web or sandbox, with responsive viewport) -->
       <div id="preview-mode" style="display:none; flex-direction:column; flex:1; overflow:hidden; background:var(--bg);">
-        <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--surface); border-bottom:1px solid var(--border);">
+        <div class="preview-toolbar">
           <button class="btn btn-secondary btn-sm" onclick="exitPreviewMode()">← Kembali ke Editor</button>
-          <strong style="flex:1;">Preview Game / ZIP</strong>
-          <button class="btn btn-secondary btn-sm" onclick="startPreview('sandbox')">Reload</button>
+          <div class="preview-toolbar-title">
+            <svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-eye"></use></svg>
+            <strong id="preview-title">Preview Game / ZIP</strong>
+          </div>
+          <div class="preview-mode-switch" role="group" aria-label="Preview mode">
+            <button type="button" id="preview-mode-web" onclick="switchPreviewMode('web')">Web Preview</button>
+            <button type="button" id="preview-mode-sandbox" onclick="switchPreviewMode('sandbox')">Sandbox</button>
+          </div>
+          <div class="preview-size-switch" role="group" aria-label="Preview viewport size">
+            <button type="button" class="active" data-preview-size="desktop" onclick="setPreviewViewport('desktop')">Desktop</button>
+            <button type="button" data-preview-size="tablet" onclick="setPreviewViewport('tablet')">Tablet</button>
+            <button type="button" data-preview-size="mobile" onclick="setPreviewViewport('mobile')">Mobile</button>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="reloadPreview()">Reload</button>
           <button class="btn btn-secondary btn-sm" onclick="runAnalysis()">Scan Error</button>
         </div>
-        <div style="display:flex; flex:1; overflow:hidden; min-height:0;">
-          <div style="flex:1.4; border-right:1px solid var(--border); display:flex; flex-direction:column; min-width:0;">
-            <div style="padding:6px 10px; font-size:11px; color:var(--text-muted); background:var(--surface-alt);">Kolom 1 — Preview Game</div>
-            <iframe id="preview-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups" style="flex:1; width:100%; border:0; background:#111;"></iframe>
+        <div class="preview-workspace">
+          <div class="preview-stage-column">
+            <div class="preview-stage-label"><span id="preview-stage-label">Web Preview</span><span id="preview-viewport-label">· Desktop</span></div>
+            <div class="preview-stage">
+              <div class="preview-frame-wrap" id="preview-frame-wrap">
+                <iframe id="preview-frame" class="preview-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
+              </div>
+            </div>
           </div>
-          <div style="flex:1; display:flex; flex-direction:column; min-width:0; background:var(--surface);">
-            <div style="padding:6px 10px; font-size:11px; color:var(--text-muted); background:var(--surface-alt); display:flex; justify-content:space-between; align-items:center;">
+          <div class="preview-log-column">
+            <div class="preview-log-header">
               <span>Kolom 2 — Log &amp; Error</span>
               <button class="btn btn-secondary btn-sm" onclick="copyErrorLog()" style="padding:2px 8px; font-size:11px;">Copy Error</button>
             </div>
             <div id="preview-file-running" style="padding:8px 12px; font-size:12px; border-bottom:1px solid var(--border); color:var(--text-secondary);">File: —</div>
-            <pre id="error-log" style="flex:1; margin:0; padding:12px; overflow:auto; font-family:ui-monospace,monospace; font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-word; color:var(--text);"></pre>
+            <pre id="error-log" class="preview-log"></pre>
           </div>
         </div>
       </div>
@@ -2787,11 +2974,49 @@
       if (pm) pm.style.display = 'none';
       if (main) main.style.display = '';
       const frame = document.getElementById('preview-frame');
-      if (frame) frame.src = 'about:blank';
+      if (frame) {
+        frame.src = 'about:blank';
+        frame.removeAttribute('allow');
+      }
+    }
+
+    let activePreviewMode = 'sandbox';
+    let activePreviewViewport = 'desktop';
+    let previewReload = null;
+
+    function switchPreviewMode(mode, shouldReload) {
+      activePreviewMode = mode === 'web' ? 'web' : 'sandbox';
+      const webButton = document.getElementById('preview-mode-web');
+      const sandboxButton = document.getElementById('preview-mode-sandbox');
+      if (webButton) webButton.classList.toggle('active', activePreviewMode === 'web');
+      if (sandboxButton) sandboxButton.classList.toggle('active', activePreviewMode === 'sandbox');
+      const label = document.getElementById('preview-stage-label');
+      if (label) label.textContent = activePreviewMode === 'web' ? 'Web Preview' : 'Sandbox Preview';
+      if (shouldReload !== false && previewReload) previewReload(activePreviewMode);
+    }
+
+    function setPreviewViewport(viewport) {
+      activePreviewViewport = ['desktop', 'tablet', 'mobile'].includes(viewport) ? viewport : 'desktop';
+      const wrap = document.getElementById('preview-frame-wrap');
+      if (wrap) {
+        wrap.classList.remove('viewport-tablet', 'viewport-mobile');
+        if (activePreviewViewport !== 'desktop') wrap.classList.add('viewport-' + activePreviewViewport);
+      }
+      document.querySelectorAll('[data-preview-size]').forEach(button => {
+        button.classList.toggle('active', button.dataset.previewSize === activePreviewViewport);
+      });
+      const label = document.getElementById('preview-viewport-label');
+      if (label) label.textContent = '· ' + activePreviewViewport.charAt(0).toUpperCase() + activePreviewViewport.slice(1);
+      if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 50);
+    }
+
+    function reloadPreview() {
+      if (previewReload) previewReload(activePreviewMode);
     }
 
     async function startPreview(mode) {
       mode = mode || 'sandbox';
+      activePreviewMode = mode === 'web' ? 'web' : 'sandbox';
       if (!currentZip) {
         alert('Load File (ZIP) dulu sebelum Run / Preview.');
         appendLog('Preview dibatalkan: belum ada ZIP.', 'warn');
@@ -2803,6 +3028,8 @@
       const main = document.getElementById('workspace-main');
       if (main) main.style.display = 'none';
       if (pm) pm.style.display = 'flex';
+      switchPreviewMode(activePreviewMode, false);
+      setPreviewViewport(activePreviewViewport);
 
       const logEl = document.getElementById('error-log');
       if (logEl) logEl.innerHTML = '';
@@ -2885,7 +3112,19 @@
 
         const pageBlob = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
         const frame = document.getElementById('preview-frame');
+        if (activePreviewMode === 'web') {
+          frame.removeAttribute('sandbox');
+          frame.setAttribute('allow', 'fullscreen; autoplay; gamepad');
+        } else {
+          frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups');
+          frame.removeAttribute('allow');
+        }
         frame.src = pageBlob;
+        previewReload = function(nextMode) {
+          startPreview(nextMode || activePreviewMode);
+        };
+        const title = document.getElementById('preview-title');
+        if (title) title.textContent = (activePreviewMode === 'web' ? 'Web Preview' : 'Sandbox Preview') + ' · ' + entryPath;
         appendLog('Preview dimuat: ' + entryPath, 'ok');
 
         // Capture iframe errors
