@@ -1538,7 +1538,19 @@
       font-family: 'Menlo', 'Monaco', 'Ubuntu Mono', monospace !important;
     }
 
-    /* ===== UTILITY ===== */
+    /* ===== LOADING / DOWNLOAD FEEDBACK ===== */
+      .gc-loading-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 22px; background: rgba(8, 15, 30, .74); backdrop-filter: blur(5px); }
+      .gc-loading-overlay[hidden] { display: none; }
+      .gc-loading-card { width: min(380px, 100%); padding: 22px; border: 1px solid rgba(96, 165, 250, .35); border-radius: 14px; background: linear-gradient(145deg, #17233b, #0e1729); box-shadow: 0 18px 60px rgba(0,0,0,.4); color: var(--text, #f8fafc); text-align: center; }
+      .gc-loading-spinner { width: 34px; height: 34px; margin: 0 auto 14px; border: 3px solid rgba(148,163,184,.28); border-top-color: #38bdf8; border-right-color: #60a5fa; border-radius: 50%; animation: gc-spin .78s linear infinite; }
+      .gc-loading-title { font-size: 15px; font-weight: 700; }
+      .gc-loading-detail { min-height: 18px; margin-top: 7px; color: #a9b8cf; font-size: 12px; word-break: break-word; }
+      .gc-loading-track { height: 6px; margin-top: 16px; overflow: hidden; border-radius: 999px; background: rgba(148,163,184,.18); }
+      .gc-loading-bar { width: 32%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #22d3ee, #2563eb); background-size: 220% 100%; animation: gc-progress 1.25s ease-in-out infinite; }
+      @keyframes gc-spin { to { transform: rotate(360deg); } }
+      @keyframes gc-progress { 0% { transform: translateX(-120%); background-position: 0 0; } 100% { transform: translateX(330%); background-position: 100% 0; } }
+
+        /* ===== UTILITY ===== */
     .hidden {
       display: none !important;
     }
@@ -1637,7 +1649,10 @@
       <path d="M4.75 7.25a.75.75 0 0 0 0 1.5h.5a.75.75 0 0 0 0-1.5h-.5zm5.5 0a.75.75 0 0 0 0 1.5h.5a.75.75 0 0 0 0-1.5h-.5z"/>
     </symbol>
   </svg>
-  <div class="app-container">
+  <div class="gc-loading-overlay" id="gc-loading-overlay" hidden aria-live="polite" aria-busy="true">
+      <div class="gc-loading-card"><div class="gc-loading-spinner" aria-hidden="true"></div><div class="gc-loading-title" id="gc-loading-title">Memproses file...</div><div class="gc-loading-detail" id="gc-loading-detail">Mohon tunggu sebentar</div><div class="gc-loading-track" aria-hidden="true"><div class="gc-loading-bar"></div></div></div>
+    </div>
+      <div class="app-container">
     <!-- Header -->
     <header>
       <div class="header-left">
@@ -1807,6 +1822,7 @@
               <button type="button" class="btn btn-primary btn-sm" onclick="saveFile()" title="Save">Save</button>
               <button type="button" class="btn btn-secondary btn-sm" onclick="openAnalysisPanel()" title="Analysis">Analysis</button>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="Load File">Load File</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-download-file" onclick="downloadCurrentFile()" title="Download file aktif">Download</button>
             </div>
             <div class="file-panel-footer-row">
               <button type="button" class="btn btn-secondary btn-sm" onclick="openCustomPanel()" title="Custom">
@@ -1858,8 +1874,8 @@
               </select>
             </div>
             <div class="ai-input">
-              <input type="text" id="ai-prompt" placeholder="Tanyakan penyebab error atau cara memperbaikinya..." />
-              <button class="btn btn-primary btn-sm" onclick="askAI()">Send</button>
+              <textarea id="ai-prompt" rows="2" placeholder="Tulis pertanyaan tentang file ini..." aria-label="Pertanyaan untuk AI"></textarea>
+              <button class="btn btn-primary btn-sm" onclick="askAI()">Kirim</button>
             </div>
             <div class="ai-buttons">
               <button class="btn btn-secondary btn-sm" onclick="analyzeWithAI()">Analyze with AI</button>
@@ -2251,82 +2267,35 @@
       return `<span class="file-icon-wrap"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#${icon}"></use></svg></span>`;
     }
 
-    document.getElementById('zip-input').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const projectNameEl = document.getElementById('project-name');
-      if (projectNameEl) projectNameEl.textContent = 'Memuat ' + file.name + ' ...';
-
-      try {
-        const nameLower = file.name.toLowerCase();
-        openFiles.clear();
-        currentFile = null;
-
-        if (nameLower.endsWith('.zip') || file.type === 'application/zip') {
-          const arrayBuffer = await file.arrayBuffer();
-          const zip = await JSZip.loadAsync(arrayBuffer);
-          currentZip = zip;
-          // Simpan setiap file dengan path yang konsisten. ZIP dari berbagai
-          // tool dapat memakai ./, backslash, atau entri direktori eksplisit.
-          // Normalisasi di sini mencegah file hilang dari Explorer/editor.
-          zipFileMap = Object.create(null);
-          const paths = [];
-          zip.forEach((relativePath, zipEntry) => {
-            if (zipEntry.dir) return;
-            const normalizedPath = String(relativePath)
-              .replaceAll('\\', '/')
-              .replace(/^\.\//, '')
-              .replace(/^\/+/, '');
-            if (!normalizedPath) return;
-            paths.push(normalizedPath);
-            zipFileMap[normalizedPath] = zipEntry;
-          });
-          paths.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-          renderFileTree(paths);
-          if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file)';
-          if (typeof appendLog === 'function') appendLog('ZIP dimuat lengkap: ' + file.name + ' — ' + paths.length + ' file', 'ok');
-          // Tampilkan Explorer agar tree + tombol Save/Load terlihat
-          (function() {
-            var fp = document.getElementById('file-panel');
-            if (fp && fp.classList.contains('collapsed')) {
-              if (typeof toggleFilePanel === 'function') toggleFilePanel();
-              else fp.classList.remove('collapsed');
-            }
-            if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 100);
-          })();
-        } else {
-          // Single file (html/js/css/...) — bungkus sebagai ZIP virtual
-          const content = await file.text();
-          currentZip = new JSZip();
-          currentZip.file(file.name, content);
-          zipFileMap = {};
-          // Fake zip entry compatible with async('string')
-          zipFileMap[file.name] = {
-            async: async (type) => type === 'string' ? content : new TextEncoder().encode(content).buffer
-          };
-          openFiles.set(file.name, content);
-          renderFileTree([file.name]);
-          if (projectNameEl) projectNameEl.textContent = file.name + ' (1 file)';
-          if (typeof openFile === 'function') openFile(file.name, content, content.length);
-          if (typeof appendLog === 'function') appendLog('File dimuat: ' + file.name, 'ok');
-        }
-
-        const bf = document.getElementById('breadcrumb-file');
-        if (bf) bf.textContent = '—';
-        const bc = document.getElementById('breadcrumb');
-        if (bc) bc.classList.remove('active');
-        const fi = document.getElementById('file-info');
-        if (fi) fi.textContent = 'No file selected';
-      } catch (err) {
-        if (projectNameEl) projectNameEl.textContent = 'Gagal memuat';
-        console.error(err);
-        alert('Gagal membuka file: ' + err.message);
-      } finally {
-        e.target.value = '';
+    function setLoading(visible, title, detail) {
+        const overlay = document.getElementById('gc-loading-overlay'); if (!overlay) return;
+        overlay.hidden = !visible; overlay.setAttribute('aria-busy', visible ? 'true' : 'false');
+        const titleEl = document.getElementById('gc-loading-title'); const detailEl = document.getElementById('gc-loading-detail');
+        if (titleEl && title) titleEl.textContent = title; if (detailEl && detail !== undefined) detailEl.textContent = detail;
       }
-    });
-
+      async function downloadBlob(blob, filename, label) {
+        const href = URL.createObjectURL(blob); try { const a = document.createElement('a'); a.href = href; a.download = filename; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); appendLog((label || 'File') + ' berhasil diunduh: ' + filename, 'ok'); } finally { setTimeout(() => URL.revokeObjectURL(href), 1000); }
+      }
+      async function downloadCurrentFile() {
+        if (!currentFile || !zipFileMap[currentFile]) { appendLog('Pilih file terlebih dahulu untuk diunduh.', 'warn'); return; }
+        setLoading(true, 'Menyiapkan unduhan', currentFile); try { await downloadBlob(await zipFileMap[currentFile].async('blob'), currentFile.split('/').pop() || 'file', 'File'); setTimeout(() => setLoading(false), 220); } catch (error) { setLoading(false); appendLog('Unduh gagal: ' + (error.message || error), 'err'); alert('File tidak dapat diunduh: ' + (error.message || error)); }
+      }
+      document.getElementById('zip-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0]; if (!file) return; const projectNameEl = document.getElementById('project-name');
+        if (projectNameEl) projectNameEl.textContent = 'Memuat ' + file.name + ' ...'; setLoading(true, 'Memuat paket file', file.name + ' · membaca isi ZIP...');
+        try {
+          const nameLower = file.name.toLowerCase(); openFiles.clear(); currentFile = null; currentZip = null; zipFileMap = Object.create(null);
+          if (nameLower.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
+            const arrayBuffer = await file.arrayBuffer(); setLoading(true, 'Membuka ZIP', 'Memvalidasi dan membaca daftar file...'); const zip = await JSZip.loadAsync(arrayBuffer, { checkCRC32: false, createFolders: false }); currentZip = zip;
+            const paths = []; zip.forEach((relativePath, zipEntry) => { if (zipEntry.dir) return; const normalizedPath = String(relativePath).replaceAll('\\', '/').replace(/^\.\//, '').replace(/^\/+/, ''); if (!normalizedPath) return; paths.push(normalizedPath); zipFileMap[normalizedPath] = zipEntry; });
+            paths.sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); renderFileTree(paths); if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file)'; appendLog('ZIP dimuat lengkap: ' + file.name + ' — ' + paths.length + ' file', 'ok');
+            const fp = document.getElementById('file-panel'); if (fp && fp.classList.contains('collapsed')) toggleFilePanel(); if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 100); setLoading(true, 'ZIP siap diedit', paths.length + ' file ditemukan · klik file untuk membukanya'); setTimeout(() => setLoading(false), 550);
+          } else {
+            setLoading(true, 'Membuka file', file.name + ' · membaca isi...'); const content = await file.text(); currentZip = new JSZip(); currentZip.file(file.name, content); zipFileMap[file.name] = { async: async (type) => type === 'string' ? content : new Blob([content]) }; openFiles.set(file.name, content); renderFileTree([file.name]); if (projectNameEl) projectNameEl.textContent = file.name + ' (1 file)'; openFile(file.name, content, content.length); appendLog('File dimuat: ' + file.name, 'ok'); setLoading(false);
+          }
+          const bf = document.getElementById('breadcrumb-file'); if (bf) bf.textContent = '—'; const bc = document.getElementById('breadcrumb'); if (bc) bc.classList.remove('active'); const fi = document.getElementById('file-info'); if (fi) fi.textContent = 'No file selected';
+        } catch (err) { setLoading(false); if (projectNameEl) projectNameEl.textContent = 'Gagal memuat'; console.error('ZIP/file load failed', err); appendLog('Gagal membuka file: ' + (err.message || err), 'err'); alert('Gagal membuka file: ' + (err.message || err)); } finally { e.target.value = ''; }
+      });
     function renderFileTree(paths) {
       // Build a nested tree object from flat zip paths
       const treeRoot = {};
@@ -2393,25 +2362,14 @@
           });
 
           fileEl.addEventListener('click', async () => {
-            document.querySelectorAll('.file-tree-item').forEach(el => el.classList.remove('active'));
-            fileEl.classList.add('active');
-
-            const zipEntry = zipFileMap[entry.__path];
-            if (!zipEntry) return;
-
-            const ext = name.split('.').pop().toLowerCase();
-            if (TEXT_EXTS.includes(ext)) {
-              const content = await zipEntry.async('string');
-              openFile(entry.__path, content, content.length);
-            } else {
-              currentFile = entry.__path;
-              document.getElementById('editor-lang').textContent = 'binary';
-              document.getElementById('breadcrumb-file').textContent = entry.__path;
-              document.getElementById('breadcrumb').classList.add('active');
-              document.getElementById('file-info').textContent = entry.__path + '\ntype: binary (tidak ditampilkan di editor teks)';
-              document.getElementById('status-info').textContent = entry.__path;
-            }
-          });
+              document.querySelectorAll('.file-tree-item').forEach(el => el.classList.remove('active')); fileEl.classList.add('active'); const zipEntry = zipFileMap[entry.__path]; if (!zipEntry) return;
+              setLoading(true, 'Membuka file', entry.__path);
+              try {
+                const ext = name.split('.').pop().toLowerCase();
+                if (TEXT_EXTS.includes(ext)) { const content = await zipEntry.async('string'); openFile(entry.__path, content, content.length); appendLog('File dibuka: ' + entry.__path, 'ok'); }
+                else { currentFile = entry.__path; document.getElementById('editor-lang').textContent = 'binary'; document.getElementById('breadcrumb-file').textContent = entry.__path; document.getElementById('breadcrumb').classList.add('active'); document.getElementById('file-info').textContent = entry.__path + '\ntype: binary · gunakan Download untuk menyimpan file'; document.getElementById('status-info').textContent = entry.__path; }
+              } catch (error) { appendLog('Gagal membuka ' + entry.__path + ': ' + (error.message || error), 'err'); alert('File gagal dibuka: ' + (error.message || error)); } finally { setLoading(false); }
+            });
 
           wrap.appendChild(fileEl);
         }
@@ -2883,19 +2841,11 @@
     }
 
     async function askAI() {
-      const prompt = document.getElementById('ai-prompt').value;
-      if (!prompt) return;
-      try {
-        await requestAI('chat', prompt);
-      } catch (error) {
-        const response = document.getElementById('ai-response');
-        if (response) {
-          response.style.display = 'block';
-          response.textContent = 'AI: ' + error.message;
-        }
-        appendLog('AI: ' + error.message, 'err');
+        const input = document.getElementById('ai-prompt'); const prompt = (input && input.value || '').trim(); if (!prompt) { if (input) input.focus(); return; }
+        const sendButton = document.querySelector('.ai-input button'); if (sendButton) sendButton.disabled = true;
+        try { await requestAI('chat', prompt); } catch (error) { const response = document.getElementById('ai-response'); if (response) { response.style.display = 'block'; response.textContent = 'AI: ' + error.message; } appendLog('AI: ' + error.message, 'err'); } finally { if (sendButton) sendButton.disabled = false; }
       }
-    }
+      document.getElementById('ai-prompt')?.addEventListener('keydown', (event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); askAI(); } });
 
 
     // ===== Custom panel =====
