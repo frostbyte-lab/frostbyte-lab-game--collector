@@ -604,13 +604,16 @@
       margin: 0 auto;
     }
     .preview-frame-wrap.viewport-mobile {
-      flex: 0 0 min(390px, 100%);
-      width: min(390px, 100%);
-      height: auto;
-      min-height: 520px;
-      aspect-ratio: 9 / 16;
-      align-self: flex-start;
-      margin: 0 auto;
+      /* Mode mobile tetap memakai seluruh ruang sandbox yang tersedia.
+         Jangan pakai ukuran perangkat tetap karena sandbox bisa sangat kecil. */
+      flex: 1 1 auto;
+      width: 100%;
+      max-width: 100%;
+      height: 100%;
+      min-height: 0;
+      aspect-ratio: auto;
+      align-self: stretch;
+      margin: 0;
     }
     .preview-frame {
       display: block;
