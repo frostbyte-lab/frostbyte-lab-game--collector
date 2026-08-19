@@ -1,4 +1,4 @@
-const MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 
     function clean(value, max = 18000) {
     if (value == null) return "";
@@ -16,7 +16,7 @@ const MODEL = "@cf/meta/llama-3.1-8b-instruct";
 
     export async function askAI(env, system, user, options = {}) {
     if (!env.AI || typeof env.AI.run !== "function") throw new Error("Cloudflare Workers AI belum tersedia");
-    const response = await env.AI.run(options.model || MODEL, {
+    const response = await env.AI.run(options.model || env.AI_MODEL || MODEL, {
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
       max_tokens: Math.min(Number(options.max_tokens || 1200), 2400),
       temperature: options.temperature ?? 0.2
