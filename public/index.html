@@ -1774,6 +1774,13 @@
           <!-- AI Panel -->
           <div class="ai-panel hidden" id="ai-panel">
             <div class="ai-label"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-bot"></use></svg> AI Assistant <span style="font-weight:400;text-transform:none;color:var(--text-muted);">· no API key required</span></div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <label for="ai-model" style="font-size:11px;color:var(--text-muted);white-space:nowrap;">Model AI</label>
+              <select id="ai-model" style="flex:1;padding:7px 9px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;">
+                <option value="llama">Llama 3.1 · cepat untuk analisis</option>
+                <option value="qwen3-coder">Qwen3-Coder · fokus coding &amp; perbaikan</option>
+              </select>
+            </div>
             <div class="ai-input">
               <input type="text" id="ai-prompt" placeholder="Tanyakan penyebab error atau cara memperbaikinya..." />
               <button class="btn btn-primary btn-sm" onclick="askAI()">Send</button>
@@ -2728,6 +2735,7 @@
 
     function formatAIResult(result) {
       const lines = [];
+      if (result.modelLabel) lines.push("Model: " + result.modelLabel);
       if (result.summary) lines.push(result.summary);
       if (result.issues?.length) {
         lines.push('', 'Temuan:');
@@ -2753,7 +2761,7 @@
       const res = await fetch('/api/ai/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...context, action, question: question || '' })
+        body: JSON.stringify({ ...context, action, question: question || '', model: document.getElementById('ai-model')?.value || 'llama' })
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi.');
