@@ -59,6 +59,8 @@
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.24",
     "expo-sharing": "~14.0.8",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "react-native-webview": "13.15.0",
+    "expo-av": "~16.0.7"
   }
 }
