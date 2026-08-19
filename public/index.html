@@ -1999,7 +1999,43 @@
     let openFiles = new Map();
     let currentFile = null;
 
-    if (typeof require !== 'undefined') {
+    function installMobileEditorFallback() {
+        if (editor || window.__textareaEditor) return;
+        const host = document.getElementById('monaco-editor');
+        if (!host) return;
+        const ta = document.createElement('textarea');
+        ta.id = 'editor-fallback';
+        ta.setAttribute('aria-label', 'Editor kode');
+        ta.spellcheck = false;
+        ta.style.cssText = 'width:100%;height:100%;min-height:240px;box-sizing:border-box;padding:12px;border:0;background:#1e1e1e;color:#d4d4d4;font:14px/1.5 Menlo,Monaco,monospace;resize:none;outline:none;tab-size:2;';
+        ta.value = '// Load a file to start editing\n';
+        host.innerHTML = '';
+        host.appendChild(ta);
+        window.__textareaEditor = ta;
+        editor = {
+          getValue: function() { return ta.value; },
+          setValue: function(v) { ta.value = v == null ? '' : String(v); },
+          getModel: function() { return null; },
+          layout: function() { sizeMonacoHost(); },
+          focus: function() { ta.focus(); },
+          updateOptions: function() {},
+          onDidChangeCursorPosition: function() { return { dispose: function(){} }; },
+          getAction: function() { return { run: function(){} }; }
+        };
+        if (window.__pendingEditorContent) {
+          editor.setValue(window.__pendingEditorContent.content || '');
+          window.__pendingEditorContent = null;
+        }
+        sizeMonacoHost();
+        try { editor.focus(); } catch (_) {}
+        const status = document.getElementById('status-info');
+        if (status && status.textContent === 'Ready') status.textContent = 'Editor siap (mode kompatibel HP)';
+      }
+      const mobileEditorFallbackTimer = setTimeout(function() {
+        if (!editor) installMobileEditorFallback();
+      }, 7000);
+
+        if (typeof require !== 'undefined') {
       require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs' }});
 
       require(['vs/editor/editor.main'], function() {
@@ -2125,31 +2161,14 @@
         setTimeout(sizeMonacoHost, 100);
         setTimeout(sizeMonacoHost, 400);
         window.addEventListener('resize', function() { sizeMonacoHost(); });
+        clearTimeout(mobileEditorFallbackTimer);
+      }, function(err) {
+        console.warn('Monaco CDN gagal dimuat — pakai editor kompatibel HP', err);
+        installMobileEditorFallback();
       });
     } else {
-      console.warn('Monaco loader tidak termuat — pakai textarea fallback');
-      (function installTextareaFallback() {
-        const host = document.getElementById('monaco-editor');
-        if (!host) return;
-        const ta = document.createElement('textarea');
-        ta.id = 'editor-fallback';
-        ta.style.cssText = 'width:100%;height:100%;min-height:240px;box-sizing:border-box;padding:12px;border:0;background:#1e1e1e;color:#d4d4d4;font:14px/1.5 Menlo,Monaco,monospace;resize:none;';
-        ta.value = '// Load a file to start editing\n';
-        host.innerHTML = '';
-        host.appendChild(ta);
-        window.__textareaEditor = ta;
-        // Polyfill minimal agar openFile/saveFile tetap jalan
-        editor = {
-          getValue: function() { return ta.value; },
-          setValue: function(v) { ta.value = v == null ? '' : String(v); },
-          getModel: function() { return null; },
-          layout: function() { sizeMonacoHost(); },
-          focus: function() { ta.focus(); },
-          updateOptions: function() {},
-          onDidChangeCursorPosition: function() { return { dispose: function(){} }; },
-          getAction: function() { return { run: function(){} }; }
-        };
-      })();
+      console.warn('Monaco loader tidak termuat — pakai editor kompatibel HP');
+      installMobileEditorFallback();
     }
 
     // Pastikan sizeMonacoHost tersedia meski Monaco async
