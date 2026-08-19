@@ -45,6 +45,85 @@ import {
 const GH_OWNER = "frostbyte-lab";
 const GH_REPO = "frostbyte-lab-game--collector";
 const GH_WORKFLOW = "collect.yml";
+const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+
+function cleanAiJson(text) {
+  const raw = String(text || "").trim();
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1].trim() : raw;
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    return {
+      summary: raw || "AI tidak mengembalikan hasil.",
+      issues: [],
+      suggestions: [],
+      repairedCode: null
+    };
+  }
+}
+
+async function analyzeWithAI(env, body) {
+  if (!env.AI || typeof env.AI.run !== "function") {
+    return Response.json({
+      ok: false,
+      error: "AI_NOT_CONFIGURED",
+      message: "Cloudflare Workers AI belum terhubung pada deployment ini."
+    }, { status: 503 });
+  }
+
+  const filename = String(body.filename || "untitled");
+  const language = String(body.language || "plaintext");
+  const code = String(body.code || "").slice(0, 30000);
+  const staticIssues = Array.isArray(body.staticIssues) ? body.staticIssues.slice(0, 20) : [];
+  const action = body.action === "repair" ? "repair" : body.action === "chat" ? "chat" : "analyze";
+  const userQuestion = String(body.question || "").slice(0, 2000);
+
+  const outputSchema = action === "repair"
+    ? `{"summary":"...","issues":[{"severity":"error|warning|info","line":1,"message":"..."}],"suggestions":["..."],"repairedCode":"FULL FILE CONTENT"}`
+    : `{"summary":"...","issues":[{"severity":"error|warning|info","line":1,"message":"..."}],"suggestions":["actionable fix 1","actionable fix 2"],"repairedCode":null}`;
+
+  const system = [
+    "You are a careful code review assistant inside Game Collector Pro.",
+    "Analyze only the supplied file. Never invent missing files or claim code was executed.",
+    "Return valid JSON only. Keep explanations concise and actionable.",
+    "Detect syntax errors, broken paths, unsafe browser assumptions, missing dependencies, and likely runtime errors.",
+    "When a line is unknown, use null rather than guessing.",
+    "The response schema is " + outputSchema
+  ].join(" ");
+  const task = action === "repair"
+    ? "Find the most important fixable problems and return the complete corrected file in repairedCode. Preserve behavior and formatting where possible."
+    : action === "chat"
+      ? "Answer the user's question about this file with concrete, safe guidance. Do not return repairedCode."
+      : "Review this file and report likely errors plus practical repair steps. Do not return repairedCode.";
+
+  const user = [
+    `File: ${filename}`,
+    `Language: ${language}`,
+    `Static checks already found: ${JSON.stringify(staticIssues)}`,
+    userQuestion ? `User question: ${userQuestion}` : "",
+    task,
+    "Code:",
+    code
+  ].filter(Boolean).join("\n\n");
+
+  try {
+    const result = await env.AI.run(AI_MODEL, {
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user }
+      ]
+    });
+    const parsed = cleanAiJson(result?.response || result?.result?.response || "");
+    return Response.json({ ok: true, model: AI_MODEL, ...parsed });
+  } catch (error) {
+    return Response.json({
+      ok: false,
+      error: "AI_REQUEST_FAILED",
+      message: String(error?.message || error).slice(0, 500)
+    }, { status: 502 });
+  }
+}
 
 
 /** Deteksi paket collect tidak usable (kosong / halaman blokir) */
@@ -103,6 +182,19 @@ export default {
           progressKV: hasProgressStore(env)
         }
       });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/ai/analyze") {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return Response.json({ ok: false, error: "INVALID_JSON" }, { status: 400 });
+      }
+      if (!body || typeof body.code !== "string" || !body.code.trim()) {
+        return Response.json({ ok: false, error: "CODE_REQUIRED" }, { status: 400 });
+      }
+      return analyzeWithAI(env, body);
     }
 
     // --- R2 download (Poin 1) — stream ZIP besar dari R2 ---
