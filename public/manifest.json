@@ -20,5 +20,11 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "id": "/",
+  "scope": "/",
+  "launch_handler": {
+    "client_mode": "navigate-new"
+  },
+  "prefer_related_applications": false
 }
