@@ -603,17 +603,16 @@
       width: min(768px, 100%);
       margin: 0 auto;
     }
-    .preview-frame-wrap.viewport-mobile {
-      /* Mode mobile tetap memakai seluruh ruang sandbox yang tersedia.
-         Jangan pakai ukuran perangkat tetap karena sandbox bisa sangat kecil. */
-      flex: 1 1 auto;
-      width: 100%;
+        .preview-frame-wrap.viewport-mobile {
+      /* Portrait tetap dipertahankan, tetapi frame dihitung agar muat di sandbox. */
+      flex: 0 0 auto;
+      width: auto;
+      height: auto;
       max-width: 100%;
-      height: 100%;
-      min-height: 0;
-      aspect-ratio: auto;
-      align-self: stretch;
-      margin: 0;
+      max-height: 100%;
+      aspect-ratio: 9 / 16;
+      align-self: center;
+      margin: 0 auto;
     }
     .preview-frame {
       display: block;
@@ -3290,10 +3289,31 @@
       });
       const label = document.getElementById('preview-viewport-label');
       if (label) label.textContent = '· ' + activePreviewViewport.charAt(0).toUpperCase() + activePreviewViewport.slice(1);
-      if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 50);
+      fitPreviewFrame();
+       if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 50);
     }
 
-    function reloadPreview() {
+    function fitPreviewFrame() {
+       const wrap = document.getElementById('preview-frame-wrap');
+       const stage = wrap && wrap.parentElement;
+       if (!wrap || !stage) return;
+       if (activePreviewViewport !== 'mobile') {
+         wrap.style.width = '';
+         wrap.style.height = '';
+         return;
+       }
+       const availableWidth = stage.clientWidth;
+       const availableHeight = stage.clientHeight;
+       if (!availableWidth || !availableHeight) return;
+       const width = Math.max(1, Math.floor(Math.min(availableWidth, availableHeight * 9 / 16)));
+       const height = Math.max(1, Math.floor(width * 16 / 9));
+       wrap.style.width = width + 'px';
+       wrap.style.height = Math.min(height, availableHeight) + 'px';
+     }
+
+     window.addEventListener('resize', fitPreviewFrame);
+
+     function reloadPreview() {
       if (previewReload) previewReload(activePreviewMode);
     }
 
