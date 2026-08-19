@@ -1550,7 +1550,13 @@
       @keyframes gc-spin { to { transform: rotate(360deg); } }
       @keyframes gc-progress { 0% { transform: translateX(-120%); background-position: 0 0; } 100% { transform: translateX(330%); background-position: 100% 0; } }
 
-        /* ===== UTILITY ===== */
+        .gc-install-app { position: fixed; right: 16px; bottom: 16px; z-index: 1200; display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(125,211,252,.45); border-radius: 999px; background: linear-gradient(135deg,#2563eb,#0891b2); color: #fff; font: 600 12px/1 system-ui,sans-serif; box-shadow: 0 10px 28px rgba(8,47,73,.42); cursor: pointer; transition: transform .2s ease, filter .2s ease; }
+    .gc-install-app:hover { transform: translateY(-2px); filter: brightness(1.08); }
+    .gc-install-app[hidden] { display: none; }
+    .gc-update-note { position: fixed; left: 50%; bottom: 18px; z-index: 1201; transform: translateX(-50%); padding: 10px 14px; border: 1px solid rgba(74,222,128,.4); border-radius: 10px; background: #123322; color: #d1fae5; font-size: 12px; box-shadow: 0 10px 28px rgba(0,0,0,.28); }
+    .gc-update-note[hidden] { display: none; }
+
+    /* ===== UTILITY ===== */
     .hidden {
       display: none !important;
     }
@@ -1652,7 +1658,9 @@
   <div class="gc-loading-overlay" id="gc-loading-overlay" hidden aria-live="polite" aria-busy="true">
       <div class="gc-loading-card"><div class="gc-loading-spinner" aria-hidden="true"></div><div class="gc-loading-title" id="gc-loading-title">Memproses file...</div><div class="gc-loading-detail" id="gc-loading-detail">Mohon tunggu sebentar</div><div class="gc-loading-track" aria-hidden="true"><div class="gc-loading-bar"></div></div></div>
     </div>
-      <div class="app-container">
+      <button type="button" class="gc-install-app" id="gc-install-app" hidden aria-label="Instal Game Collector Pro ke HP">＋ Pasang ke HP</button>
+  <div class="gc-update-note" id="gc-update-note" hidden role="status"></div>
+  <div class="app-container">
     <!-- Header -->
     <header>
       <div class="header-left">
@@ -3526,7 +3534,50 @@
       if (el) el.textContent = 'Status: Ready';
     }
 
-  </script>
+  
+      // ===== PWA install + automatic update =====
+      (function setupPWA() {
+        const installButton = document.getElementById('gc-install-app');
+        const updateNote = document.getElementById('gc-update-note');
+        let deferredInstall = null;
+        const showUpdateNote = (message) => {
+          if (!updateNote) return;
+          updateNote.textContent = message;
+          updateNote.hidden = false;
+          setTimeout(() => { if (updateNote) updateNote.hidden = true; }, 4500);
+        };
+        window.addEventListener('beforeinstallprompt', (event) => {
+          event.preventDefault();
+          deferredInstall = event;
+          if (installButton) installButton.hidden = false;
+        });
+        installButton?.addEventListener('click', async () => {
+          if (!deferredInstall) {
+            showUpdateNote('Di Chrome HP: buka menu ⋮ lalu pilih “Tambahkan ke layar utama”.');
+            return;
+          }
+          deferredInstall.prompt();
+          await deferredInstall.userChoice.catch(() => null);
+          deferredInstall = null;
+          installButton.hidden = true;
+        });
+        window.addEventListener('appinstalled', () => { deferredInstall = null; if (installButton) installButton.hidden = true; showUpdateNote('Game Collector Pro sudah terpasang di HP.'); });
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => {
+          const hadController = Boolean(navigator.serviceWorker.controller);
+          let reloading = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!hadController || reloading) return;
+            reloading = true;
+            showUpdateNote('Versi baru ditemukan. Memperbarui aplikasi...');
+            setTimeout(() => location.reload(), 650);
+          });
+          const checkForUpdate = () => registration.update().catch(() => {});
+          checkForUpdate();
+          setInterval(checkForUpdate, 5 * 60 * 1000);
+        }).catch(() => {});
+      })();
+    </script>
 </body>
 </html>
 
