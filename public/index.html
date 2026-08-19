@@ -11,7 +11,11 @@
   <link rel="apple-touch-icon" href="/frostbyte-logo.png">
   <title>Game Collector Pro — Frostbyte Technologies</title>
   
-  <!-- Monaco Editor CDN -->
+  <!-- Monaco Editor CDN: koneksi dipercepat agar editor lancar di HP -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+    <link rel="preload" as="script" crossorigin href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs/loader.min.js">
+    
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs/loader.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   
@@ -2107,24 +2111,26 @@
           lineHeight: 22,
           fontFamily: "'Cascadia Code', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', monospace",
           fontLigatures: true,
-          minimap: { enabled: window.innerWidth > 900 },
+          minimap: { enabled: window.innerWidth > 1100 },
           scrollBeyondLastLine: false,
-          wordWrap: 'on',
+          wordWrap: window.innerWidth <= 768 ? 'off' : 'on',
           automaticLayout: true,
-          formatOnPaste: true,
+          largeFileOptimizations: true,
+          maxTokenizationLineLength: 20000,
+          formatOnPaste: false,
           autoClosingBrackets: 'always',
           autoClosingQuotes: 'always',
           autoIndent: 'full',
-          renderWhitespace: 'selection',
-          renderLineHighlight: 'line',
+          renderWhitespace: 'none',
+          renderLineHighlight: window.innerWidth <= 768 ? 'none' : 'line',
           lineNumbers: 'on',
           glyphMargin: false,
-          folding: true,
-          matchBrackets: 'always',
-          bracketPairColorization: { enabled: true },
+          folding: window.innerWidth > 768,
+          matchBrackets: window.innerWidth > 768 ? 'always' : 'never',
+          bracketPairColorization: { enabled: window.innerWidth > 768 },
           guides: {
-            bracketPairs: true,
-            indentation: true
+            bracketPairs: window.innerWidth > 768,
+            indentation: window.innerWidth > 768
           },
           padding: { top: 8 },
           smoothScrolling: true,
