@@ -554,6 +554,46 @@
       min-height: 22px;
     }
 
+    .file-tree-item .file-tree-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1 1 auto;
+    }
+
+    .file-tree-delete {
+      border: 0;
+      background: transparent;
+      color: #8b949e;
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      opacity: 0;
+      flex: 0 0 22px;
+      transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+    }
+
+    .file-tree-item:hover .file-tree-delete,
+    .file-tree-item.active .file-tree-delete,
+    .file-tree-delete:focus-visible {
+      opacity: 1;
+    }
+
+    .file-tree-delete:hover {
+      color: #fff;
+      background: rgba(248, 81, 73, 0.85);
+    }
+
+    .file-tree-delete svg {
+      width: 14px;
+      height: 14px;
+    }
+
     .file-tree-item:hover {
       background: #2a2d2e;
       color: #fff;
@@ -580,6 +620,13 @@
       width: 16px;
       height: 16px;
       flex-shrink: 0;
+    }
+
+    .file-icon-svg {
+      width: 17px;
+      height: 17px;
+      display: block;
+      flex: 0 0 17px;
     }
 
     .file-icon-wrap .file-badge {
@@ -1528,6 +1575,7 @@
               <div class="editor-actions">
                 <button class="btn btn-primary btn-sm" id="btn-save" onclick="saveFile()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-save"></use></svg> Save</button>
                 <button class="btn btn-secondary btn-sm" onclick="formatCode()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-edit"></use></svg> Edit</button>
+                <button class="btn btn-danger btn-sm" id="btn-delete-file" onclick="deleteCurrentFile()" disabled title="Delete file permanently"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-trash"></use></svg> Delete</button>
                 <button class="btn btn-secondary btn-sm" onclick="toggleAIPanel()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-terminal"></use></svg> AI</button>
               </div>
             </div>
@@ -1889,8 +1937,32 @@
 
     function fileIconHTML(name) {
       const ext = name.split('.').pop().toLowerCase();
-      const [label, badgeCls] = FILE_BADGES[ext] || ['•', 'badge-default'];
-      return `<span class="file-icon-wrap"><svg class="ui-icon ui-icon-sm ui-icon-muted" aria-hidden="true"><use href="#icon-file"></use></svg><span class="file-badge ${badgeCls}">${label}</span></span>`;
+      const colors = {
+        html: '#e34f26', css: '#1572b6', js: '#f7df1e', ts: '#3178c6',
+        json: '#f0db4f', md: '#8b949e', py: '#3776ab', java: '#e76f00',
+        php: '#777bb4', rb: '#cc342d', go: '#00add8', rs: '#dea584',
+        sh: '#4eaa25', sql: '#e38c00', xml: '#e44d26', img: '#a371f7'
+      };
+      const color = colors[ext] || '#8b949e';
+      let mark = '<path d="M4 2.5h6.2L13.5 5v8.5H4z" fill="none" stroke="' + color + '" stroke-width="1.2"/><path d="M10 2.5V5h3.5" fill="none" stroke="' + color + '" stroke-width="1.2"/>';
+      if (['html', 'htm', 'xhtml'].includes(ext)) {
+        mark = '<path d="M3 2.5h10l-1 11-4 1-4-1z" fill="' + color + '"/><path d="M5.2 5.3h5.6l-.3 3.6H6.1l.2 2.2 1.7.5 1.7-.5.1-1.1h1.3l-.2 2.1-2.9.9-2.9-.9z" fill="#fff"/>';
+      } else if (['css', 'scss', 'sass', 'less'].includes(ext)) {
+        mark = '<path d="M3 2.5h10l-1 11-4 1-4-1z" fill="' + color + '"/><path d="M5.4 5.2h5.2v1.4H7v1.1h3.1v1.3H7v1.6h3.6v1.4H5.4z" fill="#fff"/>';
+      } else if (['js', 'mjs', 'cjs', 'jsx'].includes(ext)) {
+        mark = '<rect x="2.5" y="2.5" width="11" height="11" rx="1" fill="' + color + '"/><path d="M6.5 6.2v4.1c0 .7-.2 1-.8 1-.4 0-.7-.2-.9-.5l-.8.8c.4.6.9.9 1.8.9 1.4 0 2.1-.8 2.1-2.2V6.2zm3.9-.1c-1.3 0-2.1.8-2.1 1.8 0 1.1.7 1.5 1.8 2 .6.2.8.4.8.7s-.3.5-.7.5c-.6 0-1-.3-1.4-.7l-.8.8c.5.7 1.2 1 2.2 1 1.3 0 2.2-.7 2.2-1.8 0-1.1-.7-1.6-1.9-2.1-.6-.2-.8-.4-.8-.7 0-.2.2-.4.6-.4.4 0 .8.2 1.2.5l.7-.9c-.4-.4-1-.7-1.8-.7z" fill="#111827"/>';
+      } else if (['ts', 'tsx'].includes(ext)) {
+        mark = '<rect x="2.5" y="2.5" width="11" height="11" rx="1" fill="' + color + '"/><path d="M4.2 6.1h5.1v1.2H7.5v4.2H6.1V7.3H4.2zm6.8-.1c1 0 1.7.3 2.2.8l-.8.9c-.4-.3-.8-.5-1.3-.5-.4 0-.6.2-.6.4 0 .3.3.4.9.7 1.1.4 1.7 1 1.7 1.8s-.7 1.5-1.9 1.5c-.9 0-1.6-.3-2.1-.9l.8-.8c.4.4.8.6 1.3.6.4 0 .7-.2.7-.4 0-.3-.3-.4-.8-.6-1.2-.5-1.8-1-1.8-1.8s.7-1.7 1.7-1.7z" fill="#fff"/>';
+      } else if (['json', 'jsonc', 'json5'].includes(ext)) {
+        mark = '<path d="M6.1 4.1c-1.2.1-1.8.7-1.8 1.8v.7c0 .6-.2.9-.8 1.1.6.2.8.5.8 1.1v.7c0 1.1.6 1.7 1.8 1.8M9.9 4.1c1.2.1 1.8.7 1.8 1.8v.7c0 .6.2.9.8 1.1-.6.2-.8.5-.8 1.1v.7c0 1.1-.6 1.7-1.8 1.8" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linecap="round"/>';
+      } else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'avif'].includes(ext)) {
+        mark = '<rect x="2.5" y="3.5" width="11" height="9" rx="1" fill="none" stroke="' + colors.img + '" stroke-width="1.3"/><circle cx="6" cy="6.4" r="1.1" fill="' + colors.img + '"/><path d="m3.5 11 2.8-2.5 2 1.7 1.5-1.3 3.7 3.3" fill="none" stroke="' + colors.img + '" stroke-width="1.2"/>';
+      }
+      return `<span class="file-icon-wrap" aria-hidden="true"><svg class="file-icon-svg" viewBox="0 0 16 16">${mark}</svg></span>`;
+    }
+
+    function deleteIconHTML() {
+      return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 4.5h9M6 4.5V3h4v1.5m-5.5 0 .5 9h6l.5-9M7 7v4m2-4v4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     }
 
     function fileNameClass(name) {
@@ -2028,9 +2100,15 @@
           // File row
           const fileEl = document.createElement('div');
           fileEl.className = 'file-tree-item';
-          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}">${name}</span>`;
+          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span><button type="button" class="file-tree-delete" title="Delete file permanently" aria-label="Delete file permanently">${deleteIconHTML()}</button>`;
+          fileEl.querySelector('.file-tree-name').textContent = name;
           fileEl.style.paddingLeft = (8 + depth * 14) + 'px';
           fileEl.dataset.path = entry.__path;
+
+          fileEl.querySelector('.file-tree-delete').addEventListener('click', (event) => {
+            event.stopPropagation();
+            deleteFile(entry.__path);
+          });
 
           fileEl.addEventListener('click', async () => {
             document.querySelectorAll('.file-tree-item').forEach(el => el.classList.remove('active'));
@@ -2157,6 +2235,7 @@
       const elSz = document.getElementById('editor-size');
       const elSt = document.getElementById('status-info');
       const elFi = document.getElementById('file-info');
+      const deleteButton = document.getElementById('btn-delete-file');
       if (elLang) elLang.textContent = language;
       if (elBf) elBf.textContent = filename;
       if (elBc) elBc.classList.add('active');
@@ -2164,6 +2243,7 @@
       if (elSz) elSz.textContent = size + ' bytes';
       if (elSt) elSt.textContent = filename;
       if (elFi) elFi.textContent = 'path: ' + filename + '\nlanguage: ' + language + '\nsize: ' + size + ' bytes';
+      if (deleteButton) deleteButton.disabled = false;
 
       openFiles.set(filename, textContent);
       updateEditorTabs(filename);
@@ -2372,6 +2452,67 @@
       appendLog('Saved: ' + currentFile, 'ok');
       const el = document.getElementById('status-info');
       if (el) el.textContent = 'Saved: ' + currentFile;
+    }
+
+    function clearEditorState() {
+      currentFile = null;
+      const model = editor && editor.getModel ? editor.getModel() : null;
+      if (model && model.dispose) {
+        try { model.dispose(); } catch (_) {}
+      }
+      if (editor) editor.setValue('// No file open\n');
+      const lang = document.getElementById('editor-lang');
+      const size = document.getElementById('editor-size');
+      const status = document.getElementById('status-info');
+      const info = document.getElementById('file-info');
+      const breadcrumb = document.getElementById('breadcrumb');
+      const deleteButton = document.getElementById('btn-delete-file');
+      if (lang) lang.textContent = 'No file';
+      if (size) size.textContent = '—';
+      if (status) status.textContent = 'No file selected';
+      if (info) info.textContent = 'No file selected';
+      if (breadcrumb) breadcrumb.classList.remove('active');
+      if (deleteButton) deleteButton.disabled = true;
+    }
+
+    function deleteFile(filename) {
+      if (!filename) return;
+      const confirmed = window.confirm('Hapus file ini secara permanen dari paket ZIP?\\n\\n' + filename);
+      if (!confirmed) return;
+
+      if (currentFile === filename && editor && openFiles.has(filename)) {
+        openFiles.set(filename, editor.getValue());
+      }
+      openFiles.delete(filename);
+      if (currentZip && typeof currentZip.remove === 'function') {
+        currentZip.remove(filename);
+      }
+      delete zipFileMap[filename];
+
+      if (currentFile === filename) {
+        clearEditorState();
+        const next = openFiles.keys().next().value;
+        if (next) openFile(next, openFiles.get(next), openFiles.get(next).length);
+      }
+      renderFileTree(Object.keys(zipFileMap));
+      updateEditorTabs(currentFile);
+      document.querySelectorAll('.file-tree-item').forEach(item => {
+        if (item.dataset.path === currentFile) item.classList.add('active');
+      });
+      const projectNameEl = document.getElementById('project-name');
+      if (projectNameEl) {
+        const count = Object.keys(zipFileMap).length;
+        projectNameEl.textContent = count ? count + ' file tersisa' : 'Paket kosong';
+      }
+      appendLog('Deleted permanently: ' + filename, 'ok');
+    }
+
+    function deleteCurrentFile() {
+      if (!currentFile) {
+        appendLog('Tidak ada file aktif untuk dihapus.', 'warn');
+        return;
+      }
+      deleteFile(currentFile);
     }
 
     function askAI() {
