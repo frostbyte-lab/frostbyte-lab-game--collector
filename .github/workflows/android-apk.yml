@@ -45,7 +45,11 @@ jobs:
 
       - name: Generate Android project
         working-directory: android-app
-        run: pnpm exec expo prebuild --platform android --non-interactive --clean
+        env:
+          CI: "1"
+        run: |
+          pnpm exec expo prebuild --platform android --clean --no-install
+          pnpm install --no-frozen-lockfile
 
       - name: Build debug APK
         working-directory: android-app/android
