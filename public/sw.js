@@ -1,6 +1,6 @@
-/* Game Collector Pro — SW v3: shell cache + virtual ZIP assets under /__gc__/ */
-const SHELL = "gc-pro-shell-v3";
-const ZIP_CACHE = "gc-pro-zip-v3";
+/* Game Collector Pro — SW v4: shell cache + virtual ZIP assets under /__gc__/ */
+const SHELL = "gc-pro-shell-v4";
+const ZIP_CACHE = "gc-pro-zip-v4";
 const ASSETS = ["/", "/index.html", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
