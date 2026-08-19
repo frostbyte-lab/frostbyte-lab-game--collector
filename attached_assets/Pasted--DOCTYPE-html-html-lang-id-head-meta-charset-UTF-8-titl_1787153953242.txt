@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Workspace Preview — Mockup</title>
+<style>
+  :root{
+    --bg:#0e1116;
+    --panel:#151a21;
+    --panel2:#11151b;
+    --line:#2a323d;
+    --line-soft:#1e252d;
+    --text:#e6e9ee;
+    --text-dim:#8b96a5;
+    --accent:#5ee1c0;
+    --accent-dim:#2e5c52;
+    --warn:#ff6b5e;
+    --mono:"JetBrains Mono","Fira Code",ui-monospace,Consolas,monospace;
+    --sans:"Inter","Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    padding:28px;
+    display:flex;
+    justify-content:center;
+  }
+  .frame{
+    width:100%;
+    max-width:1180px;
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin-bottom:6px;
+  }
+  h1{
+    font-size:20px;
+    margin:0 0 20px 0;
+    font-weight:600;
+    letter-spacing:.01em;
+  }
+
+  /* Tombol mode workspace */
+  .toolbar{
+    display:flex;
+    gap:6px;
+    margin-bottom:16px;
+    flex-wrap:nowrap;
+  }
+  .tbtn{
+    font-family:var(--mono);
+    font-size:11px;
+    padding:9px 4px;
+    border-radius:7px;
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--text-dim);
+    cursor:default;
+    display:flex;
+    align-items:center;
+    gap:5px;
+    flex:1 1 0;
+    justify-content:center;
+    white-space:nowrap;
+    min-width:0;
+  }
+  .tbtn .dot{
+    width:5px;height:5px;border-radius:50%;
+    background:var(--text-dim);
+    flex-shrink:0;
+  }
+  .tbtn.active{
+    border-color:var(--accent);
+    color:var(--accent);
+    background:rgba(94,225,192,0.08);
+  }
+  .tbtn.active .dot{background:var(--accent);}
+  .tbtn.warn .dot{background:var(--warn);}
+  .tbtn.push-right{margin-left:auto;}
+
+  /* Panel utama split 70/30 */
+  .main-split{
+    display:grid;
+    grid-template-columns:70fr 30fr;
+    border:1px solid var(--line);
+    border-radius:10px 10px 0 0;
+    overflow:hidden;
+    min-height:340px;
+  }
+  .pane{
+    padding:16px 18px;
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    min-width:0; /* wajib: cegah konten memaksa kolom grid melebar */
+    overflow:hidden;
+  }
+  .pane-left{
+    background:var(--panel);
+    border-right:1px solid var(--line);
+  }
+  .pane-right{
+    background:var(--panel2);
+  }
+  .pane-tag{
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--text-dim);
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    margin-bottom:12px;
+    display:flex;
+    justify-content:space-between;
+  }
+  .pane-body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex:1;
+    min-height:280px;
+    border:1px dashed var(--line-soft);
+    border-radius:8px;
+    color:var(--text-dim);
+    font-size:13px;
+    text-align:center;
+    flex-direction:column;
+    gap:6px;
+  }
+  .pane-body strong{color:var(--text);font-weight:500;}
+
+  .log-line{
+    font-family:var(--mono);
+    font-size:11.5px;
+    line-height:1.7;
+    padding:2px 0;
+    border-bottom:1px solid var(--line-soft);
+    color:var(--text-dim);
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+  .log-line.err{color:var(--warn);}
+  .log-line .tag{
+    color:var(--accent);
+    margin-right:6px;
+  }
+
+  /* Detail error */
+  .detail{
+    border:1px solid var(--line);
+    border-top:none;
+    border-radius:0 0 10px 10px;
+    background:var(--panel2);
+    padding:16px 18px;
+  }
+  .detail-label{
+    font-family:var(--mono);
+    font-size:10.5px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    margin-bottom:10px;
+  }
+  .detail-body{
+    min-height:90px;
+    border:1px dashed var(--line-soft);
+    border-radius:8px;
+    padding:12px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--text-dim);
+  }
+  .detail-body .line{margin-bottom:4px;}
+  .detail-footer{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-top:14px;
+  }
+  .filename{
+    flex:1;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--text-dim);
+    border:1px solid var(--line);
+    border-radius:7px;
+    padding:8px 12px;
+    background:var(--panel);
+  }
+  .filename .ico{color:var(--accent);}
+  .abtn{
+    font-family:var(--mono);
+    font-size:12.5px;
+    padding:8px 18px;
+    border-radius:7px;
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--text-dim);
+  }
+  .abtn.custom{color:var(--text);}
+  .abtn.ai{
+    border-color:var(--accent);
+    color:var(--accent);
+    background:rgba(94,225,192,0.08);
+    font-weight:600;
+  }
+
+  /* Panel bawah alur AI */
+  .flow{
+    border:1px solid var(--line);
+    border-top:none;
+    border-radius:0 0 10px 10px;
+    background:var(--panel);
+    padding:18px;
+  }
+  .flow-title{
+    font-family:var(--mono);
+    font-size:10.5px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin-bottom:14px;
+  }
+  .flow-row{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:8px;
+    font-size:13px;
+    margin-bottom:10px;
+  }
+  .flow-row:last-child{margin-bottom:0;}
+  .chip{
+    font-family:var(--mono);
+    font-size:11.5px;
+    padding:5px 11px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    color:var(--text-dim);
+    background:var(--panel2);
+    white-space:nowrap;
+  }
+  .chip.ai{color:var(--accent);border-color:var(--accent-dim);}
+  .chip.user{color:var(--warn);border-color:#5c332e;}
+  .arrow{color:var(--text-dim);font-size:13px;}
+
+  .note{
+    margin-top:22px;
+    font-size:12px;
+    color:var(--text-dim);
+    line-height:1.6;
+    border-left:2px solid var(--line);
+    padding-left:12px;
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="eyebrow">Wireframe · Mode Workspace</div>
+  <h1>Preview &amp; Error Panel</h1>
+
+  <!-- Tombol mode workspace -->
+  <div class="toolbar">
+    <div class="tbtn active"><span class="dot"></span>Web View</div>
+    <div class="tbtn"><span class="dot"></span>Sandbox</div>
+    <div class="tbtn warn"><span class="dot"></span>Scan Error</div>
+    <div class="tbtn"><span class="dot"></span>Reload</div>
+  </div>
+
+  <!-- Split 70/30 -->
+  <div class="main-split">
+    <div class="pane pane-left">
+      <div class="pane-tag"><span>70% dari 100% — Mode Preview Game</span><span>live</span></div>
+      <div class="pane-body">
+        <strong>▶ Game Preview</strong>
+        <span>render output dari game/app yang dijalankan</span>
+      </div>
+    </div>
+    <div class="pane pane-right">
+      <div class="pane-tag"><span>30% dari 100% — Log Pencatat Error/Elemen/Kode/Baris</span><span>3 error</span></div>
+      <div class="log-line"><span class="tag">NET</span>failed to fetch asset: texture_02.png</div>
+      <div class="log-line err"><span class="tag">JS</span>main.js — baris 42 — elemen &lt;canvas id="game"&gt;</div>
+      <div class="log-line err"><span class="tag">PY3</span>server.py — baris 7 — ModuleNotFoundError: numpy</div>
+      <div class="log-line"><span class="tag">CSS</span>style.css — baris 118 — unknown property 'gap'</div>
+      <div class="log-line"><span class="tag">HTML</span>index.html — baris 118 — unclosed tag &lt;div&gt;</div>
+    </div>
+  </div>
+
+  <!-- Detail error -->
+  <div class="detail">
+    <div class="detail-label">Detail error yg terjadi</div>
+    <div class="detail-body">
+      <div class="line">TypeError: cannot read property 'x' of undefined</div>
+      <div class="line">&nbsp;&nbsp;at updatePlayer (main.js:42:18)</div>
+      <div class="line">&nbsp;&nbsp;at gameLoop (main.js:12:5)</div>
+    </div>
+    <div class="detail-footer">
+      <div class="filename"><span class="ico">📄</span>main.js</div>
+      <div class="abtn custom">Costum</div>
+      <div class="abtn ai">AI</div>
+    </div>
+  </div>
+
+  <div class="note">
+    Konsep: download game → ganti IP → hosting sendiri → modifikasi → tampilkan error log, dll.
+  </div>
+</div>
+</body>
+</html>
