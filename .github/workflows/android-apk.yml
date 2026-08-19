@@ -1,34 +1,57 @@
-
 name: Build Android APK
+
 on:
- workflow_dispatch:
- push:
-   branches: [main]
-   paths:
-     - 'android-app/**'
-     - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "android-app/**"
+      - ".github/workflows/android-apk.yml"
+
 permissions:
- contents: read
+  contents: read
+
 jobs:
- build-apk:
-   runs-on: ubuntu-latest
-   steps:
-     - uses: actions/checkout@v4
-     - uses: actions/setup-node@v4
-       with:
-         node-version: 20
-     - uses: pnpm/action-setup@v4
-       with:
-         version: 10
-     - run: pnpm install --no-frozen-lockfile
-     - name: Generate Android project
-       working-directory: android-app
-       run: pnpm exec expo prebuild --platform android --non-interactive --clean
-     - name: Build APK
-       working-directory: android-app
-       run: ./android/gradlew assembleRelease
-     - uses: actions/upload-artifact@v4
-       with:
-         name: ZipScope-android-release
-         path: android-app/android/app/build/outputs/apk/release/app-release.apk
-         if-no-files-found: error
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Android app dependencies
+        working-directory: android-app
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Generate Android project
+        working-directory: android-app
+        run: pnpm exec expo prebuild --platform android --non-interactive --clean
+
+      - name: Build release APK
+        working-directory: android-app/android
+        run: ./gradlew assembleRelease
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZipScope-android-release
+          path: android-app/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
