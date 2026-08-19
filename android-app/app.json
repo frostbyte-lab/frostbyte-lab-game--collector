@@ -14,9 +14,17 @@
       "backgroundColor": "#08111f"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.fblabb.zipscope"
     },
-    "android": {},
+    "android": {
+      "package": "com.fblabb.zipscope",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#08111f"
+      }
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
