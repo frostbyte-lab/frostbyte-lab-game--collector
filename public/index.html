@@ -4056,7 +4056,16 @@
         });
 
         // Bridge: kirim error/network dari iframe → parent (panel Detail Error)
+        // Preview memakai blob: URL. Normalisasi URL relatif sebelum XHR/fetch
+        // agar request seperti /shared/... tidak gagal dengan Invalid URL.
+        const previewBaseUrl = window.location.origin + '/';
         const bridge = `<script>(function(){
+  var GC_BASE_URL = ${JSON.stringify(previewBaseUrl)};
+  function gcAbsoluteUrl(input){
+    if (typeof input !== 'string' || !input) return input;
+    try { return new URL(input, GC_BASE_URL).toString(); }
+    catch (err) { send('err', 'Invalid runtime URL — ' + input); return input; }
+  }
   function send(type, msg, extra){
     try { parent.postMessage({ source:'gc-preview', type:type, msg:String(msg||''), extra:extra||null }, '*'); } catch(e){}
   }
@@ -4080,8 +4089,10 @@
   if (window.fetch) {
     var of = window.fetch;
     window.fetch = function(){
-      var args = arguments;
-      var url = (args[0] && args[0].url) || args[0];
+      var args = Array.prototype.slice.call(arguments);
+      var rawUrl = (args[0] && args[0].url) || args[0];
+      var url = gcAbsoluteUrl(rawUrl);
+      if (typeof args[0] === 'string') args[0] = url;
       return of.apply(this, args).then(function(res){
         if (!res.ok) send('err', 'NET fetch '+res.status+' '+res.statusText+' — '+url);
         return res;
@@ -4095,7 +4106,11 @@
     var XO = window.XMLHttpRequest;
     if (XO) {
       var open = XO.prototype.open, sendX = XO.prototype.send;
-      XO.prototype.open = function(m,u){ this.__gc_url = u; return open.apply(this, arguments); };
+      XO.prototype.open = function(m,u){
+        this.__gc_url = gcAbsoluteUrl(u);
+        var rest = Array.prototype.slice.call(arguments, 2);
+        return open.apply(this, [m, this.__gc_url].concat(rest));
+      };
       XO.prototype.send = function(){
         this.addEventListener('error', function(){ send('err', 'NET XHR error — '+ (this.__gc_url||'')); });
         this.addEventListener('load', function(){ if (this.status>=400) send('err', 'NET XHR '+this.status+' — '+(this.__gc_url||'')); });
