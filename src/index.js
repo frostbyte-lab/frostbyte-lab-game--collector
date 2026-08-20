@@ -34,6 +34,7 @@ import {
   getSession,
   deleteSession
 } from "./history/kv.js";
+import { parseLogText } from "./history/log-parser.js";
 import {
   hasProgressStore,
   setProgress,
@@ -416,6 +417,26 @@ export default {
       }
       const ok = await requestStop(env, id);
       return Response.json({ ok, id, message: ok ? "Stop diminta" : "Gagal set stop flag" });
+    }
+
+    // --- Import browser/collector log into server-side history ---
+    if (request.method === "POST" && url.pathname === "/api/history/import-log") {
+      let body = {};
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "INVALID_JSON" }, { status: 400 }); }
+      let raw = typeof body.raw === "string" ? body.raw : "";
+      const sourcePath = typeof body.path === "string" ? body.path.trim() : "";
+      if (!raw && sourcePath) {
+        const safePath = sourcePath.replace(/^\/+/, "").split("/").map(encodeURIComponent).join("/");
+        const file = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/contents/${safePath}?ref=${encodeURIComponent(String(body.ref || "main"))}`);
+        if (!file.ok || !file.data?.content) return Response.json({ ok: false, error: "GITHUB_LOG_NOT_FOUND", detail: file.data }, { status: file.status || 404 });
+        raw = atob(String(file.data.content).replace(/\s/g, ""));
+      }
+      if (!raw.trim()) return Response.json({ ok: false, error: "LOG_REQUIRED", message: "Kirim raw log atau path file log di GitHub." }, { status: 400 });
+      const parsed = parseLogText(raw);
+      const entry = { id: crypto.randomUUID(), url: parsed.page || "", status: parsed.errors.length ? "error_imported" : "log_imported", files: 0, message: "Log diimpor" + (sourcePath ? " dari " + sourcePath : "") + (parsed.errorCode ? " — " + parsed.errorCode : ""), source: sourcePath ? "github" : "file", kind: "runtime-error-log", errorCode: parsed.errorCode, ip: parsed.ip, userAgent: parsed.userAgent, details: parsed.errors, time: parsed.time };
+      const saved = await putHistory(env, entry);
+      if (!saved.ok && saved.reason === "no-kv") return Response.json({ ok: false, error: "NO_KV", message: "KV GC_HISTORY belum di-bind." }, { status: 503 });
+      return Response.json({ ok: true, saved, entry, parsed: { ip: parsed.ip, page: parsed.page, errorCode: parsed.errorCode, time: parsed.time, userAgent: parsed.userAgent, errors: parsed.errors } });
     }
 
     // --- History (KV) ---
