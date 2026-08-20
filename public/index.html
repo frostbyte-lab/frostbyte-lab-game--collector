@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#1e40af">
+  <meta name="theme-color" content="#0e1116">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="/manifest.json">
@@ -22,28 +22,32 @@
   
   <style>
     :root {
-      --primary: #1e40af;
-      --primary-light: #3b82f6;
-      --primary-dark: #1e3a8a;
-      --secondary: #0f766e;
-      --success: #16a34a;
-      --warning: #d97706;
-      --danger: #dc2626;
-      --bg: #0f172a;
-      --bg-secondary: #1e293b;
-      --surface: #1e293b;
-      --surface-alt: #334155;
-      --border: #475569;
-      --border-light: #64748b;
-      --text: #f1f5f9;
-      --text-secondary: #cbd5e1;
-      --text-muted: #94a3b8;
-      --accent: #06b6d4;
-      --radius: 12px;
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-      --shadow-md: 0 4px 12px 0 rgba(0, 0, 0, 0.4);
-      --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      /* Palette wireframe v20 — Preview & Error Panel */
+      --primary: #2e5c52;
+      --primary-light: #5ee1c0;
+      --primary-dark: #1a3d36;
+      --secondary: #151a21;
+      --success: #5ee1c0;
+      --warning: #ff6b5e;
+      --danger: #ff6b5e;
+      --bg: #0e1116;
+      --bg-secondary: #11151b;
+      --surface: #151a21;
+      --surface-alt: #11151b;
+      --border: #2a323d;
+      --border-light: #3a4552;
+      --text: #e6e9ee;
+      --text-secondary: #b0b8c4;
+      --text-muted: #8b96a5;
+      --accent: #5ee1c0;
+      --accent-dim: #2e5c52;
+      --warn: #ff6b5e;
+      --radius: 10px;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 4px 14px 0 rgba(0, 0, 0, 0.45);
+      --shadow-lg: 0 16px 28px -6px rgba(0, 0, 0, 0.55);
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      --mono: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
     }
 
     * {
@@ -70,8 +74,8 @@
 
     /* ===== HEADER ===== */
     header {
-      background: linear-gradient(135deg, var(--primary) 0%, #1e3a8a 50%, var(--secondary) 100%);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: linear-gradient(135deg, #0e1116 0%, #151a21 45%, #1a3d36 100%);
+      border-bottom: 1px solid var(--border);
       padding: 12px 20px;
       display: flex;
       align-items: center;
@@ -194,9 +198,10 @@
     }
 
     .nav-btn.active {
-      background: rgba(255, 255, 255, 0.28);
-      border-color: rgba(255, 255, 255, 0.45);
-      box-shadow: 0 0 16px rgba(96, 165, 250, 0.35);
+      background: rgba(94, 225, 192, 0.16);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 16px rgba(94, 225, 192, 0.25);
     }
 
     /* Breadcrumb di header sering numpuk dengan nav di HP → sembunyikan di layar sempit */
@@ -286,8 +291,9 @@
 
     .btn-primary {
       background: linear-gradient(135deg, var(--primary-light), var(--primary-dark));
-      color: #fff;
+      color: #0e1116;
       box-shadow: var(--shadow-sm);
+      font-weight: 700;
     }
 
     .btn-primary:hover {
@@ -296,23 +302,26 @@
     }
 
     .btn-secondary {
-      background: var(--surface-alt);
-      color: var(--text);
-      border: 1px solid var(--border-light);
+      background: var(--surface);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
     }
 
     .btn-secondary:hover {
-      background: var(--border);
-      border-color: var(--text-secondary);
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(94, 225, 192, 0.06);
     }
 
     .btn-success {
-      background: var(--success);
-      color: #fff;
+      background: rgba(94, 225, 192, 0.12);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      font-weight: 700;
     }
 
     .btn-success:hover {
-      opacity: 0.9;
+      background: rgba(94, 225, 192, 0.2);
     }
 
     .btn-sm {
@@ -343,8 +352,8 @@
       flex: 0 0 260px;
       width: 260px;
       max-width: 260px;
-      background: #252526;
-      border-right: 1px solid #1e1e1e;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -404,8 +413,8 @@
     }
     .workspace-header {
       padding: 10px 14px !important;
-      background: #252526 !important;
-      border-bottom: 1px solid #1e1e1e !important;
+      background: var(--surface) !important;
+      border-bottom: 1px solid var(--border) !important;
     }
     .file-tree {
       flex: 1 1 0;
@@ -423,7 +432,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: #1e1e1e;
+      background: var(--bg);
       position: relative;
       z-index: 1;
     }
@@ -672,6 +681,289 @@
         flex-basis: 100%;
       }
     }
+
+    /* ===== Preview wireframe v20 ===== */
+    .pv-eyebrow {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 3px;
+      flex-shrink: 0;
+    }
+    .pv-title-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-shrink: 0;
+      margin-bottom: 6px;
+    }
+    .pv-h1 {
+      font-size: 17px;
+      margin: 0;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--text);
+    }
+    .pv-hidden-title { display: none; }
+    .pv-toolbar {
+      background: transparent !important;
+      border-bottom: none !important;
+      padding: 0 0 8px !important;
+      gap: 5px !important;
+    }
+    .pv-tbtn {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 7px 8px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      flex: 1 1 0;
+      min-width: 0;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .pv-tbtn .pv-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .pv-tbtn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(94, 225, 192, 0.08);
+    }
+    .pv-tbtn.active .pv-dot { background: var(--accent); }
+    .pv-tbtn.warn { border-color: rgba(255, 107, 94, 0.45); }
+    .pv-tbtn.warn .pv-dot { background: var(--warn); }
+    .pv-tbtn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .pv-size {
+      flex: 0 0 auto !important;
+    }
+    .pv-main-split {
+      border: 1px solid var(--border);
+      border-radius: 10px 10px 0 0;
+      overflow: hidden;
+      flex: 0 1 58% !important;
+      min-height: 0;
+      display: grid !important;
+      grid-template-columns: minmax(0, 56fr) minmax(0, 30fr);
+    }
+    .pv-pane-left {
+      background: var(--surface) !important;
+      border-right: 1px solid var(--border) !important;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      padding: 10px 12px;
+    }
+    .pv-pane-right {
+      background: var(--bg-secondary) !important;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      padding: 10px 12px;
+      flex: unset !important;
+      width: auto !important;
+      max-width: none !important;
+    }
+    .pane-tag {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 7px;
+      display: flex;
+      justify-content: space-between;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .pv-file-running {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      padding: 4px 0 6px;
+      border-bottom: 1px solid var(--line-soft, var(--border));
+      margin-bottom: 4px;
+    }
+    .pv-pane-right .preview-log {
+      padding: 4px 0 !important;
+      background: transparent;
+      font-size: 9.5px;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .pv-detail {
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      background: var(--bg-secondary);
+      padding: 9px 12px 48px;
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .pv-detail-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .pv-detail-body {
+      min-height: 52px;
+      max-height: 28vh;
+      overflow: auto;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 7px 9px;
+      font-family: var(--mono);
+      font-size: 9.5px;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .pv-detail-footer {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 9px;
+    }
+    .pv-filename {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 6px 9px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .pv-filename .ico { color: var(--accent); }
+    .pv-abtn {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      padding: 6px 12px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .pv-abtn.custom { color: var(--text); }
+    .pv-abtn.ai {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(94, 225, 192, 0.08);
+      font-weight: 600;
+    }
+    .pv-abtn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .pv-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 16px;
+    }
+    .pv-modal-overlay.open { display: flex; }
+    .pv-modal-box {
+      width: 100%;
+      max-width: 420px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .pv-modal-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .pv-modal-close {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .pv-modal-textarea {
+      width: 100%;
+      min-height: 110px;
+      resize: vertical;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12.5px;
+      outline: none;
+    }
+    .pv-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 7px;
+    }
+    .pv-modal-send {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 7px 16px;
+      border-radius: 7px;
+      border: 1px solid var(--accent);
+      background: rgba(94, 225, 192, 0.08);
+      color: var(--accent);
+      cursor: pointer;
+    }
+    @media (max-width: 700px) {
+      .pv-main-split {
+        grid-template-columns: 1fr !important;
+        flex: 0 1 55% !important;
+      }
+      .pv-pane-left { border-right: 0 !important; border-bottom: 1px solid var(--border); min-height: 220px; }
+      .pv-tbtn { font-size: 8px; padding: 6px 3px; }
+      .pv-h1 { font-size: 15px; }
+    }
+
     .preview-content {
       flex: 1 1 0;
       min-height: 0;
@@ -1823,42 +2115,88 @@
         </div>
       </div>
 
-      <!-- Full Preview Mode (web or sandbox, with responsive viewport) -->
-      <div id="preview-mode" style="display:none; flex-direction:column; flex:1; overflow:hidden; background:var(--bg);">
-        <div class="preview-toolbar">
-          <button class="btn btn-secondary btn-sm" onclick="exitPreviewMode()">← Kembali</button>
-          <div class="preview-toolbar-title">
-            <svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-eye"></use></svg>
-            <strong id="preview-title">Preview Game / ZIP</strong>
-          </div>
-          <div class="preview-mode-switch" role="group" aria-label="Preview mode">
-            <button type="button" id="preview-mode-web" onclick="switchPreviewMode('web')">Web View</button>
-            <button type="button" id="preview-mode-sandbox" onclick="switchPreviewMode('sandbox')">Sandbox</button>
-          </div>
-          <div class="preview-size-switch" role="group" aria-label="Preview viewport size">
+      <!-- Full Preview Mode — wireframe v20 (Preview & Error Panel) -->
+      <div id="preview-mode" style="display:none; flex-direction:column; flex:1; overflow:hidden; background:var(--bg); padding:8px;">
+        <div class="pv-eyebrow">Wireframe · Mode Workspace · v20</div>
+        <div class="pv-title-row">
+          <h2 class="pv-h1">Preview &amp; Error Panel</h2>
+          <strong id="preview-title" class="pv-hidden-title">Preview Game / ZIP</strong>
+        </div>
+
+        <div class="preview-toolbar pv-toolbar">
+          <button type="button" class="pv-tbtn" onclick="exitPreviewMode()" title="Kembali ke editor">
+            <span class="pv-dot"></span> ← Edit Kode
+          </button>
+          <button type="button" class="pv-tbtn active" id="preview-mode-web" onclick="switchPreviewMode('web')">
+            <span class="pv-dot"></span> Web View
+          </button>
+          <button type="button" class="pv-tbtn" id="preview-mode-sandbox" onclick="switchPreviewMode('sandbox')">
+            <span class="pv-dot"></span> Sandbox
+          </button>
+          <button type="button" class="pv-tbtn warn" onclick="runAnalysis()">
+            <span class="pv-dot"></span> Scan Error
+          </button>
+          <button type="button" class="pv-tbtn" onclick="reloadPreview()">
+            <span class="pv-dot"></span> Reload
+          </button>
+          <div class="preview-size-switch pv-size" role="group" aria-label="Preview viewport size">
             <button type="button" class="active" data-preview-size="desktop" onclick="setPreviewViewport('desktop')">Desktop</button>
             <button type="button" data-preview-size="tablet" onclick="setPreviewViewport('tablet')">Tablet</button>
             <button type="button" data-preview-size="mobile" onclick="setPreviewViewport('mobile')">Mobile</button>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="reloadPreview()">Reload</button>
-          <button class="btn btn-secondary btn-sm" onclick="runAnalysis()">Scan Error</button>
         </div>
-        <div class="preview-workspace">
-          <div class="preview-stage-column">
-            <div class="preview-stage-label"><span id="preview-stage-label">Web Preview</span><span id="preview-viewport-label">· Desktop</span></div>
+
+        <div class="preview-workspace pv-main-split">
+          <div class="preview-stage-column pv-pane-left">
+            <div class="pane-tag">
+              <span id="preview-stage-label">Game Preview</span>
+              <span id="preview-viewport-label">live</span>
+            </div>
             <div class="preview-stage">
               <div class="preview-frame-wrap" id="preview-frame-wrap">
                 <iframe id="preview-frame" class="preview-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
               </div>
             </div>
           </div>
-          <div class="preview-log-column">
-            <div class="preview-log-header">
-              <span>Diagnostics · Network + Source</span>
-              <button class="btn btn-secondary btn-sm" onclick="copyErrorLog()" style="padding:2px 8px; font-size:11px;">Copy Error</button>
+
+          <div class="preview-log-column pv-pane-right">
+            <div class="pane-tag">
+              <span>Log Error · Elemen · Kode · Baris</span>
+              <span id="pv-error-count">0 error</span>
             </div>
-            <div id="preview-file-running" style="padding:8px 12px; font-size:12px; border-bottom:1px solid var(--border); color:var(--text-secondary);">File: —</div>
+            <div id="preview-file-running" class="pv-file-running">File: —</div>
             <pre id="error-log" class="preview-log"></pre>
+          </div>
+        </div>
+
+        <div class="pv-detail">
+          <div class="pv-detail-label">Detail error yang terjadi</div>
+          <div class="pv-detail-body" id="preview-error-detail">
+            Belum ada error. Jalankan file lalu Scan Error untuk melihat diagnostik.
+          </div>
+          <div class="pv-detail-footer">
+            <div class="pv-filename" id="pv-filename">
+              <span class="ico">📄</span>
+              <span id="pv-filename-text">—</span>
+            </div>
+            <button type="button" class="pv-abtn" id="btn-pv-copy" onclick="copyErrorLog()">Copy</button>
+            <button type="button" class="pv-abtn custom" id="btn-pv-custom" onclick="openPreviewModal('Costum')">Costum</button>
+            <button type="button" class="pv-abtn ai" id="btn-pv-ai" onclick="openPreviewModal('AI')">AI</button>
+          </div>
+        </div>
+
+        <!-- Modal AI / Costum -->
+        <div class="pv-modal-overlay" id="pv-modal-overlay">
+          <div class="pv-modal-box">
+            <div class="pv-modal-title">
+              <span id="pv-modal-title">AI</span>
+              <span class="pv-modal-close" id="pv-modal-close" onclick="closePreviewModal()">✕</span>
+            </div>
+            <textarea class="pv-modal-textarea" id="pv-modal-textarea" placeholder="Tulis instruksi: deteksi error, perbaiki kode, rename file, sambungkan API/domain..."></textarea>
+            <div class="pv-modal-footer">
+              <button type="button" class="pv-abtn" onclick="closePreviewModal()">Batal</button>
+              <button type="button" class="pv-modal-send" id="pv-modal-send" onclick="sendPreviewModal()">Kirim</button>
+            </div>
           </div>
         </div>
       </div>
@@ -2126,7 +2464,7 @@
             { token: 'strong', fontStyle: 'bold' }
           ],
           colors: {
-            'editor.background': '#1e1e1e',
+            'editor.background': '#0e1116',
             'editor.foreground': '#d4d4d4',
             'editorLineNumber.foreground': '#858585',
             'editorLineNumber.activeForeground': '#c6c6c6',
@@ -3217,15 +3555,76 @@
     }
 
     function copyErrorLog() {
+      const detail = document.getElementById('preview-error-detail');
       const el = document.getElementById('error-log');
-      if (!el) return;
-      const text = el.innerText || el.textContent || '';
+      const text = (detail && detail.innerText.trim()) || (el && (el.innerText || el.textContent)) || '';
+      if (!text) return;
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => appendLog('Error log di-copy.', 'ok'));
+        navigator.clipboard.writeText(text).then(() => {
+          appendLog('Error log di-copy.', 'ok');
+          const btn = document.getElementById('btn-pv-copy');
+          if (btn) {
+            const o = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = o; }, 1200);
+          }
+        });
       } else {
         alert(text.slice(0, 1500));
       }
     }
+
+    function openPreviewModal(label) {
+      const overlay = document.getElementById('pv-modal-overlay');
+      const title = document.getElementById('pv-modal-title');
+      const ta = document.getElementById('pv-modal-textarea');
+      if (title) title.textContent = label || 'AI';
+      if (ta) {
+        ta.value = '';
+        const detail = document.getElementById('preview-error-detail');
+        if (detail && detail.innerText.trim() && label === 'AI') {
+          ta.placeholder = 'AI akan menganalisis error di panel. Tambahkan instruksi tambahan di sini...';
+        }
+      }
+      if (overlay) overlay.classList.add('open');
+      if (ta) setTimeout(() => ta.focus(), 50);
+    }
+
+    function closePreviewModal() {
+      const overlay = document.getElementById('pv-modal-overlay');
+      if (overlay) overlay.classList.remove('open');
+    }
+
+    function sendPreviewModal() {
+      const titleEl = document.getElementById('pv-modal-title');
+      const ta = document.getElementById('pv-modal-textarea');
+      const label = (titleEl && titleEl.textContent) || 'AI';
+      const text = (ta && ta.value.trim()) || '';
+      const detail = document.getElementById('preview-error-detail');
+      const context = detail ? detail.innerText.trim() : '';
+      closePreviewModal();
+      if (label === 'AI' || label === 'Costum') {
+        // Reuse existing AI panel flow when possible
+        const promptEl = document.getElementById('ai-prompt');
+        if (promptEl) {
+          promptEl.value = [text, context ? '\n\n--- Error context ---\n' + context : ''].filter(Boolean).join('');
+        }
+        const aiPanel = document.getElementById('ai-panel');
+        if (aiPanel) aiPanel.classList.remove('hidden');
+        if (typeof askAI === 'function' && (text || context)) {
+          try { askAI(); } catch (_) {}
+        } else if (text) {
+          appendLog(label + ': ' + text, 'ok');
+        }
+      } else if (text) {
+        appendLog(label + ': ' + text, 'ok');
+      }
+    }
+
+    document.addEventListener('click', function (e) {
+      const overlay = document.getElementById('pv-modal-overlay');
+      if (overlay && e.target === overlay) closePreviewModal();
+    });
 
     function exitPreviewMode() {
       releasePreviewAssets();
