@@ -1816,7 +1816,9 @@
         </div>
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditorFullscreen()" title="Editor layar penuh">Editor Fullscreen</button>
+          <button class="btn btn-primary btn-sm" id="btn-save" onclick="saveFile()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-save"></use></svg> Save</button>
+          <button class="btn btn-secondary btn-sm" onclick="formatCode()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-edit"></use></svg> Edit</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleAIPanel()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-terminal"></use></svg> AI</button>
           <button type="button" class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -1897,19 +1899,13 @@
           <!-- Tabs -->
           <div class="editor-tabs" id="editor-tabs"></div>
 
-          <!-- Toolbar -->
+          <!-- Toolbar (info only — action buttons moved to workspace-header) -->
           <div class="editor-toolbar">
             <div class="editor-toolbar-content" id="editor-toolbar-content">
               <div class="editor-info">
                 <span><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-file-text"></use></svg> <span id="editor-lang">No file</span></span>
                 <span>Ln <span id="editor-line">1</span>, Col <span id="editor-col">1</span></span>
                 <span id="editor-size">—</span>
-              </div>
-              <div class="editor-actions">
-                <button class="btn btn-primary btn-sm" id="btn-save" onclick="saveFile()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-save"></use></svg> Save</button>
-                <button class="btn btn-secondary btn-sm" onclick="formatCode()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-edit"></use></svg> Edit</button>
-                <button class="btn btn-danger btn-sm" id="btn-delete-file" onclick="deleteCurrentFile()" disabled title="Delete file permanently"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-trash"></use></svg> Delete</button>
-                <button class="btn btn-secondary btn-sm" onclick="toggleAIPanel()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-terminal"></use></svg> AI</button>
               </div>
             </div>
           </div>
