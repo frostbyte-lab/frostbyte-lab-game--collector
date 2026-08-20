@@ -45,7 +45,13 @@ export async function putHistory(env, entry) {
     message: entry.message || null,
     elapsed: entry.elapsed ?? null,
     stillMissing: entry.stillMissing || null,
-    overallScore: entry.overallScore ?? null
+    overallScore: entry.overallScore ?? null,
+    source: entry.source || null,
+    kind: entry.kind || null,
+    errorCode: entry.errorCode || null,
+    ip: entry.ip || null,
+    userAgent: entry.userAgent || null,
+    details: Array.isArray(entry.details) ? entry.details.slice(0, 50) : null
   };
   await env.GC_HISTORY.put(HISTORY_PREFIX + id, JSON.stringify(row));
   let idx = (await env.GC_HISTORY.get(INDEX_KEY, "json")) || [];
