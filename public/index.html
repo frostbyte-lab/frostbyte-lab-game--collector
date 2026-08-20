@@ -4434,14 +4434,13 @@
                   return;
                 }
                 const blob = await zipRes.blob();
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = 'game-resources.zip';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(a.href);
-                statusEl.textContent = 'Status: Selesai — ZIP diunduh (tetap di web ini)';
+                  const zipInput = document.getElementById('zip-input');
+                  if (!zipInput) throw new Error('Input ZIP tidak ditemukan');
+                  const transfer = new DataTransfer();
+                  transfer.items.add(new File([blob], 'game-resources.zip', { type: 'application/zip' }));
+                  zipInput.files = transfer.files;
+                  zipInput.dispatchEvent(new Event('change', { bubbles: true }));
+                  statusEl.textContent = 'Status: Selesai — ZIP otomatis dimuat ke Workspace untuk edit & preview';
               } catch (dlErr) {
                 statusEl.textContent = 'Status: Selesai tapi unduh gagal — ' + dlErr.message;
               }
