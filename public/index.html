@@ -4058,13 +4058,24 @@
         // Bridge: kirim error/network dari iframe → parent (panel Detail Error)
         // Preview memakai blob: URL. Normalisasi URL relatif sebelum XHR/fetch
         // agar request seperti /shared/... tidak gagal dengan Invalid URL.
+        // Map dynamic runtime requests (fetch/XHR) to files loaded from the ZIP.
+        const previewAssetMap = Object.fromEntries(Object.entries(blobUrls).map(([p, url]) => [p.replace(/^\/+/, ''), url]));
+        const previewAssetNames = {};
+        Object.keys(previewAssetMap).forEach((p) => { previewAssetNames[p.split('/').pop()] = previewAssetMap[p]; });
         const previewBaseUrl = window.location.origin + '/';
         const bridge = `<script>(function(){
   var GC_BASE_URL = ${JSON.stringify(previewBaseUrl)};
+  var GC_ASSET_MAP = ${JSON.stringify(previewAssetMap)};
+  var GC_ASSET_NAMES = ${JSON.stringify(previewAssetNames)};
   function gcAbsoluteUrl(input){
     if (typeof input !== 'string' || !input) return input;
-    try { return new URL(input, GC_BASE_URL).toString(); }
-    catch (err) { send('err', 'Invalid runtime URL — ' + input); return input; }
+    try {
+      var resolved = new URL(input, GC_BASE_URL);
+      var assetPath = decodeURIComponent(resolved.pathname || '').replace(/^\/+/, '');
+      var hit = GC_ASSET_MAP[assetPath] || GC_ASSET_NAMES[assetPath.split('/').pop()];
+      if (hit) return hit + (resolved.search || '');
+      return resolved.toString();
+    } catch (err) { send('err', 'Invalid runtime URL — ' + input); return input; }
   }
   function send(type, msg, extra){
     try { parent.postMessage({ source:'gc-preview', type:type, msg:String(msg||''), extra:extra||null }, '*'); } catch(e){}
