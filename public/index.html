@@ -838,11 +838,17 @@
       border-top: none;
       border-radius: 0 0 10px 10px;
       background: var(--bg-secondary);
-      padding: 9px 12px 48px;
-      flex: 1;
+      padding: 9px 12px 52px;
+      flex: 1 1 auto;
       min-height: 0;
+      width: 100%;
+      max-width: 100%;
+      align-self: stretch;
+      box-sizing: border-box;
       position: relative;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
     .pv-detail-label {
       font-family: var(--mono);
@@ -851,19 +857,56 @@
       text-transform: uppercase;
       color: var(--text-muted);
       margin-bottom: 6px;
+      flex-shrink: 0;
+      width: max-content; /* ukuran kolom label = lebar teks */
+      max-width: 100%;
     }
     .pv-detail-body {
-      min-height: 52px;
-      max-height: 28vh;
+      width: 100%;
+      max-width: 100%;
+      align-self: stretch;
+      box-sizing: border-box;
+      flex: 1 1 auto;
+      min-height: 3.2em;
+      height: auto;
+      max-height: 34vh;
       overflow: auto;
       border: 1px dashed var(--border);
       border-radius: 8px;
-      padding: 7px 9px;
+      padding: 10px 12px;
       font-family: var(--mono);
-      font-size: 9.5px;
+      font-size: 10px;
+      line-height: 1.55;
       color: var(--text-muted);
       white-space: pre-wrap;
       word-break: break-word;
+      overflow-wrap: anywhere;
+      display: block;
+    }
+    .pv-detail-body.is-loading {
+      color: var(--accent);
+      border-style: solid;
+      border-color: rgba(94, 225, 192, 0.4);
+      background: rgba(94, 225, 192, 0.05);
+      min-height: 3.2em;
+    }
+    .pv-detail-body .pv-detail-text {
+      display: inline;
+    }
+    .pv-dots-anim {
+      display: inline-block;
+      min-width: 1.6em;
+      letter-spacing: 0.12em;
+      font-weight: 700;
+      color: var(--accent);
+      vertical-align: baseline;
+    }
+    @keyframes pv-pulse-border {
+      0%, 100% { border-color: rgba(94, 225, 192, 0.25); }
+      50% { border-color: rgba(94, 225, 192, 0.65); }
+    }
+    .pv-detail-body.is-loading {
+      animation: pv-pulse-border 1.6s ease-in-out infinite;
     }
     .pv-detail-footer {
       display: flex;
@@ -2194,8 +2237,8 @@
 
         <div class="pv-detail">
           <div class="pv-detail-label">Detail error yg terjadi</div>
-          <div class="pv-detail-body" id="preview-error-detail">
-            Belum ada error. Jalankan file lalu Scan Error untuk melihat diagnostik.
+          <div class="pv-detail-body is-loading" id="preview-error-detail" data-state="loading">
+            <span class="pv-detail-text">Belum ada error — menunggu diagnostik </span><span class="pv-dots-anim" id="pv-dots">.</span>
           </div>
           <div class="pv-detail-footer">
             <div class="pv-filename" id="pv-filename">
@@ -3123,7 +3166,11 @@
       }
       closeSidePanels();
     }
-    document.addEventListener('DOMContentLoaded', collapsePanelsOnMobile);
+    document.addEventListener('DOMContentLoaded', function () {
+      collapsePanelsOnMobile();
+      // Animasi titik di panel detail (idle / menunggu)
+      try { startDetailLoadingDots('Belum ada error — menunggu diagnostik'); } catch (_) {}
+    });
     window.addEventListener('resize', function() {
       collapsePanelsOnMobile();
       layoutEditor();
@@ -3533,11 +3580,13 @@
     }
 
     function runAnalysis() {
+      startDetailLoadingDots('Scan Error berjalan');
       const issues = analyzeCurrentCode();
       const box = document.getElementById('error-log') || document.getElementById('file-info');
       const detail = document.getElementById('preview-error-detail');
       if (!currentZip && !currentFile) {
         appendLog('Belum ada file. Klik Load File dulu (ZIP dari HP/komputer).', 'warn');
+        startDetailLoadingDots('Belum ada error — load file dulu');
         alert('Load File dulu (ZIP atau file), baru Analysis.');
         return;
       }
@@ -3545,7 +3594,7 @@
       const runtime = (window.__pvLastErrors || []).slice(-20);
       if (issues.length === 0 && runtime.length === 0) {
         appendLog('Analysis: tidak ada issue jelas di file aktif / runtime.', 'ok');
-        if (detail) detail.textContent = '✓ Tidak ada error jelas pada file aktif atau runtime preview.';
+        if (detail) setDetailErrorContent('✓ Tidak ada error jelas pada file aktif atau runtime preview.', 'ok');
         if (box && box.id === 'error-log') {
           const div = document.createElement('div');
           div.style.color = '#4ade80';
@@ -3602,6 +3651,45 @@
       return m ? m[0] : (document.getElementById('preview-file-running')?.textContent || '').replace(/^File:\s*/i, '') || '—';
     }
 
+    function stopDetailLoadingDots() {
+      if (window.__pvDotsTimer) {
+        clearInterval(window.__pvDotsTimer);
+        window.__pvDotsTimer = null;
+      }
+    }
+
+    function startDetailLoadingDots(baseText) {
+      const detail = document.getElementById('preview-error-detail');
+      if (!detail) return;
+      stopDetailLoadingDots();
+      detail.classList.add('is-loading');
+      detail.dataset.state = 'loading';
+      detail.style.color = '';
+      const base = baseText || 'Belum ada error — menunggu diagnostik';
+      let n = 1;
+      // Titik bertambah: . → .. → ... → .... → ulang
+      detail.innerHTML = '<span class="pv-detail-text"></span><span class="pv-dots-anim" id="pv-dots">.</span>';
+      const textEl = detail.querySelector('.pv-detail-text');
+      const dotsEl = detail.querySelector('#pv-dots');
+      if (textEl) textEl.textContent = base + ' ';
+      window.__pvDotsTimer = setInterval(function () {
+        n = (n % 4) + 1;
+        if (dotsEl) dotsEl.textContent = '.'.repeat(n);
+      }, 380);
+    }
+
+    function setDetailErrorContent(text, level) {
+      const detail = document.getElementById('preview-error-detail');
+      if (!detail) return;
+      stopDetailLoadingDots();
+      detail.classList.remove('is-loading');
+      detail.dataset.state = level === 'err' || level === 'warn' ? 'error' : 'idle';
+      detail.textContent = text;
+      if (level === 'err') detail.style.color = 'var(--warn)';
+      else if (level === 'warn') detail.style.color = '#fbbf24';
+      else detail.style.color = '';
+    }
+
     function updatePreviewErrorDetail(msg, level) {
       const detail = document.getElementById('preview-error-detail');
       const countEl = document.getElementById('pv-error-count');
@@ -3626,10 +3714,12 @@
       // Detail panel: tampilkan error/warn terbaru (bukan status ok)
       if (level === 'err' || level === 'warn') {
         const stackish = entry.text;
-        detail.textContent =
+        setDetailErrorContent(
           '[' + entry.kind + '] ' + entry.time + '\n' +
           stackish +
-          (file && file !== '—' ? '\n\nFile: ' + file : '');
+          (file && file !== '—' ? '\n\nFile: ' + file : ''),
+          level
+        );
         detail.dataset.level = level;
       }
     }
@@ -3979,13 +4069,12 @@
         else if (/<html[\s>]/i.test(html)) html = html.replace(/<html([^>]*)>/i, '<html$1><head>' + bridge + '</head>');
         else html = bridge + html;
 
-        // Reset counter detail error tiap Run baru
+        // Reset counter detail error tiap Run baru + animasi loading titik
         window.__pvErrorCount = 0;
         window.__pvLastErrors = [];
         const countEl0 = document.getElementById('pv-error-count');
         if (countEl0) countEl0.textContent = '0 error';
-        const detail0 = document.getElementById('preview-error-detail');
-        if (detail0) detail0.textContent = 'Menunggu error runtime / network dari preview…';
+        startDetailLoadingDots('Memantau runtime / network');
         const fileEl0 = document.getElementById('pv-filename-text');
         if (fileEl0) fileEl0.textContent = entryPath || '—';
 
