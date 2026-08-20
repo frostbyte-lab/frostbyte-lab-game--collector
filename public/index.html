@@ -3535,25 +3535,48 @@
     function runAnalysis() {
       const issues = analyzeCurrentCode();
       const box = document.getElementById('error-log') || document.getElementById('file-info');
-      let html = '';
+      const detail = document.getElementById('preview-error-detail');
       if (!currentZip && !currentFile) {
         appendLog('Belum ada file. Klik Load File dulu (ZIP dari HP/komputer).', 'warn');
         alert('Load File dulu (ZIP atau file), baru Analysis.');
         return;
       }
-      if (issues.length === 0) {
-        appendLog('Analysis: tidak ada issue jelas di file aktif.', 'ok');
-        if (box && box.id === 'error-log') box.innerHTML = '<span style="color:#4ade80">✓ Tidak ada error jelas pada file aktif.</span>';
-        else if (document.getElementById('file-info')) document.getElementById('file-info').textContent = 'Analysis OK — no clear issues';
-      } else {
-        appendLog('Analysis: ' + issues.length + ' issue ditemukan', 'err');
-        issues.forEach(i => appendLog(i, 'err'));
+      // Gabungkan error runtime yang sudah tertangkap
+      const runtime = (window.__pvLastErrors || []).slice(-20);
+      if (issues.length === 0 && runtime.length === 0) {
+        appendLog('Analysis: tidak ada issue jelas di file aktif / runtime.', 'ok');
+        if (detail) detail.textContent = '✓ Tidak ada error jelas pada file aktif atau runtime preview.';
         if (box && box.id === 'error-log') {
-          box.innerHTML = issues.map(i => '<div style="color:#f87171; margin-bottom:6px;">✗ ' + escapeHtml(i) + '</div>').join('') +
-            '<div style="margin-top:10px;color:var(--text-muted)">Saran: Auto Repair / perbaiki path absolut / cek kurung kurawal.</div>';
+          const div = document.createElement('div');
+          div.style.color = '#4ade80';
+          div.textContent = '✓ Tidak ada error jelas pada file aktif.';
+          box.appendChild(div);
+        } else if (document.getElementById('file-info')) {
+          document.getElementById('file-info').textContent = 'Analysis OK — no clear issues';
         }
+      } else {
+        if (issues.length) {
+          appendLog('Analysis: ' + issues.length + ' issue sumber ditemukan', 'err');
+          issues.forEach(i => appendLog(String(i), 'err'));
+        }
+        if (runtime.length) {
+          appendLog('Runtime/network tertangkap: ' + runtime.length, 'warn');
+        }
+        if (detail) {
+          const lines = [];
+          if (issues.length) {
+            lines.push('— Scan sumber —');
+            issues.forEach(i => lines.push('✗ ' + i));
+          }
+          if (runtime.length) {
+            lines.push('— Runtime / Network —');
+            runtime.forEach(r => lines.push('[' + r.kind + '] ' + r.text + (r.file ? ' · ' + r.file : '')));
+          }
+          detail.textContent = lines.join('\n');
+        }
+        const countEl = document.getElementById('pv-error-count');
+        if (countEl) countEl.textContent = (window.__pvErrorCount || issues.length) + ' error';
       }
-      // Show analysis side panel
       const panel = document.getElementById('preview-panel');
       if (panel) panel.classList.remove('collapsed');
     }
@@ -3562,18 +3585,77 @@
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
+    window.__pvErrorCount = window.__pvErrorCount || 0;
+    window.__pvLastErrors = window.__pvLastErrors || [];
+
+    function classifyLogKind(msg) {
+      const u = String(msg || '').toLowerCase();
+      if (/fetch|network|404|net::|failed to load|cors|timeout|jaringan|request error|n1000|err_/.test(u)) return 'NET';
+      if (/\.css|stylesheet|unknown property/.test(u)) return 'CSS';
+      if (/\.html|unclosed|tag </.test(u)) return 'HTML';
+      if (/python|numpy|module not found|\.py\b/.test(u)) return 'PY3';
+      return 'JS';
+    }
+
+    function extractLogFile(msg) {
+      const m = String(msg || '').match(/[A-Za-z0-9_./-]+\.(html?|css|m?js|json|png|jpe?g|webp|svg|py3?|wasm)/i);
+      return m ? m[0] : (document.getElementById('preview-file-running')?.textContent || '').replace(/^File:\s*/i, '') || '—';
+    }
+
+    function updatePreviewErrorDetail(msg, level) {
+      const detail = document.getElementById('preview-error-detail');
+      const countEl = document.getElementById('pv-error-count');
+      const fileEl = document.getElementById('pv-filename-text');
+      const kind = classifyLogKind(msg);
+      const file = extractLogFile(msg);
+      const entry = {
+        kind,
+        file,
+        level: level || 'err',
+        time: new Date().toLocaleTimeString(),
+        text: String(msg || '')
+      };
+      if (level === 'err' || level === 'warn') {
+        window.__pvLastErrors.push(entry);
+        if (window.__pvLastErrors.length > 80) window.__pvLastErrors.shift();
+        if (level === 'err') window.__pvErrorCount++;
+      }
+      if (countEl) countEl.textContent = window.__pvErrorCount + ' error';
+      if (fileEl && file && file !== '—') fileEl.textContent = file;
+      if (!detail) return;
+      // Detail panel: tampilkan error/warn terbaru (bukan status ok)
+      if (level === 'err' || level === 'warn') {
+        const stackish = entry.text;
+        detail.textContent =
+          '[' + entry.kind + '] ' + entry.time + '\n' +
+          stackish +
+          (file && file !== '—' ? '\n\nFile: ' + file : '');
+        detail.dataset.level = level;
+      }
+    }
+
     function appendLog(msg, level) {
       const el = document.getElementById('error-log');
       const color = level === 'err' ? '#f87171' : level === 'warn' ? '#fbbf24' : level === 'ok' ? '#4ade80' : 'inherit';
-      const line = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+      const kind = (level === 'err' || level === 'warn') ? classifyLogKind(msg) : '';
+      const line = '[' + new Date().toLocaleTimeString() + '] ' + (kind ? kind + ' · ' : '') + msg;
       if (el) {
         const div = document.createElement('div');
         div.style.color = color;
         div.style.marginBottom = '4px';
+        div.style.cursor = (level === 'err' || level === 'warn') ? 'pointer' : 'default';
         div.textContent = line;
+        div.dataset.level = level || '';
+        div.dataset.raw = String(msg || '');
+        if (level === 'err' || level === 'warn') {
+          div.onclick = function () {
+            updatePreviewErrorDetail(div.dataset.raw, div.dataset.level);
+          };
+        }
         el.appendChild(div);
         el.scrollTop = el.scrollHeight;
       }
+      updatePreviewErrorDetail(msg, level);
       console.log(line);
     }
 
@@ -3841,7 +3923,74 @@
           return m;
         });
 
+        // Bridge: kirim error/network dari iframe → parent (panel Detail Error)
+        const bridge = `<script>(function(){
+  function send(type, msg, extra){
+    try { parent.postMessage({ source:'gc-preview', type:type, msg:String(msg||''), extra:extra||null }, '*'); } catch(e){}
+  }
+  window.addEventListener('error', function(ev){
+    send('err', (ev.message||'Error') + (ev.filename ? ' @ '+ev.filename+':'+ev.lineno : ''), { file: ev.filename, line: ev.lineno, col: ev.colno });
+  });
+  window.addEventListener('unhandledrejection', function(ev){
+    var r = ev.reason;
+    send('err', 'Promise: ' + (r && r.message ? r.message : r));
+  });
+  var c = window.console;
+  if (c) {
+    ['error','warn'].forEach(function(k){
+      var o = c[k];
+      c[k] = function(){
+        try { send(k==='error'?'err':'warn', Array.prototype.slice.call(arguments).join(' ')); } catch(e){}
+        return o && o.apply(c, arguments);
+      };
+    });
+  }
+  if (window.fetch) {
+    var of = window.fetch;
+    window.fetch = function(){
+      var args = arguments;
+      var url = (args[0] && args[0].url) || args[0];
+      return of.apply(this, args).then(function(res){
+        if (!res.ok) send('err', 'NET fetch '+res.status+' '+res.statusText+' — '+url);
+        return res;
+      }).catch(function(err){
+        send('err', 'NET fetch failed — '+url+' — '+(err && err.message || err));
+        throw err;
+      });
+    };
+  }
+  try {
+    var XO = window.XMLHttpRequest;
+    if (XO) {
+      var open = XO.prototype.open, sendX = XO.prototype.send;
+      XO.prototype.open = function(m,u){ this.__gc_url = u; return open.apply(this, arguments); };
+      XO.prototype.send = function(){
+        this.addEventListener('error', function(){ send('err', 'NET XHR error — '+ (this.__gc_url||'')); });
+        this.addEventListener('load', function(){ if (this.status>=400) send('err', 'NET XHR '+this.status+' — '+(this.__gc_url||'')); });
+        return sendX.apply(this, arguments);
+      };
+    }
+  } catch(e){}
+  document.addEventListener('securitypolicyviolation', function(ev){
+    send('warn', 'CSP: '+ (ev.blockedURI||'') + ' ('+(ev.violatedDirective||'')+')');
+  });
+})();<\/script>`;
+        if (/<head[\s>]/i.test(html)) html = html.replace(/<head([^>]*)>/i, '<head$1>' + bridge);
+        else if (/<html[\s>]/i.test(html)) html = html.replace(/<html([^>]*)>/i, '<html$1><head>' + bridge + '</head>');
+        else html = bridge + html;
+
+        // Reset counter detail error tiap Run baru
+        window.__pvErrorCount = 0;
+        window.__pvLastErrors = [];
+        const countEl0 = document.getElementById('pv-error-count');
+        if (countEl0) countEl0.textContent = '0 error';
+        const detail0 = document.getElementById('preview-error-detail');
+        if (detail0) detail0.textContent = 'Menunggu error runtime / network dari preview…';
+        const fileEl0 = document.getElementById('pv-filename-text');
+        if (fileEl0) fileEl0.textContent = entryPath || '—';
+
         const pageBlob = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        activePreviewBlobUrls.push(pageBlob);
         const frame = document.getElementById('preview-frame');
         if (activePreviewMode === 'web') {
           frame.removeAttribute('sandbox');
@@ -3858,7 +4007,22 @@
         if (title) title.textContent = (activePreviewMode === 'web' ? 'Web Preview' : 'Sandbox Preview') + ' · ' + entryPath;
         appendLog('Preview dimuat: ' + entryPath, 'ok');
 
-        // Capture iframe errors
+        // Terima pesan error dari bridge iframe
+        if (!window.__gcPreviewMsgBound) {
+          window.__gcPreviewMsgBound = true;
+          window.addEventListener('message', function (ev) {
+            const d = ev && ev.data;
+            if (!d || d.source !== 'gc-preview') return;
+            const lvl = d.type === 'warn' ? 'warn' : 'err';
+            appendLog(d.msg || '(empty error)', lvl);
+            if (d.extra && d.extra.file) {
+              const fe = document.getElementById('pv-filename-text');
+              if (fe) fe.textContent = String(d.extra.file).split('/').pop();
+            }
+          });
+        }
+
+        // Capture iframe errors (fallback jika bridge gagal)
         frame.onload = () => {
           try {
             const w = frame.contentWindow;
