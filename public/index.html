@@ -757,10 +757,11 @@
       border: 1px solid var(--border);
       border-radius: 10px 10px 0 0;
       overflow: hidden;
-      flex: 0 1 58% !important;
+      flex: 0 1 62% !important;
       min-height: 0;
       display: grid !important;
-      grid-template-columns: minmax(0, 56fr) minmax(0, 30fr);
+      /* 65% preview | 35% log error */
+      grid-template-columns: minmax(0, 65fr) minmax(0, 35fr) !important;
     }
     .pv-pane-left {
       background: var(--surface) !important;
@@ -770,6 +771,29 @@
       min-width: 0;
       min-height: 0;
       padding: 10px 12px;
+      position: relative;
+    }
+    .pv-back-btn {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 6px 10px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .pv-back-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
     }
     .pv-pane-right {
       background: var(--bg-secondary) !important;
@@ -959,9 +983,15 @@
         grid-template-columns: 1fr !important;
         flex: 0 1 55% !important;
       }
-      .pv-pane-left { border-right: 0 !important; border-bottom: 1px solid var(--border); min-height: 220px; }
-      .pv-tbtn { font-size: 8px; padding: 6px 3px; }
+      .pv-pane-left {
+        border-right: 0 !important;
+        border-bottom: 1px solid var(--border);
+        min-height: 240px;
+      }
+      .pv-pane-right { min-height: 160px; }
+      .pv-tbtn { font-size: 9px; padding: 6px 4px; }
       .pv-h1 { font-size: 15px; }
+      .pv-back-btn { top: 8px; left: 8px; font-size: 9px; padding: 5px 8px; }
     }
 
     .preview-content {
@@ -2016,7 +2046,6 @@
         <button class="nav-btn active" data-panel="collect">Collect</button>
         <button class="nav-btn" data-panel="workspace">Workspace</button>
         <button class="nav-btn" data-panel="history">History</button>
-        <button class="nav-btn" data-panel="ai">AI Studio</button>
       </nav>
     </header>
 
@@ -2108,14 +2137,11 @@
         </div>
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
-          <button class="btn btn-primary btn-sm" id="btn-save" onclick="saveFile()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-save"></use></svg> Save</button>
-          <button class="btn btn-secondary btn-sm" onclick="formatCode()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-edit"></use></svg> Edit</button>
-          <button class="btn btn-secondary btn-sm" onclick="toggleAIPanel()"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-terminal"></use></svg> AI</button>
-          <button type="button" class="btn btn-success btn-sm" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
+          <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
 
-      <!-- Full Preview Mode — wireframe v20 (Preview & Error Panel) -->
+      <!-- Full Preview Mode — wireframe v20 (acuan mockup) -->
       <div id="preview-mode" style="display:none; flex-direction:column; flex:1; overflow:hidden; background:var(--bg); padding:8px;">
         <div class="pv-eyebrow">Wireframe · Mode Workspace · v20</div>
         <div class="pv-title-row">
@@ -2123,10 +2149,8 @@
           <strong id="preview-title" class="pv-hidden-title">Preview Game / ZIP</strong>
         </div>
 
+        <!-- Toolbar atas: Web View · Sandbox · Scan Error · Reload -->
         <div class="preview-toolbar pv-toolbar">
-          <button type="button" class="pv-tbtn" onclick="exitPreviewMode()" title="Kembali ke editor">
-            <span class="pv-dot"></span> ← Edit Kode
-          </button>
           <button type="button" class="pv-tbtn active" id="preview-mode-web" onclick="switchPreviewMode('web')">
             <span class="pv-dot"></span> Web View
           </button>
@@ -2139,15 +2163,14 @@
           <button type="button" class="pv-tbtn" onclick="reloadPreview()">
             <span class="pv-dot"></span> Reload
           </button>
-          <div class="preview-size-switch pv-size" role="group" aria-label="Preview viewport size">
-            <button type="button" class="active" data-preview-size="desktop" onclick="setPreviewViewport('desktop')">Desktop</button>
-            <button type="button" data-preview-size="tablet" onclick="setPreviewViewport('tablet')">Tablet</button>
-            <button type="button" data-preview-size="mobile" onclick="setPreviewViewport('mobile')">Mobile</button>
-          </div>
         </div>
 
+        <!-- Split 65% preview | 35% log -->
         <div class="preview-workspace pv-main-split">
           <div class="preview-stage-column pv-pane-left">
+            <button type="button" class="pv-back-btn" onclick="exitPreviewMode()" title="Kembali ke editor">
+              ← Edit Kode
+            </button>
             <div class="pane-tag">
               <span id="preview-stage-label">Game Preview</span>
               <span id="preview-viewport-label">live</span>
@@ -2161,7 +2184,7 @@
 
           <div class="preview-log-column pv-pane-right">
             <div class="pane-tag">
-              <span>Log Error · Elemen · Kode · Baris</span>
+              <span>Log pencatat error / elemen / kode / baris</span>
               <span id="pv-error-count">0 error</span>
             </div>
             <div id="preview-file-running" class="pv-file-running">File: —</div>
@@ -2170,7 +2193,7 @@
         </div>
 
         <div class="pv-detail">
-          <div class="pv-detail-label">Detail error yang terjadi</div>
+          <div class="pv-detail-label">Detail error yg terjadi</div>
           <div class="pv-detail-body" id="preview-error-detail">
             Belum ada error. Jalankan file lalu Scan Error untuk melihat diagnostik.
           </div>
@@ -3630,8 +3653,10 @@
       releasePreviewAssets();
       const pm = document.getElementById('preview-mode');
       const main = document.getElementById('workspace-main');
+      const wh = document.querySelector('#panel-workspace .workspace-header');
       if (pm) pm.style.display = 'none';
       if (main) main.style.display = '';
+      if (wh) wh.style.display = '';
       const frame = document.getElementById('preview-frame');
       if (frame) {
         frame.src = 'about:blank';
@@ -3725,10 +3750,13 @@
       // Masuk mode preview split (tetap di Workspace, tidak pindah tab browser)
       const pm = document.getElementById('preview-mode');
       const main = document.getElementById('workspace-main');
+      const wh = document.querySelector('#panel-workspace .workspace-header');
       if (main) main.style.display = 'none';
+      if (wh) wh.style.display = 'none';
       if (pm) pm.style.display = 'flex';
       switchPreviewMode(activePreviewMode, false);
-      setPreviewViewport(activePreviewViewport);
+      // Viewport fixed — tidak ada Desktop/Tablet/Mobile di UI
+      try { setPreviewViewport('desktop'); } catch (_) {}
 
       const logEl = document.getElementById('error-log');
       if (logEl) logEl.innerHTML = '';
@@ -4166,7 +4194,7 @@
       })();
     </script>
 
-<style id="workspace-preview-live-overrides">#preview-mode .preview-workspace{display:grid;grid-template-columns:minmax(0,7fr) minmax(250px,3fr)}#preview-mode .preview-workspace.preview-web{display:block}#preview-mode .preview-workspace.preview-web .preview-log-column{display:none}#preview-mode .preview-workspace.preview-web .preview-stage-column{height:100%;border-right:0}#preview-mode #error-log{display:none}#preview-diagnostics{display:flex;flex-direction:column;height:calc(100% - 42px);min-height:0}.preview-diagnostics-tools{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border)}#preview-log-filter{flex:1;min-width:0;padding:7px 9px;color:var(--text);background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px}#preview-diagnostics-list{overflow:auto;min-height:0;padding:6px 8px}.preview-diagnostic{display:grid;grid-template-columns:42px minmax(0,1fr);gap:8px;width:100%;padding:9px 8px;border:1px solid transparent;border-bottom-color:var(--border);background:transparent;color:var(--text-secondary);text-align:left;cursor:pointer}.preview-diagnostic:hover,.preview-diagnostic.active{background:rgba(6,182,212,.1);border-color:rgba(6,182,212,.3)}.preview-diagnostic-kind{font:600 10px monospace;padding:3px 4px;height:max-content;text-align:center;border:1px solid currentColor;border-radius:4px}.preview-diagnostic-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:12px}.preview-diagnostic-meta{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);font:10px monospace}.preview-error-detail{margin:0 10px 10px;padding:10px;min-height:94px;overflow:auto;white-space:pre-wrap;color:var(--text-secondary);background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;font:11px/1.55 monospace}@media(max-width:760px){#preview-mode .preview-workspace{display:flex;flex-direction:column}#preview-mode .preview-stage-column{min-height:320px;border-right:0;border-bottom:1px solid var(--border)}#preview-mode .preview-workspace.preview-web .preview-log-column{display:none}}</style>
+<style id="workspace-preview-live-overrides">#preview-mode .preview-workspace{display:grid!important;grid-template-columns:minmax(0,65fr) minmax(0,35fr)!important}#preview-mode .preview-workspace.preview-web .preview-log-column{display:flex}#preview-mode #error-log{display:block}#preview-diagnostics{display:flex;flex-direction:column;height:calc(100% - 42px);min-height:0}.preview-diagnostics-tools{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border)}#preview-log-filter{flex:1;min-width:0;padding:7px 9px;color:var(--text);background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px}#preview-diagnostics-list{overflow:auto;min-height:0;padding:6px 8px}.preview-diagnostic{display:grid;grid-template-columns:42px minmax(0,1fr);gap:8px;width:100%;padding:9px 8px;border:1px solid transparent;border-bottom-color:var(--border);background:transparent;color:var(--text-secondary);text-align:left;cursor:pointer}.preview-diagnostic:hover,.preview-diagnostic.active{background:rgba(6,182,212,.1);border-color:rgba(6,182,212,.3)}.preview-diagnostic-kind{font:600 10px monospace;padding:3px 4px;height:max-content;text-align:center;border:1px solid currentColor;border-radius:4px}.preview-diagnostic-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:12px}.preview-diagnostic-meta{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);font:10px monospace}.preview-error-detail{margin:0 10px 10px;padding:10px;min-height:94px;overflow:auto;white-space:pre-wrap;color:var(--text-secondary);background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;font:11px/1.55 monospace}@media(max-width:760px){#preview-mode .preview-workspace{display:flex;flex-direction:column}#preview-mode .preview-stage-column{min-height:320px;border-right:0;border-bottom:1px solid var(--border)}#preview-mode .preview-workspace.preview-web .preview-log-column{display:none}}</style>
 <script>(function(){var a=[],s=null,o=window.appendLog;function add(v){var t=String(v||""),u=t.toLowerCase(),k=u.indexOf("python")>=0||u.indexOf("numpy")>=0?"PY3":u.indexOf(".css")>=0?"CSS":u.indexOf(".html")>=0||u.indexOf("tag")>=0?"HTML":u.indexOf("fetch")>=0||u.indexOf("404")>=0?"NET":"JS";var f="runtime output",m=t.match(/[A-Za-z0-9_./-]+\.(html?|css|m?js|py3?)/i);if(m)f=m[0];return{kind:k,file:f,title:t,detail:t}}function draw(){var box=document.getElementById("preview-diagnostics-list"),q=document.getElementById("preview-log-filter");if(!box)return;var n=q?q.value.toLowerCase():"",v=a.filter(function(x){return!n||(x.kind+" "+x.file+" "+x.title).toLowerCase().indexOf(n)>=0});box.innerHTML=v.length?v.map(function(x){return"<button type=\"button\" class=\"preview-diagnostic"+ (x===s?" active":"") +" data-i=\""+a.indexOf(x)+"\"><b class=\"preview-diagnostic-kind\">"+x.kind+"</b><span><strong class=\"preview-diagnostic-title\">"+x.title+"</strong><small class=\"preview-diagnostic-meta\">"+x.file+"</small></span></button>"}).join(""):"<div style=\"padding:18px;color:var(--text-muted)\">No diagnostics yet.</div>";Array.prototype.forEach.call(box.querySelectorAll("[data-i]"),function(b){b.onclick=function(){s=a[Number(b.getAttribute("data-i"))];var d=document.getElementById("preview-error-detail");if(d)d.textContent=s.detail+"\n\nFile: "+s.file;draw()}})}window.appendLog=function(v){if(typeof o==="function")o.apply(this,arguments);s=add(v);a.push(s);draw()};var sw=window.switchPreviewMode;window.switchPreviewMode=function(m){var r=sw?sw.apply(this,arguments):null,w=document.querySelector("#preview-mode .preview-workspace");if(w)w.classList.toggle("preview-web",m==="web");return r};var f=document.getElementById("preview-log-filter");if(f)f.oninput=draw;var c=document.getElementById("preview-log-clear");if(c)c.onclick=function(){a=[];s=null;draw()};draw()})();</script>
 </body>
 </html>
