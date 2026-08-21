@@ -2279,7 +2279,7 @@
               <span id="pv-filename-text">—</span>
             </div>
             <button type="button" class="pv-abtn" id="btn-pv-copy" onclick="copyErrorLog()">Copy</button>
-            <button type="button" class="pv-abtn custom" id="btn-pv-custom" onclick="openPreviewModal('Costum')">Costum</button>
+            <button type="button" class="pv-abtn custom" id="btn-pv-custom" onclick="openPreviewModal('Custom AI')">Custom AI</button>
             <button type="button" class="pv-abtn ai" id="btn-pv-ai" onclick="openPreviewModal('AI')">AI</button>
           </div>
         </div>
@@ -3823,7 +3823,7 @@
       if (overlay) overlay.classList.remove('open');
     }
 
-    function sendPreviewModal() {
+    async function sendPreviewModal() {
       const titleEl = document.getElementById('pv-modal-title');
       const ta = document.getElementById('pv-modal-textarea');
       const label = (titleEl && titleEl.textContent) || 'AI';
@@ -3831,7 +3831,7 @@
       const detail = document.getElementById('preview-error-detail');
       const context = detail ? detail.innerText.trim() : '';
       closePreviewModal();
-      if (label === 'AI' || label === 'Costum') {
+      if (label === 'AI' || label === 'Custom AI') {
         // Reuse existing AI panel flow when possible
         const promptEl = document.getElementById('ai-prompt');
         if (promptEl) {
@@ -3839,8 +3839,13 @@
         }
         const aiPanel = document.getElementById('ai-panel');
         if (aiPanel) aiPanel.classList.remove('hidden');
+        if (label === 'Custom AI' && (!currentFile || !editor)) {
+          appendLog('Custom AI: buka file teks terlebih dahulu.', 'warn');
+          alert('Buka file teks terlebih dahulu sebelum memakai Custom AI.');
+          return;
+        }
         if (typeof askAI === 'function' && (text || context)) {
-          try { askAI(); } catch (_) {}
+          try { await askAI(); } catch (error) { appendLog(label + ': ' + error.message, 'err'); }
         } else if (text) {
           appendLog(label + ': ' + text, 'ok');
         }
