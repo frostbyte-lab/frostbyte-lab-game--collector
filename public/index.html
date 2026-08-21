@@ -2213,6 +2213,7 @@
         </div>
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openPreviewModal('Custom AI')" title="Custom AI">Custom AI</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -2284,21 +2285,23 @@
           </div>
         </div>
 
-        <!-- Modal AI / Costum -->
-        <div class="pv-modal-overlay" id="pv-modal-overlay">
-          <div class="pv-modal-box">
-            <div class="pv-modal-title">
-              <span id="pv-modal-title">AI</span>
-              <span class="pv-modal-close" id="pv-modal-close" onclick="closePreviewModal()">✕</span>
-            </div>
-            <textarea class="pv-modal-textarea" id="pv-modal-textarea" placeholder="Tulis instruksi: deteksi error, perbaiki kode, rename file, sambungkan API/domain..."></textarea>
-            <div class="pv-modal-footer">
-              <button type="button" class="pv-abtn" onclick="closePreviewModal()">Batal</button>
-              <button type="button" class="pv-modal-send" id="pv-modal-send" onclick="sendPreviewModal()">Kirim</button>
-            </div>
-          </div>
-        </div>
+
       </div>
+
+      <!-- Modal AI / Costum -->
+              <div class="pv-modal-overlay" id="pv-modal-overlay">
+                <div class="pv-modal-box">
+                  <div class="pv-modal-title">
+                    <span id="pv-modal-title">AI</span>
+                    <span class="pv-modal-close" id="pv-modal-close" onclick="closePreviewModal()">✕</span>
+                  </div>
+                  <textarea class="pv-modal-textarea" id="pv-modal-textarea" placeholder="Tulis instruksi: deteksi error, perbaiki kode, rename file, sambungkan API/domain..."></textarea>
+                  <div class="pv-modal-footer">
+                    <button type="button" class="pv-abtn" onclick="closePreviewModal()">Batal</button>
+                    <button type="button" class="pv-modal-send" id="pv-modal-send" onclick="sendPreviewModal()">Kirim</button>
+                  </div>
+                </div>
+              </div>
 
       <!-- Main Workspace -->
       <div class="workspace-main" id="workspace-main">
