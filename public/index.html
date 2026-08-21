@@ -2603,7 +2603,7 @@
           <label>Base URL (OpenAI-compatible)</label>
           <input id="cai-new-base" type="text" value="https://api.groq.com/openai/v1" placeholder="https://api.groq.com/openai/v1">
           <label>Model</label>
-          <input id="cai-new-model" type="text" value="llama-3.3-70b-versatile" placeholder="llama-3.3-70b-versatile">
+          <input id="cai-new-model" type="text" value="openai/gpt-oss-20b" placeholder="openai/gpt-oss-20b">
           <div class="cai-actions" style="margin-top:12px;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
             <button type="button" class="btn btn-primary btn-sm" onclick="caiAddNewKey()">Simpan ke slot baru</button>
@@ -3621,9 +3621,16 @@
     // ===== Custom AI multi-key failover =====
     const CAI_STORAGE = 'gc_custom_ai_apis';
     const CAI_DEFAULTS = [
-      { name: '1', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'llama-3.3-70b-versatile', enabled: true },
-      { name: '2', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'llama-3.3-70b-versatile', enabled: true },
-      { name: '3', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', enabled: true }
+      { name: '1', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'openai/gpt-oss-20b', enabled: true },
+      { name: '2', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'openai/gpt-oss-20b', enabled: true },
+      { name: '3', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'openai/gpt-oss-120b', enabled: true }
+    ];
+    const CAI_MODEL_OPTIONS = [
+      'openai/gpt-oss-20b',
+      'openai/gpt-oss-120b',
+      'qwen/qwen3.6-27b',
+      'groq/compound',
+      'groq/compound-mini'
     ];
 
     function loadCustomAISlots() {
@@ -3634,7 +3641,7 @@
             name: String(s.name || (i + 1)),
             baseUrl: String(s.baseUrl || 'https://api.groq.com/openai/v1').replace(/\/+$/, ''),
             apiKey: String(s.apiKey || ''),
-            model: String(s.model || 'llama-3.3-70b-versatile'),
+            model: String(s.model || 'openai/gpt-oss-20b'),
             enabled: s.enabled !== false
           }));
         }
@@ -3660,7 +3667,7 @@
           name: (card.querySelector('[data-f="name"]')?.value || String(i + 1)).trim() || String(i + 1),
           baseUrl: (card.querySelector('[data-f="baseUrl"]')?.value || 'https://api.groq.com/openai/v1').trim().replace(/\/+$/, ''),
           apiKey: (card.querySelector('[data-f="apiKey"]')?.value || '').trim(),
-          model: (card.querySelector('[data-f="model"]')?.value || 'llama-3.3-70b-versatile').trim(),
+          model: (card.querySelector('[data-f="model"]')?.value || 'openai/gpt-oss-20b').trim(),
           enabled: !!(card.querySelector('[data-f="enabled"]')?.checked)
         });
       });
@@ -3695,7 +3702,7 @@
           '</div>' +
           '<div class="cai-card-row">' +
             '<div><label>Nama</label><input data-f="name" value="' + escapeHtmlAttr(slot.name || String(idx + 1)) + '" placeholder="' + (idx + 1) + '"></div>' +
-            '<div><label>Model</label><input data-f="model" value="' + escapeHtmlAttr(slot.model || '') + '" placeholder="llama-3.3-70b-versatile"></div>' +
+            '<div><label>Model</label><select data-f="model">' + caiModelOptionsHtml(slot.model) + '</select></div>' +
           '</div>' +
           '<label>Base URL (OpenAI-compatible)</label>' +
           '<input data-f="baseUrl" value="' + escapeHtmlAttr(slot.baseUrl || '') + '" placeholder="https://api.groq.com/openai/v1">' +
@@ -3709,6 +3716,18 @@
     function escapeHtmlAttr(s) {
       return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     }
+
+    function caiModelOptionsHtml(selected) {
+      const opts = (typeof CAI_MODEL_OPTIONS !== 'undefined' && CAI_MODEL_OPTIONS.length)
+        ? CAI_MODEL_OPTIONS.slice()
+        : ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.6-27b'];
+      const sel = selected || opts[0];
+      if (sel && !opts.includes(sel)) opts.unshift(sel);
+      return opts.map(function (m) {
+        return '<option value="' + escapeHtmlAttr(m) + '"' + (m === sel ? ' selected' : '') + '>' + escapeHtmlAttr(m) + '</option>';
+      }).join('');
+    }
+
 
     try { window.__useCustomAI = loadCustomAISlots().some(s => s.enabled && s.apiKey); } catch (_) { window.__useCustomAI = false; }
 
@@ -3819,7 +3838,7 @@
       const slots = loadCustomAISlots();
       const name = (document.getElementById('cai-new-name')?.value || '').trim() || String(slots.length + 1);
       const baseUrl = (document.getElementById('cai-new-base')?.value || 'https://api.groq.com/openai/v1').trim().replace(/\/+$/, '');
-      const model = (document.getElementById('cai-new-model')?.value || 'llama-3.3-70b-versatile').trim();
+      const model = (document.getElementById('cai-new-model')?.value || 'openai/gpt-oss-20b').trim();
       slots.push({ name: name, baseUrl: baseUrl, apiKey: key, model: model, enabled: true });
       localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
       window.__useCustomAI = true;
@@ -3849,7 +3868,7 @@
         name: n,
         baseUrl: 'https://api.groq.com/openai/v1',
         apiKey: '',
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-20b',
         enabled: true
       });
       localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
@@ -3882,7 +3901,7 @@
           'Authorization': 'Bearer ' + slot.apiKey
         },
         body: JSON.stringify({
-          model: slot.model || 'llama-3.3-70b-versatile',
+          model: slot.model || 'openai/gpt-oss-20b',
           messages,
           temperature: options.temperature ?? 0.2,
           max_tokens: Math.min(Number(options.max_tokens || 2000), 8000)
