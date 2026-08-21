@@ -242,6 +242,97 @@
       flex-direction: column;
     }
 
+
+    /* ===== Custom AI Manager ===== */
+    .cai-overlay {
+      position: fixed; inset: 0; z-index: 10050;
+      background: rgba(0,0,0,.6); display: flex;
+      align-items: center; justify-content: center; padding: 16px;
+    }
+    .cai-box {
+      width: min(560px, 100%); max-height: 90vh; overflow: auto;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; box-shadow: var(--shadow-lg); padding: 16px 18px;
+    }
+    .cai-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    .cai-head strong { font-size:16px; color:#fff; display:block; }
+    .cai-sub { font-size:12px; color:var(--text-muted); }
+    .cai-close {
+      background:transparent; border:none; color:var(--text-muted);
+      font-size:18px; cursor:pointer; line-height:1; padding:4px 8px;
+    }
+    .cai-close:hover { color:#fff; }
+    .cai-hint { font-size:12px; color:var(--text-secondary); margin-bottom:14px; line-height:1.5; }
+    .cai-list { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+    .cai-card {
+      border:1px solid var(--border); border-radius:10px; padding:12px;
+      background: var(--bg-secondary);
+    }
+    .cai-card-top { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+    .cai-badge {
+      min-width:28px; height:28px; border-radius:8px;
+      background: rgba(94,225,192,.15); color: var(--accent);
+      display:flex; align-items:center; justify-content:center;
+      font-weight:800; font-size:12px;
+    }
+    .cai-card input, .cai-card select {
+      width:100%; padding:7px 9px; margin-bottom:6px;
+      border-radius:6px; border:1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size:12px;
+    }
+    .cai-card label { display:block; font-size:11px; color:var(--text-muted); margin-bottom:3px; }
+    .cai-card-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .cai-card-actions { display:flex; gap:6px; margin-top:4px; flex-wrap:wrap; }
+    .cai-limit-note {
+      font-size:11px; color:var(--text-muted); margin-top:4px;
+      padding:4px 8px; border-radius:6px; background:rgba(255,107,94,.08);
+      border:1px solid rgba(255,107,94,.2);
+    }
+    .cai-actions, .cai-foot { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .cai-foot { margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+    .cai-status { font-size:11px; color:var(--accent); margin-left:auto; }
+
+    .cai-menu { display:flex; flex-direction:column; gap:10px; }
+    .cai-opt {
+      display:flex; align-items:center; gap:12px; width:100%;
+      text-align:left; padding:12px 14px; cursor:pointer;
+      border:1px solid var(--border); border-radius:10px;
+      background: var(--bg-secondary); color: var(--text);
+      transition: var(--transition);
+    }
+    .cai-opt:hover { border-color: var(--accent); background: rgba(94,225,192,.08); }
+    .cai-opt-num {
+      width:32px; height:32px; border-radius:8px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:800; background: rgba(94,225,192,.15); color: var(--accent);
+    }
+    .cai-opt-body { display:flex; flex-direction:column; gap:2px; min-width:0; }
+    .cai-opt-body strong { font-size:14px; }
+    .cai-opt-body small { font-size:11px; color: var(--text-muted); }
+    .cai-panel { margin-top:4px; }
+    .cai-chat-log {
+      max-height: 220px; overflow-y:auto; margin-bottom:10px;
+      padding:10px; border-radius:8px; border:1px solid var(--border);
+      background: var(--bg); font-size:12px; line-height:1.5;
+      white-space: pre-wrap; word-break: break-word; min-height: 80px;
+    }
+    .cai-chat-log .cai-msg-user { color: var(--accent); margin-bottom:8px; }
+    .cai-chat-log .cai-msg-ai { color: var(--text-secondary); margin-bottom:10px; }
+    .cai-chat-input {
+      width:100%; padding:10px; margin-bottom:10px; resize:vertical;
+      border-radius:8px; border:1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size:13px;
+      font-family: inherit;
+    }
+    .cai-check { display:flex; align-items:center; gap:6px; font-size:12px; color: var(--text-muted); margin-right:auto; }
+    .cai-panel label { display:block; font-size:11px; color:var(--text-muted); margin:8px 0 3px; }
+    .cai-panel input[type="text"],
+    .cai-panel input[type="password"] {
+      width:100%; padding:8px 10px; border-radius:6px;
+      border:1px solid var(--border); background: var(--bg); color: var(--text); font-size:12px;
+    }
+
+
     /* ===== WORKSPACE PANEL ===== */
     #panel-workspace {
       background: var(--bg);
@@ -2213,7 +2304,7 @@
         </div>
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openPreviewModal('Custom AI')" title="Custom AI">Custom AI</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Custom AI — multi API failover">Custom AI</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -2280,7 +2371,7 @@
               <span id="pv-filename-text">—</span>
             </div>
             <button type="button" class="pv-abtn" id="btn-pv-copy" onclick="copyErrorLog()">Copy</button>
-            <button type="button" class="pv-abtn custom" id="btn-pv-custom" onclick="openPreviewModal('Custom AI')">Custom AI</button>
+            <button type="button" class="pv-abtn custom" id="btn-pv-custom" onclick="openCustomAIManager()">Custom AI</button>
             <button type="button" class="pv-abtn ai" id="btn-pv-ai" onclick="openPreviewModal('AI')">AI</button>
           </div>
         </div>
@@ -2440,6 +2531,84 @@
         <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">API key AI (opsional, Groq/OpenAI-compatible)</label>
         <input id="custom-ai-key" type="password" placeholder="sk-... atau gsk_..." style="width:100%; padding:8px; margin-bottom:12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
         <button class="btn btn-primary btn-sm" style="width:100%;" onclick="saveCustomSettings()">Simpan Custom</button>
+      </div>
+    </div>
+
+    <!-- Custom AI: 3 opsi + failover chain -->
+    <div id="custom-ai-manager" class="cai-overlay" style="display:none;">
+      <div class="cai-box">
+        <div class="cai-head">
+          <div>
+            <strong id="cai-title">Custom AI</strong>
+            <span class="cai-sub" id="cai-sub">Pilih opsi</span>
+          </div>
+          <button type="button" class="cai-close" onclick="closeCustomAIManager()" aria-label="Tutup">✕</button>
+        </div>
+
+        <!-- Menu 3 opsi -->
+        <div id="cai-menu" class="cai-menu">
+          <button type="button" class="cai-opt" onclick="caiShowPanel('apply')">
+            <span class="cai-opt-num">1</span>
+            <span class="cai-opt-body">
+              <strong>Apply API</strong>
+              <small>Daftar key berantai · Limit → API berikutnya</small>
+            </span>
+          </button>
+          <button type="button" class="cai-opt" onclick="caiShowPanel('chat')">
+            <span class="cai-opt-num">2</span>
+            <span class="cai-opt-body">
+              <strong>Chat</strong>
+              <small>Chat sebelum/sesudah load kode · edit langsung ke editor</small>
+            </span>
+          </button>
+          <button type="button" class="cai-opt" onclick="caiShowPanel('addkey')">
+            <span class="cai-opt-num">3</span>
+            <span class="cai-opt-body">
+              <strong>Masukkan key baru</strong>
+              <small>Tambah key → otomatis masuk slot baru</small>
+            </span>
+          </button>
+        </div>
+
+        <!-- Panel 1: Apply API (slot list) -->
+        <div id="cai-panel-apply" class="cai-panel" style="display:none;">
+          <p class="cai-hint">Urutan = prioritas. API No.1 kena limit → otomatis No.2, lalu No.3, dst.</p>
+          <div id="cai-list" class="cai-list"></div>
+          <div class="cai-actions">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="addCustomAISlot()">+ Custom (slot baru)</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="saveCustomAISlots(); alert('API diterapkan.');">Apply API</button>
+          </div>
+        </div>
+
+        <!-- Panel 2: Chat -->
+        <div id="cai-panel-chat" class="cai-panel" style="display:none;">
+          <p class="cai-hint">Bisa dipakai sebelum atau sesudah load/buka file. Jika minta edit kode dan ada file aktif di editor, perubahan <b>langsung diterapkan</b> ke file tersebut.</p>
+          <div id="cai-chat-log" class="cai-chat-log"></div>
+          <textarea id="cai-chat-input" class="cai-chat-input" rows="3" placeholder="Tulis permintaan… mis. perbaiki error di baris 42, rename fungsi, jelaskan kode ini…"></textarea>
+          <div class="cai-actions">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
+            <label class="cai-check"><input type="checkbox" id="cai-apply-edit" checked> Terapkan edit ke editor</label>
+            <button type="button" class="btn btn-primary btn-sm" id="cai-chat-send" onclick="caiSendChat()">Kirim</button>
+          </div>
+        </div>
+
+        <!-- Panel 3: Add key -->
+        <div id="cai-panel-addkey" class="cai-panel" style="display:none;">
+          <p class="cai-hint">Key baru otomatis masuk <b>slot baru</b> di ujung rantai failover.</p>
+          <label>Nama slot (opsional)</label>
+          <input id="cai-new-name" type="text" placeholder="otomatis: nomor berikutnya">
+          <label>API Key</label>
+          <input id="cai-new-key" type="password" placeholder="gsk_... / sk-...">
+          <label>Base URL (OpenAI-compatible)</label>
+          <input id="cai-new-base" type="text" value="https://api.groq.com/openai/v1" placeholder="https://api.groq.com/openai/v1">
+          <label>Model</label>
+          <input id="cai-new-model" type="text" value="llama-3.3-70b-versatile" placeholder="llama-3.3-70b-versatile">
+          <div class="cai-actions" style="margin-top:12px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="caiAddNewKey()">Simpan ke slot baru</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3381,6 +3550,11 @@
     }
 
     async function requestAI(action, question) {
+      // Prefer Custom AI multi-key failover when user has applied API keys
+      if (window.__useCustomAI && typeof requestCustomAI === 'function') {
+        const slots = (typeof loadCustomAISlots === 'function' ? loadCustomAISlots() : []).filter(s => s.enabled && s.apiKey);
+        if (slots.length) return requestCustomAI(action, question);
+      }
       const context = activeAIContext();
       const response = document.getElementById('ai-response');
       if (response) {
@@ -3441,6 +3615,397 @@
         try { await requestAI('chat', prompt); } catch (error) { const response = document.getElementById('ai-response'); if (response) { response.style.display = 'block'; response.textContent = 'AI: ' + error.message; } appendLog('AI: ' + error.message, 'err'); } finally { if (sendButton) sendButton.disabled = false; }
       }
       document.getElementById('ai-prompt')?.addEventListener('keydown', (event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); askAI(); } });
+
+
+
+    // ===== Custom AI multi-key failover =====
+    const CAI_STORAGE = 'gc_custom_ai_apis';
+    const CAI_DEFAULTS = [
+      { name: '1', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'llama-3.3-70b-versatile', enabled: true },
+      { name: '2', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'llama-3.3-70b-versatile', enabled: true },
+      { name: '3', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', enabled: true }
+    ];
+
+    function loadCustomAISlots() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(CAI_STORAGE) || 'null');
+        if (Array.isArray(raw) && raw.length) {
+          return raw.map((s, i) => ({
+            name: String(s.name || (i + 1)),
+            baseUrl: String(s.baseUrl || 'https://api.groq.com/openai/v1').replace(/\/+$/, ''),
+            apiKey: String(s.apiKey || ''),
+            model: String(s.model || 'llama-3.3-70b-versatile'),
+            enabled: s.enabled !== false
+          }));
+        }
+      } catch (_) {}
+      // migrate single key from gc_custom if present
+      try {
+        const old = JSON.parse(localStorage.getItem('gc_custom') || '{}');
+        if (old.aiKey) {
+          const slots = CAI_DEFAULTS.map((d, i) => ({ ...d }));
+          slots[0].apiKey = old.aiKey;
+          return slots;
+        }
+      } catch (_) {}
+      return CAI_DEFAULTS.map(d => ({ ...d }));
+    }
+
+    function saveCustomAISlots() {
+      const list = document.getElementById('cai-list');
+      if (!list) return loadCustomAISlots();
+      const slots = [];
+      list.querySelectorAll('.cai-card').forEach((card, i) => {
+        slots.push({
+          name: (card.querySelector('[data-f="name"]')?.value || String(i + 1)).trim() || String(i + 1),
+          baseUrl: (card.querySelector('[data-f="baseUrl"]')?.value || 'https://api.groq.com/openai/v1').trim().replace(/\/+$/, ''),
+          apiKey: (card.querySelector('[data-f="apiKey"]')?.value || '').trim(),
+          model: (card.querySelector('[data-f="model"]')?.value || 'llama-3.3-70b-versatile').trim(),
+          enabled: !!(card.querySelector('[data-f="enabled"]')?.checked)
+        });
+      });
+      localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
+      // keep first key mirrored for old custom panel
+      try {
+        const s = JSON.parse(localStorage.getItem('gc_custom') || '{}');
+        s.aiKey = (slots.find(x => x.apiKey) || {}).apiKey || '';
+        localStorage.setItem('gc_custom', JSON.stringify(s));
+      } catch (_) {}
+      window.__useCustomAI = slots.some(s => s.enabled && s.apiKey);
+      if (typeof appendLog === 'function') appendLog('Custom AI: ' + slots.length + ' API slot disimpan (failover berantai).', 'ok');
+      return slots;
+    }
+
+    function renderCustomAISlots(slots) {
+      const list = document.getElementById('cai-list');
+      if (!list) return;
+      list.innerHTML = '';
+      slots.forEach((slot, idx) => {
+        const next = slots[idx + 1];
+        const limitNote = next
+          ? ('Limit → gunakan API AI No.' + (next.name || (idx + 2)))
+          : (idx === slots.length - 1 ? 'Slot terakhir (tidak ada failover berikutnya)' : '');
+        const card = document.createElement('div');
+        card.className = 'cai-card';
+        card.innerHTML =
+          '<div class="cai-card-top">' +
+            '<span class="cai-badge">' + (slot.name || (idx + 1)) + '</span>' +
+            '<label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;"><input type="checkbox" data-f="enabled"' + (slot.enabled !== false ? ' checked' : '') + '> Aktif</label>' +
+            '<button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="removeCustomAISlot(' + idx + ')">Hapus</button>' +
+          '</div>' +
+          '<div class="cai-card-row">' +
+            '<div><label>Nama</label><input data-f="name" value="' + escapeHtmlAttr(slot.name || String(idx + 1)) + '" placeholder="' + (idx + 1) + '"></div>' +
+            '<div><label>Model</label><input data-f="model" value="' + escapeHtmlAttr(slot.model || '') + '" placeholder="llama-3.3-70b-versatile"></div>' +
+          '</div>' +
+          '<label>Base URL (OpenAI-compatible)</label>' +
+          '<input data-f="baseUrl" value="' + escapeHtmlAttr(slot.baseUrl || '') + '" placeholder="https://api.groq.com/openai/v1">' +
+          '<label>API Key</label>' +
+          '<input data-f="apiKey" type="password" value="' + escapeHtmlAttr(slot.apiKey || '') + '" placeholder="gsk_... / sk-...">' +
+          (limitNote ? '<div class="cai-limit-note">' + limitNote + '</div>' : '');
+        list.appendChild(card);
+      });
+    }
+
+    function escapeHtmlAttr(s) {
+      return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
+    try { window.__useCustomAI = loadCustomAISlots().some(s => s.enabled && s.apiKey); } catch (_) { window.__useCustomAI = false; }
+
+    function openCustomAIManager() {
+      const el = document.getElementById('custom-ai-manager');
+      if (!el) return;
+      el.style.display = 'flex';
+      caiShowPanel('menu');
+    }
+
+    function caiShowPanel(which) {
+      const menu = document.getElementById('cai-menu');
+      const pApply = document.getElementById('cai-panel-apply');
+      const pChat = document.getElementById('cai-panel-chat');
+      const pKey = document.getElementById('cai-panel-addkey');
+      const title = document.getElementById('cai-title');
+      const sub = document.getElementById('cai-sub');
+      if (menu) menu.style.display = which === 'menu' ? 'flex' : 'none';
+      if (pApply) pApply.style.display = which === 'apply' ? 'block' : 'none';
+      if (pChat) pChat.style.display = which === 'chat' ? 'block' : 'none';
+      if (pKey) pKey.style.display = which === 'addkey' ? 'block' : 'none';
+      if (which === 'menu') {
+        if (title) title.textContent = 'Custom AI';
+        if (sub) sub.textContent = 'Pilih opsi';
+      } else if (which === 'apply') {
+        if (title) title.textContent = '1 · Apply API';
+        if (sub) sub.textContent = 'Failover berantai antar API key';
+        renderCustomAISlots(loadCustomAISlots());
+      } else if (which === 'chat') {
+        if (title) title.textContent = '2 · Chat';
+        if (sub) sub.textContent = 'Edit kode langsung ke file di editor bila diminta';
+      } else if (which === 'addkey') {
+        if (title) title.textContent = '3 · Masukkan key baru';
+        if (sub) sub.textContent = 'Otomatis masuk slot baru';
+        const nk = document.getElementById('cai-new-key');
+        if (nk) nk.value = '';
+        const nn = document.getElementById('cai-new-name');
+        if (nn) nn.value = '';
+      }
+    }
+
+    function caiAppendChat(role, text) {
+      const log = document.getElementById('cai-chat-log');
+      if (!log) return;
+      const div = document.createElement('div');
+      div.className = role === 'user' ? 'cai-msg-user' : 'cai-msg-ai';
+      div.textContent = (role === 'user' ? 'Anda: ' : 'AI: ') + text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function caiExtractCodeBlock(text) {
+      const m = String(text || '').match(/```(?:[\w.+-]+)?\n([\s\S]*?)```/);
+      return m ? m[1].replace(/\s+$/, '') : null;
+    }
+
+    async function caiSendChat() {
+      const input = document.getElementById('cai-chat-input');
+      const sendBtn = document.getElementById('cai-chat-send');
+      const applyEdit = document.getElementById('cai-apply-edit');
+      const q = (input && input.value || '').trim();
+      if (!q) { if (input) input.focus(); return; }
+      caiAppendChat('user', q);
+      if (input) input.value = '';
+      if (sendBtn) sendBtn.disabled = true;
+      try {
+        const hasFile = !!(typeof currentFile !== 'undefined' && currentFile && typeof editor !== 'undefined' && editor);
+        const code = hasFile ? (editor.getValue() || '') : '';
+        const filename = hasFile ? currentFile : '(belum ada file di editor)';
+        const system = [
+          'Anda asisten kode di Game Collector Pro (Custom AI).',
+          'Jawab ringkas dalam Bahasa Indonesia.',
+          'Jika user meminta edit/perbaiki/ubah kode dan ada file aktif, kembalikan FILE LENGKAP yang sudah diperbaiki di dalam satu blok markdown code fence.',
+          'Jangan potong file. Pertahankan perilaku yang tidak terkait permintaan.',
+          'Jika hanya tanya (bukan edit), jawab tanpa code fence penuh kecuali cuplikan pendek.'
+        ].join(' ');
+        const userMsg = hasFile
+          ? ('FILE: ' + filename + '\n\nPERMINTAAN:\n' + q + '\n\nKODE SAAT INI:\n```\n' + code.slice(0, 28000) + '\n```')
+          : ('Belum ada file di editor.\nPERMINTAAN:\n' + q);
+        const { content, slotName } = await callCustomAIWithFailover([
+          { role: 'system', content: system },
+          { role: 'user', content: userMsg }
+        ], { max_tokens: 4000 });
+        caiAppendChat('ai', content + (slotName ? '\n\n(via API No.' + slotName + ')' : ''));
+        const wantApply = applyEdit ? applyEdit.checked : true;
+        const newCode = caiExtractCodeBlock(content);
+        if (wantApply && newCode && hasFile && editor) {
+          if (window.confirm('Terapkan hasil edit AI ke file aktif di editor?\n\n' + filename)) {
+            editor.setValue(newCode);
+            if (typeof openFiles !== 'undefined' && openFiles && currentFile) openFiles.set(currentFile, newCode);
+            if (typeof appendLog === 'function') appendLog('Custom AI Chat: edit diterapkan ke ' + filename, 'ok');
+            caiAppendChat('ai', '✓ Perubahan diterapkan ke editor: ' + filename + ' (Save untuk ke ZIP).');
+          }
+        } else if (wantApply && newCode && !hasFile) {
+          caiAppendChat('ai', '(Ada kode di jawaban, tapi belum ada file aktif di editor — buka file dulu.)');
+        }
+      } catch (e) {
+        caiAppendChat('ai', 'Gagal: ' + (e.message || e));
+        if (typeof appendLog === 'function') appendLog('Custom AI Chat: ' + (e.message || e), 'err');
+      } finally {
+        if (sendBtn) sendBtn.disabled = false;
+      }
+    }
+
+    function caiAddNewKey() {
+      const key = (document.getElementById('cai-new-key')?.value || '').trim();
+      if (!key) { alert('Isi API Key dulu.'); return; }
+      const slots = loadCustomAISlots();
+      const name = (document.getElementById('cai-new-name')?.value || '').trim() || String(slots.length + 1);
+      const baseUrl = (document.getElementById('cai-new-base')?.value || 'https://api.groq.com/openai/v1').trim().replace(/\/+$/, '');
+      const model = (document.getElementById('cai-new-model')?.value || 'llama-3.3-70b-versatile').trim();
+      slots.push({ name: name, baseUrl: baseUrl, apiKey: key, model: model, enabled: true });
+      localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
+      window.__useCustomAI = true;
+      if (typeof appendLog === 'function') appendLog('Custom AI: key baru masuk slot No.' + name, 'ok');
+      alert('Key tersimpan di slot No.' + name + '.');
+      // clear and go to apply list
+      const nk = document.getElementById('cai-new-key');
+      if (nk) nk.value = '';
+      caiShowPanel('apply');
+    }
+
+    function closeCustomAIManager() {
+      const el = document.getElementById('custom-ai-manager');
+      if (el) el.style.display = 'none';
+    }
+
+    document.addEventListener('click', function (e) {
+      const m = document.getElementById('custom-ai-manager');
+      if (m && e.target === m) closeCustomAIManager();
+    });
+
+
+    function addCustomAISlot() {
+      const slots = saveCustomAISlots();
+      const n = String(slots.length + 1);
+      slots.push({
+        name: n,
+        baseUrl: 'https://api.groq.com/openai/v1',
+        apiKey: '',
+        model: 'llama-3.3-70b-versatile',
+        enabled: true
+      });
+      localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
+      renderCustomAISlots(slots);
+    }
+
+    function removeCustomAISlot(idx) {
+      const slots = saveCustomAISlots();
+      if (slots.length <= 1) {
+        alert('Minimal satu slot API.');
+        return;
+      }
+      slots.splice(idx, 1);
+      localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
+      renderCustomAISlots(slots);
+    }
+
+    function isRateLimitError(status, bodyText, errMsg) {
+      if (status === 429 || status === 503) return true;
+      const t = String(bodyText || errMsg || '').toLowerCase();
+      return /rate.?limit|too many requests|quota|limit exceeded|capacity|overloaded|tokens per day|tpm|rpm/.test(t);
+    }
+
+    async function callOpenAICompatible(slot, messages, options = {}) {
+      const url = slot.baseUrl.replace(/\/+$/, '') + '/chat/completions';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + slot.apiKey
+        },
+        body: JSON.stringify({
+          model: slot.model || 'llama-3.3-70b-versatile',
+          messages,
+          temperature: options.temperature ?? 0.2,
+          max_tokens: Math.min(Number(options.max_tokens || 2000), 8000)
+        })
+      });
+      const text = await res.text();
+      let json = {};
+      try { json = JSON.parse(text); } catch (_) {}
+      if (!res.ok) {
+        const msg = json.error?.message || json.message || text.slice(0, 300) || ('HTTP ' + res.status);
+        const err = new Error(msg);
+        err.status = res.status;
+        err.rateLimited = isRateLimitError(res.status, text, msg);
+        err.slotName = slot.name;
+        throw err;
+      }
+      const content = json.choices?.[0]?.message?.content
+        || json.choices?.[0]?.text
+        || json.response
+        || '';
+      if (!content) throw new Error('Respons kosong dari API ' + (slot.name || ''));
+      return { content: String(content), model: json.model || slot.model, slotName: slot.name };
+    }
+
+    async function callCustomAIWithFailover(messages, options = {}) {
+      const slots = loadCustomAISlots().filter(s => s.enabled && s.apiKey);
+      if (!slots.length) {
+        throw new Error('Belum ada API key. Buka Custom AI → isi key di slot 1, 2, 3… lalu Apply.');
+      }
+      const errors = [];
+      for (let i = 0; i < slots.length; i++) {
+        const slot = slots[i];
+        try {
+          if (typeof appendLog === 'function') {
+            appendLog('Custom AI: mencoba API No.' + (slot.name || (i + 1)) + '…', 'ok');
+          }
+          const result = await callOpenAICompatible(slot, messages, options);
+          if (typeof appendLog === 'function') {
+            appendLog('Custom AI: sukses via API No.' + (result.slotName || slot.name), 'ok');
+          }
+          return result;
+        } catch (e) {
+          errors.push('No.' + (slot.name || (i + 1)) + ': ' + e.message);
+          if (e.rateLimited || isRateLimitError(e.status, '', e.message)) {
+            if (typeof appendLog === 'function') {
+              appendLog('Custom AI: API No.' + (slot.name || (i + 1)) + ' kena limit → failover ke berikutnya', 'warn');
+            }
+            continue;
+          }
+          // non-limit error: still try next if more keys exist
+          if (i < slots.length - 1) {
+            if (typeof appendLog === 'function') {
+              appendLog('Custom AI: API No.' + (slot.name || (i + 1)) + ' gagal (' + e.message + ') → coba berikutnya', 'warn');
+            }
+            continue;
+          }
+          throw e;
+        }
+      }
+      throw new Error('Semua API Custom AI gagal/limit.\n' + errors.join('\n'));
+    }
+
+    function parseCustomAIJson(text) {
+      const raw = String(text || '').trim();
+      try { return JSON.parse(raw); } catch (_) {}
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) { try { return JSON.parse(m[0]); } catch (_) {} }
+      return { summary: raw, issues: [], suggestions: [], repairedCode: null };
+    }
+
+    async function requestCustomAI(action, question) {
+      const context = activeAIContext();
+      const response = document.getElementById('ai-response');
+      if (response) {
+        response.style.display = 'block';
+        response.textContent = 'Custom AI menganalisis ' + context.filename + ' (failover multi-key)…';
+      }
+      const schema = action === 'repair'
+        ? '{"summary":"...","issues":[{"severity":"error|warning|info","line":1,"message":"..."}],"suggestions":["..."],"repairedCode":"FULL FILE CONTENT"}'
+        : '{"summary":"...","issues":[{"severity":"error|warning|info","line":1,"message":"..."}],"suggestions":["..."],"repairedCode":null}';
+      const system = [
+        'You are a careful code review assistant inside Game Collector Pro.',
+        'Analyze only the supplied file. Never invent missing files.',
+        'Return valid JSON only. Schema: ' + schema,
+        'Reply in Bahasa Indonesia for summary/suggestions when possible.'
+      ].join(' ');
+      const task = action === 'repair'
+        ? 'Find fixable problems and return the complete corrected file in repairedCode.'
+        : action === 'chat'
+          ? 'Answer the user question about this file. Do not return repairedCode unless asked.'
+          : 'Analyze issues and give actionable suggestions.';
+      const userContent = [
+        'FILE: ' + context.filename,
+        'LANGUAGE: ' + context.language,
+        'STATIC_ISSUES: ' + JSON.stringify(context.staticIssues || []),
+        action === 'chat' && question ? 'QUESTION: ' + question : '',
+        'TASK: ' + task,
+        'CODE:\n' + String(context.code || '').slice(0, 28000)
+      ].filter(Boolean).join('\n\n');
+
+      const { content, model, slotName } = await callCustomAIWithFailover([
+        { role: 'system', content: system },
+        { role: 'user', content: userContent }
+      ], { max_tokens: action === 'repair' ? 4000 : 2000 });
+
+      const parsed = parseCustomAIJson(content);
+      const result = {
+        ok: true,
+        modelLabel: (model || '') + ' · API No.' + (slotName || '?'),
+        summary: parsed.summary || content,
+        issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+        suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+        repairedCode: parsed.repairedCode || null
+      };
+      aiSuggestedCode = result.repairedCode || null;
+      const applyButton = document.getElementById('ai-apply-fix');
+      if (applyButton) applyButton.hidden = !aiSuggestedCode;
+      if (response) {
+        response.style.display = 'block';
+        response.textContent = formatAIResult(result);
+      }
+      return result;
+    }
 
 
     // ===== Custom panel =====
@@ -3835,7 +4400,6 @@
       const context = detail ? detail.innerText.trim() : '';
       closePreviewModal();
       if (label === 'AI' || label === 'Custom AI') {
-        // Reuse existing AI panel flow when possible
         const promptEl = document.getElementById('ai-prompt');
         if (promptEl) {
           promptEl.value = [text, context ? '\n\n--- Error context ---\n' + context : ''].filter(Boolean).join('');
@@ -3847,7 +4411,16 @@
           alert('Buka file teks terlebih dahulu sebelum memakai Custom AI.');
           return;
         }
-        if (typeof askAI === 'function' && (text || context)) {
+        if (label === 'Custom AI' && (text || context)) {
+          try {
+            const q = [text, context ? '\n\n--- Error context ---\n' + context : ''].filter(Boolean).join('');
+            await requestCustomAI('chat', q);
+          } catch (error) {
+            appendLog('Custom AI: ' + error.message, 'err');
+            const response = document.getElementById('ai-response');
+            if (response) { response.style.display = 'block'; response.textContent = 'Custom AI: ' + error.message; }
+          }
+        } else if (typeof askAI === 'function' && (text || context)) {
           try { await askAI(); } catch (error) { appendLog(label + ': ' + error.message, 'err'); }
         } else if (text) {
           appendLog(label + ': ' + text, 'ok');
