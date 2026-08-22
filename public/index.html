@@ -5583,23 +5583,35 @@
             _ghPollTimer = null;
 
             if (data.conclusion === 'success' && data.artifact && data.artifact.id) {
-              statusEl.textContent = 'Status: Selesai — mengunduh ZIP...';
+              var artSizeMb = data.artifact.size ? (data.artifact.size / 1024 / 1024).toFixed(1) : '?';
+              statusEl.textContent = 'Status: Selesai — mengunduh ZIP (~' + artSizeMb + ' MB)...';
               try {
                 const zipRes = await fetch('/api/github/artifact?artifact_id=' + encodeURIComponent(data.artifact.id));
                 if (!zipRes.ok) {
-                  statusEl.textContent = 'Status: Selesai tapi gagal unduh artifact (' + zipRes.status + ')';
+                  var errTxt = '';
+                  try { errTxt = await zipRes.text(); } catch (_) {}
+                  statusEl.textContent = 'Status: Selesai tapi gagal unduh artifact (' + zipRes.status + ') ' + String(errTxt).slice(0, 120);
                   return;
                 }
                 const blob = await zipRes.blob();
-                  const zipInput = document.getElementById('zip-input');
-                  if (!zipInput) throw new Error('Input ZIP tidak ditemukan');
-                  const transfer = new DataTransfer();
-                  transfer.items.add(new File([blob], 'game-resources.zip', { type: 'application/zip' }));
-                  zipInput.files = transfer.files;
-                  zipInput.dispatchEvent(new Event('change', { bubbles: true }));
-                  statusEl.textContent = 'Status: Selesai — ZIP otomatis dimuat ke Workspace untuk edit & preview';
+                if (!blob || blob.size < 64) {
+                  statusEl.textContent = 'Status: Selesai tapi ZIP kosong (' + (blob && blob.size) + ' byte)';
+                  return;
+                }
+                const zipInput = document.getElementById('zip-input');
+                if (!zipInput) throw new Error('Input ZIP tidak ditemukan');
+                const transfer = new DataTransfer();
+                transfer.items.add(new File([blob], 'game-resources.zip', { type: 'application/zip' }));
+                zipInput.files = transfer.files;
+                zipInput.dispatchEvent(new Event('change', { bubbles: true }));
+                statusEl.textContent = 'Status: Selesai — ZIP ' + (blob.size / 1024 / 1024).toFixed(1) + ' MB dimuat ke Workspace';
+                // buka tab Workspace otomatis jika ada tombol nav
+                try {
+                  var wsBtn = document.querySelector('.nav-btn[data-panel="workspace"], button[onclick*="workspace"]');
+                  if (wsBtn) wsBtn.click();
+                } catch (_) {}
               } catch (dlErr) {
-                statusEl.textContent = 'Status: Selesai tapi unduh gagal — ' + dlErr.message;
+                statusEl.textContent = 'Status: Selesai tapi unduh gagal — ' + (dlErr && dlErr.message ? dlErr.message : dlErr) + '. Coba WiFi / Capture (Cloudflare).';
               }
             } else {
               statusEl.textContent = 'Status: Selesai (conclusion: ' + (data.conclusion || '?') + ') — tidak ada artifact';

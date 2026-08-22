@@ -356,7 +356,7 @@ export default {
       });
     }
 
-    // --- Download artifact ZIP (proxy) ---
+    // --- Download artifact ZIP (proxy) — unwrap nested GitHub Actions zip ---
     if (request.method === "GET" && url.pathname === "/api/github/artifact") {
       const artifactId = url.searchParams.get("artifact_id");
       if (!artifactId) return Response.json({ error: "artifact_id wajib" }, { status: 400 });
@@ -375,10 +375,35 @@ export default {
         const t = await res.text();
         return Response.json({ error: "Gagal download artifact", detail: t.slice(0, 300) }, { status: res.status });
       }
-      return new Response(res.body, {
+      const outerBuf = new Uint8Array(await res.arrayBuffer());
+      let outBytes = outerBuf;
+      let filename = "game-resources.zip";
+      try {
+        const entries = unzipSync(outerBuf);
+        const names = Object.keys(entries).filter((n) => !n.endsWith("/") && entries[n]?.length);
+        const innerZips = names.filter((n) => /\.zip$/i.test(n));
+        // GitHub Actions membungkus 1 file ZIP hasil collect → ambil isi dalamnya
+        if (innerZips.length === 1 && names.length === 1) {
+          outBytes = entries[innerZips[0]];
+          filename = innerZips[0].split("/").pop() || filename;
+        } else if (innerZips.length === 1 && names.length <= 3) {
+          // kadang ada file ekstra kecil (log) — prioritaskan zip terbesar
+          let best = innerZips[0];
+          for (const n of innerZips) {
+            if ((entries[n]?.length || 0) > (entries[best]?.length || 0)) best = n;
+          }
+          outBytes = entries[best];
+          filename = best.split("/").pop() || filename;
+        }
+      } catch {
+        // bukan zip valid / sudah flat — kirim outer apa adanya
+      }
+      return new Response(outBytes, {
         headers: {
           "Content-Type": "application/zip",
-          "Content-Disposition": 'attachment; filename="game-resources.zip"'
+          "Content-Disposition": `attachment; filename="${filename.replace(/[^\w.\-]+/g, "_")}"`,
+          "X-GC-Artifact-Unwrapped": outBytes === outerBuf ? "0" : "1",
+          "X-GC-Bytes": String(outBytes.byteLength)
         }
       });
     }
