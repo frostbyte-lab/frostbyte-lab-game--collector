@@ -2492,9 +2492,11 @@
         <div class="hosting-card">
           <h3>Setelah upload</h3>
           <ul>
+            <li><strong>Auto-patch API</strong> — base URL diganti ke EDU + inject SDK + <code>game_id = game-N</code>.</li>
             <li>Commit masuk branch <code>main</code> repo Edu-network.</li>
             <li>Pages rebuild ~1–3 menit → buka <code>/game-N/</code>.</li>
             <li>Batas per file 25 MB (sama validasi Edu-network).</li>
+            <li>Game yang logic-nya sangat custom mungkin masih perlu edit manual di Workspace.</li>
           </ul>
         </div>
 
@@ -5231,8 +5233,15 @@
           return;
         }
 
+        var patchLine = '';
+        if (data.patch) {
+          patchLine = 'API patch: ' + (data.patch.patched || 0) + '/' + (data.patch.scanned || 0) +
+            ' file · SDK inject: ' + ((data.patch.injected_html && data.patch.injected_html.length) || 0) +
+            ' · base ' + (data.patch.edu_base || '') + '\n';
+        }
         setLog(
-          'Berhasil! ' + data.files + ' file → game-' + data.game_slot + '\n' +
+          'Berhasil! ' + data.files + ' file → game-' + data.game_slot + ' (game_id=' + (data.game_id || '') + ')\n' +
+          patchLine +
           'Commit: ' + (data.commit || '').slice(0, 12) + '\n' +
           'Live (setelah Pages deploy ~1–3 mnt):\n' + data.live_url + '\n' +
           (data.commit_url || ''),

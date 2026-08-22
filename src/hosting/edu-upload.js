@@ -1,8 +1,10 @@
 /**
  * Upload paket game (ZIP files map) ke repo Edu-network via GitHub Git Trees API.
  * Target path: game-{N}/... di branch main → Cloudflare Pages auto-deploy.
+ * Auto-patch API base + inject SDK sebelum commit.
  */
 import { ghFetch } from "../collect/github.js";
+import { patchFilesForEdu } from "./edu-patch.js";
 
 const DEFAULT_EDU = {
   owner: "frostbyte-lab",
@@ -69,11 +71,18 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
 
   const cfg = eduConfig(env);
   const prefix = `game-${slot}`;
+  const gameId = prefix; // game-12 → game_id di API EDU
+
+  // Auto-patch: rewrite API host → EDU + inject SDK + gameId
+  const { files: patchedFiles, report: patchReport } = patchFilesForEdu(files || {}, {
+    eduBase: cfg.baseUrl,
+    gameId
+  });
 
   // Build path list
   const entries = [];
   let totalBytes = 0;
-  for (const [raw, data] of Object.entries(files || {})) {
+  for (const [raw, data] of Object.entries(patchedFiles)) {
     const rel = normalizeGamePath(raw);
     if (!rel || !(data instanceof Uint8Array)) continue;
     if (data.byteLength > MAX_FILE_BYTES) {
@@ -208,12 +217,20 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
     status: 200,
     game_slot: slot,
     path_prefix: prefix,
+    game_id: gameId,
     files: entries.length,
     bytes: totalBytes,
     commit: newCommitSha,
     commit_url: `https://github.com/${cfg.owner}/${cfg.repo}/commit/${newCommitSha}`,
     live_url: liveUrl,
-    note: "Cloudflare Pages biasanya deploy dalam 1–3 menit setelah push."
+    patch: {
+      scanned: patchReport.scanned,
+      patched: patchReport.patched,
+      injected_html: patchReport.injectedHtml,
+      edu_base: patchReport.eduBase,
+      details: patchReport.files.slice(0, 40)
+    },
+    note: "Cloudflare Pages biasanya deploy dalam 1–3 menit setelah push. API auto-patch: base → EDU + SDK inject."
   };
 }
 
