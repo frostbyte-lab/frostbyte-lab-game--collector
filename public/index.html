@@ -4075,86 +4075,188 @@
     }
 
     // ===== Deteksi AI =====
+    // Fokus: domain bawaan, endpoint API game, field balance (bukan frame-buster/eval generik)
+    const DETECT_API_PATHS = [
+      '/api/game/config',
+      '/api/game/init',
+      '/api/game/session',
+      '/api/game/balance',
+      '/api/game/bet',
+      '/api/game/spin',
+      '/api/game/result',
+      '/api/game/history',
+      '/api/game/collect',
+      '/api/game/bonus'
+    ];
+    const DETECT_BALANCE_KEYS = [
+      { key: 'balance', label: 'saldo saat ini' },
+      { key: 'demo_balance', label: 'saldo khusus demo' },
+      { key: 'initial_balance', label: 'saldo awal' },
+      { key: 'starting_balance', label: 'saldo ketika sesi dimulai' },
+      { key: 'virtual_balance', label: 'saldo virtual/demo' },
+      { key: 'default_balance', label: 'saldo bawaan' }
+    ];
+
+    function detectDomainsInText(text) {
+      const found = new Set();
+      const re = /https?:\/\/([a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,})(?::\d+)?/gi;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        found.add(m[1].toLowerCase());
+      }
+      // protocol-relative
+      const re2 = /\/\/([a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,})(?::\d+)?/gi;
+      while ((m = re2.exec(text)) !== null) {
+        const h = m[1].toLowerCase();
+        if (!h.includes(' ')) found.add(h);
+      }
+      return [...found].sort();
+    }
+
+    function detectApiPathsInText(text) {
+      const hits = [];
+      for (const p of DETECT_API_PATHS) {
+        if (text.includes(p)) hits.push(p);
+      }
+      // also loose match without leading path quirks
+      const loose = text.match(/\/api\/game\/[a-zA-Z0-9_-]+/g) || [];
+      for (const p of loose) {
+        if (!hits.includes(p) && DETECT_API_PATHS.includes(p)) hits.push(p);
+      }
+      return hits;
+    }
+
+    function detectBalanceKeysInText(text) {
+      const hits = [];
+      for (const item of DETECT_BALANCE_KEYS) {
+        const re = new RegExp('["\']?' + item.key + '["\']?\\s*[:=]', 'i');
+        if (re.test(text) || text.includes(item.key)) {
+          hits.push(item);
+        }
+      }
+      return hits;
+    }
+
     async function runDeteksiAI() {
-      // Buka preview log panel area / error log
       const logEl = document.getElementById('error-log');
-      const pm = document.getElementById('preview-mode');
-      const main = document.getElementById('workspace-main');
 
       if (!currentFile && !currentZip) {
         alert('Load File / buka file dulu, lalu Deteksi AI.');
         return;
       }
 
-      // Pastikan area log terlihat: jika belum preview mode, tampilkan log di analysis side atau buat ringkas di alert+appendLog
-      if (typeof appendLog === 'function') {
-        // clear soft
-      }
       if (logEl) logEl.innerHTML = '';
-      appendLog('🤖 Deteksi AI dimulai...', 'ok');
+      appendLog('🤖 Deteksi AI dimulai (domain · API game · balance)...', 'ok');
 
-      const issues = typeof analyzeCurrentCode === 'function' ? analyzeCurrentCode() : [];
-      let report = [];
-
-      // Scan beberapa file teks di ZIP (max 20)
       const paths = Object.keys(zipFileMap || {}).filter(p => {
-        const ext = p.split('.').pop().toLowerCase();
-        return ['html','htm','js','mjs','css','json','ts','tsx','jsx'].includes(ext);
-      }).slice(0, 20);
+        const ext = (p.split('.').pop() || '').toLowerCase();
+        return ['html', 'htm', 'js', 'mjs', 'css', 'json', 'ts', 'tsx', 'jsx', 'txt', 'xml'].includes(ext);
+      }).slice(0, 40);
+
+      // Always include active editor file
+      if (currentFile && !paths.includes(currentFile)) paths.unshift(currentFile);
+
+      const domainMap = new Map(); // domain -> [files]
+      const apiMap = new Map();    // path -> [files]
+      const balanceMap = new Map(); // key -> [files]
+      const fileSummaries = [];
 
       for (const p of paths) {
         try {
-          let code = openFiles.has(p) ? openFiles.get(p) : await zipFileMap[p].async('string');
-          if (!code || code.length > 500000) continue;
-          if (/top\.location|parent\.location|frameElement/i.test(code))
-            report.push({ file: p, level: 'err', msg: 'Frame-buster / anti-embed terdeteksi' });
-          if (/eval\s*\(|new Function\s*\(/i.test(code))
-            report.push({ file: p, level: 'warn', msg: 'Penggunaan eval/Function dinamis' });
-          if (/https?:\/\/(?!localhost)/i.test(code) && /\.(js|html?|css)$/i.test(p))
-            report.push({ file: p, level: 'warn', msg: 'URL absolut eksternal (offline mungkin putus)' });
-          if (/\bTODO\b|\bFIXME\b|\bXXX\b/.test(code))
-            report.push({ file: p, level: 'warn', msg: 'Ada TODO/FIXME di kode' });
-          const o = (code.match(/\{/g) || []).length, c = (code.match(/\}/g) || []).length;
-          if (/\.(js|css)$/i.test(p) && o !== c)
-            report.push({ file: p, level: 'err', msg: 'Kurung kurawal tidak seimbang {' + o + '} vs }' + c });
+          let code = '';
+          if (currentFile === p && editor) code = editor.getValue() || '';
+          else if (openFiles && openFiles.has(p)) code = openFiles.get(p) || '';
+          else if (zipFileMap[p]) code = await zipFileMap[p].async('string');
+          if (!code || code.length > 800000) continue;
+
+          const domains = detectDomainsInText(code);
+          const apis = detectApiPathsInText(code);
+          const bals = detectBalanceKeysInText(code);
+
+          domains.forEach(d => {
+            if (!domainMap.has(d)) domainMap.set(d, []);
+            domainMap.get(d).push(p);
+          });
+          apis.forEach(a => {
+            if (!apiMap.has(a)) apiMap.set(a, []);
+            apiMap.get(a).push(p);
+          });
+          bals.forEach(b => {
+            if (!balanceMap.has(b.key)) balanceMap.set(b.key, []);
+            balanceMap.get(b.key).push(p);
+          });
+
+          if (domains.length || apis.length || bals.length) {
+            fileSummaries.push({ file: p, domains, apis, bals });
+          }
         } catch (e) {
-          report.push({ file: p, level: 'warn', msg: 'Gagal baca: ' + e.message });
+          appendLog('Gagal baca: ' + p + ' — ' + e.message, 'warn');
         }
       }
 
-      issues.forEach(i => report.push({ file: currentFile || '(aktif)', level: 'err', msg: i }));
-
-      let aiExtra = '';
-      if (currentFile && editor) {
-        try {
-          const aiResult = await requestAI('analyze');
-          aiExtra = formatAIResult(aiResult);
-        } catch (e) {
-          appendLog('AI online tidak tersedia: ' + e.message + ' — lanjut deteksi lokal', 'warn');
-        }
-      }
-
-      if (!report.length && !aiExtra) {
-        appendLog('Deteksi AI: tidak ada temuan mencolok.', 'ok');
+      // --- Domain bawaan ---
+      appendLog('—— Deteksi domain (bawaan di kode) ——', 'ok');
+      if (!domainMap.size) {
+        appendLog('Domain: tidak ditemukan URL/host di file yang di-scan.', 'warn');
       } else {
-        report.forEach(r => appendLog('[' + r.file + '] ' + r.msg, r.level === 'err' ? 'err' : 'warn'));
-        if (aiExtra) appendLog('— Saran AI —\n' + aiExtra, 'ok');
+        [...domainMap.entries()].forEach(([d, files]) => {
+          appendLog('Domain: ' + d + '  ←  ' + files.slice(0, 5).join(', ') + (files.length > 5 ? ' …' : ''), 'ok');
+        });
       }
 
-      // Tunjukkan di preview log jika user mau
-      if (logEl && (report.length || aiExtra)) {
-        // already filled via appendLog
+      // --- API game ---
+      appendLog('—— Deteksi API /api/game/* ——', 'ok');
+      const missingApis = DETECT_API_PATHS.filter(p => !apiMap.has(p));
+      DETECT_API_PATHS.forEach(p => {
+        if (apiMap.has(p)) {
+          const files = apiMap.get(p);
+          appendLog('API ketemu: ' + p + '  ←  ' + files.slice(0, 4).join(', '), 'ok');
+        }
+      });
+      if (missingApis.length === DETECT_API_PATHS.length) {
+        appendLog('API: tidak ada endpoint /api/game/* dari daftar target.', 'warn');
+      } else if (missingApis.length) {
+        appendLog('API belum terlihat: ' + missingApis.join(', '), 'warn');
       }
-      // Buka AI panel juga
+
+      // --- Balance fields ---
+      appendLog('—— Deteksi field balance ——', 'ok');
+      let anyBal = false;
+      DETECT_BALANCE_KEYS.forEach(item => {
+        if (balanceMap.has(item.key)) {
+          anyBal = true;
+          const files = balanceMap.get(item.key);
+          appendLog(item.key + ' — ' + item.label + '  ←  ' + files.slice(0, 4).join(', '), 'ok');
+        }
+      });
+      if (!anyBal) {
+        appendLog('Balance: tidak ada key balance/demo_balance/initial_balance/dll.', 'warn');
+      }
+
+      // Panel AI response (ringkas, tanpa mengganti alur Custom AI)
       const aiPanel = document.getElementById('ai-panel');
       if (aiPanel) aiPanel.classList.remove('hidden');
       const aiResp = document.getElementById('ai-response');
       if (aiResp) {
+        const lines = [];
+        lines.push('=== Deteksi domain ===');
+        if (!domainMap.size) lines.push('(tidak ada)');
+        else [...domainMap.keys()].forEach(d => lines.push('• ' + d));
+        lines.push('', '=== Deteksi API ===');
+        DETECT_API_PATHS.forEach(p => {
+          lines.push((apiMap.has(p) ? '✓ ' : '· ') + p);
+        });
+        lines.push('', '=== Deteksi balance ===');
+        DETECT_BALANCE_KEYS.forEach(item => {
+          lines.push((balanceMap.has(item.key) ? '✓ ' : '· ') + item.key + ' — ' + item.label);
+        });
         aiResp.style.display = 'block';
-        aiResp.textContent = (report.map(r => '• [' + r.file + '] ' + r.msg).join('\n') || 'Tidak ada temuan lokal.') +
-          (aiExtra ? '\n\n— AI —\n' + aiExtra : '\n\nAI online tidak tersedia; hanya deteksi lokal yang ditampilkan.');
+        aiResp.textContent = lines.join('\n');
       }
-      alert('Deteksi AI selesai. Lihat log / panel AI untuk detail.');
+
+      const total = domainMap.size + apiMap.size + balanceMap.size;
+      appendLog('Deteksi AI selesai. Temuan unik: domain ' + domainMap.size + ', API ' + apiMap.size + ', balance ' + balanceMap.size + '.', total ? 'ok' : 'warn');
+      alert('Deteksi AI selesai.\nDomain: ' + domainMap.size + '\nAPI: ' + apiMap.size + '\nBalance: ' + balanceMap.size + '\n\nLihat log / panel AI.');
     }
 
     function analyzeCurrentCode() {
