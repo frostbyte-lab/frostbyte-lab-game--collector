@@ -3,7 +3,8 @@ import { analyzeGame, repairMetadata, recommendGames, chatAboutGames } from "./a
  * Game Collector Pro — Worker entry (modular Poin 5)
  */
 import { launch } from "@cloudflare/playwright";
-import { zipSync, strToU8 } from "fflate";
+import { zipSync, strToU8, unzipSync } from "fflate";
+import { uploadGameToEduNetwork, eduConfig } from "./hosting/edu-upload.js";
 
 import { safe } from "./lib/safe.js";
 import { TYPES, isExcluded, classifyResource } from "./classify/resource.js";
@@ -581,6 +582,73 @@ export default {
           "X-GC-Mode": "resume"
         }
       });
+    }
+
+    // --- Hosting: upload ZIP ke Edu-network (Git commit → Pages) ---
+    if (request.method === "GET" && url.pathname === "/api/hosting/config") {
+      const cfg = eduConfig(env);
+      return Response.json({
+        ok: true,
+        edu: cfg,
+        has_github_token: Boolean(env.GITHUB_TOKEN),
+        slots: { min: 1, max: 150 }
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/hosting/upload") {
+      let gameSlot = 0;
+      let commitMessage = "";
+      /** @type {Record<string, Uint8Array>} */
+      let filesMap = {};
+      const ct = (request.headers.get("content-type") || "").toLowerCase();
+      try {
+        if (ct.includes("multipart/form-data")) {
+          const form = await request.formData();
+          gameSlot = Number(form.get("game_slot") || form.get("slot") || 0);
+          commitMessage = String(form.get("message") || "").trim();
+          const zipFile = form.get("zip") || form.get("file");
+          if (!zipFile || typeof zipFile.arrayBuffer !== "function") {
+            return Response.json({ ok: false, error: "Field zip (file) wajib" }, { status: 400 });
+          }
+          const buf = new Uint8Array(await zipFile.arrayBuffer());
+          if (buf.byteLength < 22) {
+            return Response.json({ ok: false, error: "ZIP kosong / tidak valid" }, { status: 400 });
+          }
+          if (buf.byteLength > 80 * 1024 * 1024) {
+            return Response.json({ ok: false, error: "ZIP terlalu besar (maks ~80 MB raw)" }, { status: 400 });
+          }
+          let unzipped;
+          try {
+            unzipped = unzipSync(buf);
+          } catch (e) {
+            return Response.json({ ok: false, error: "Gagal extract ZIP: " + (e?.message || e) }, { status: 400 });
+          }
+          for (const [name, data] of Object.entries(unzipped)) {
+            if (name.endsWith("/")) continue;
+            filesMap[name] = data;
+          }
+        } else {
+          const bodyUp = await request.json();
+          gameSlot = Number(bodyUp.game_slot || bodyUp.slot || 0);
+          commitMessage = String(bodyUp.message || "").trim();
+          const files = bodyUp.files || {};
+          for (const [name, b64] of Object.entries(files)) {
+            if (typeof b64 !== "string") continue;
+            try {
+              const binary = atob(b64);
+              const out = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+              filesMap[name] = out;
+            } catch {
+              /* skip */
+            }
+          }
+        }
+      } catch (e) {
+        return Response.json({ ok: false, error: "Body tidak valid: " + (e?.message || e) }, { status: 400 });
+      }
+      const result = await uploadGameToEduNetwork(env, gameSlot, filesMap, commitMessage || undefined);
+      return Response.json(result, { status: result.ok ? 200 : result.status || 500 });
     }
 
     // Cloudflare browser collect

@@ -20,6 +20,10 @@
     "GH_OWNER": "frostbyte-lab",
     "GH_REPO": "frostbyte-lab-game--collector",
     "GH_WORKFLOW": "collect.yml",
-    "PUBLIC_APP_NAME": "Game Collector Pro"
+    "PUBLIC_APP_NAME": "Game Collector Pro",
+    "EDU_GH_OWNER": "frostbyte-lab",
+    "EDU_GH_REPO": "Edu-network",
+    "EDU_GH_BRANCH": "main",
+    "EDU_PAGES_URL": "https://ea29118c.edu-network.pages.dev"
   }
 }

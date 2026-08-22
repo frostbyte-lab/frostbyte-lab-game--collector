@@ -2455,32 +2455,52 @@
       <div id="hosting-mode">
         <div class="hosting-top">
           <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage()" title="Kembali ke editor">← Kembali ke Editor</button>
-          <strong style="color:#e2e8f0;font-size:14px;">Hosting</strong>
+          <strong style="color:#e2e8f0;font-size:14px;">Hosting → EDU Network</strong>
         </div>
+
         <div class="hosting-card">
           <h3>Status paket</h3>
-          <p id="hosting-status">Belum ada ZIP di Workspace. Load ZIP collect dulu, lalu kembali ke sini.</p>
+          <p id="hosting-status">Belum ada ZIP di Workspace. Load ZIP collect dulu, lalu upload ke slot game.</p>
         </div>
+
         <div class="hosting-card">
-          <h3>Opsi hosting</h3>
-          <ul>
-            <li><strong>Preview Hybrid</strong> — jalankan di browser dengan asset lokal + network server.</li>
-            <li><strong>Sandbox offline</strong> — preview tanpa jaringan (client-side saja).</li>
-            <li><strong>Unduh ZIP</strong> — host manual di Netlify / Cloudflare Pages / static server.</li>
-          </ul>
-          <div class="hosting-actions">
-            <button type="button" class="btn btn-success btn-sm" onclick="closeHostingPage(); startPreview('hybrid');">Buka Hybrid</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage(); startPreview('sandbox');">Buka Sandbox</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage(); repackage();">Unduh ZIP</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage();">← Kembali ke Editor</button>
+          <h3>Upload ke EDU Network (Git)</h3>
+          <p style="margin-bottom:10px;">
+            Commit file game ke repo <code>frostbyte-lab/Edu-network</code> path <code>game-N/</code>.
+            Cloudflare Pages akan deploy ke
+            <a href="https://ea29118c.edu-network.pages.dev/" target="_blank" rel="noopener" style="color:#22d3ee;">ea29118c.edu-network.pages.dev</a>.
+          </p>
+          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">Slot game (1–150)</label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+            <input type="number" id="hosting-slot" min="1" max="150" value="1"
+              style="width:100px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;" />
+            <span id="hosting-live-hint" style="font-size:12px;color:var(--text-muted);"></span>
           </div>
+          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">Pesan commit (opsional)</label>
+          <input type="text" id="hosting-commit-msg" placeholder="feat: update game-N dari Collector"
+            style="width:100%;max-width:480px;padding:8px 10px;margin-bottom:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;" />
+          <div class="hosting-actions">
+            <button type="button" class="btn btn-success btn-sm" id="btn-hosting-upload" onclick="uploadToEduNetwork()">
+              Upload ke EDU (Git)
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage(); startPreview('hybrid');">Preview Hybrid</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage(); repackage();">Unduh ZIP cadangan</button>
+          </div>
+          <p id="hosting-upload-log" style="margin-top:12px;font-size:12px;color:var(--text-secondary);white-space:pre-wrap;min-height:1.2em;"></p>
         </div>
+
         <div class="hosting-card">
-          <h3>Custom domain / server baru</h3>
-          <p>Collector ini sudah portable: ganti domain di Cloudflare Dashboard, API tetap <code>/api/*</code>. Lihat docs <code>CUSTOM_DOMAIN_AND_AUTO_DETECT.md</code> di repo.</p>
+          <h3>Setelah upload</h3>
+          <ul>
+            <li>Commit masuk branch <code>main</code> repo Edu-network.</li>
+            <li>Pages rebuild ~1–3 menit → buka <code>/game-N/</code>.</li>
+            <li>Batas per file 25 MB (sama validasi Edu-network).</li>
+          </ul>
         </div>
+
         <div class="hosting-brand-foot">Frostby<span class="te">TE</span> hostingers</div>
       </div>
+
 
       <!-- Full Preview Mode — wireframe v20 (acuan mockup) -->
       <div id="preview-mode" style="display:none; flex-direction:column; flex:1; overflow:hidden; background:var(--bg); padding:8px;">
@@ -5136,13 +5156,25 @@
       const st = document.getElementById('hosting-status');
       if (st) {
         if (typeof currentZip !== 'undefined' && currentZip) {
-          const n = currentZip.files ? Object.keys(currentZip.files).length : 0;
-          st.textContent = 'ZIP aktif di Workspace' + (n ? ' · ~' + n + ' path file' : '') + '. Siap di-preview atau diunduh untuk di-host.';
+          const n = currentZip.files ? Object.keys(currentZip.files).filter(function (k) {
+            return currentZip.files[k] && !currentZip.files[k].dir;
+          }).length : 0;
+          st.textContent = 'ZIP aktif di Workspace · ~' + n + ' file. Siap di-upload ke slot game EDU Network.';
         } else {
           st.textContent = 'Belum ada ZIP di Workspace. Load ZIP collect dulu, lalu kembali ke sini.';
         }
       }
+      const slotEl = document.getElementById('hosting-slot');
+      if (slotEl) {
+        slotEl.oninput = function () {
+          const n = Math.min(150, Math.max(1, parseInt(slotEl.value, 10) || 1));
+          const hint = document.getElementById('hosting-live-hint');
+          if (hint) hint.textContent = '→ https://ea29118c.edu-network.pages.dev/game-' + n + '/';
+        };
+        slotEl.oninput();
+      }
     }
+
     function closeHostingPage() {
       const host = document.getElementById('hosting-mode');
       const main = document.querySelector('#panel-workspace .workspace-main');
@@ -5151,6 +5183,70 @@
         host.style.display = 'none';
       }
       if (main) main.style.display = '';
+    }
+
+    async function uploadToEduNetwork() {
+      const log = document.getElementById('hosting-upload-log');
+      const btn = document.getElementById('btn-hosting-upload');
+      const slotEl = document.getElementById('hosting-slot');
+      const msgEl = document.getElementById('hosting-commit-msg');
+      const slot = Math.min(150, Math.max(1, parseInt(slotEl && slotEl.value, 10) || 1));
+
+      function setLog(t, ok) {
+        if (log) {
+          log.style.color = ok === true ? '#5ee1c0' : ok === false ? '#ff6b5e' : 'var(--text-secondary)';
+          log.textContent = t;
+        }
+      }
+
+      if (typeof currentZip === 'undefined' || !currentZip) {
+        setLog('Tidak ada ZIP di Workspace. Collect / load ZIP dulu.', false);
+        return;
+      }
+
+      if (btn) btn.disabled = true;
+      setLog('Menyiapkan ZIP untuk upload ke game-' + slot + '…');
+
+      try {
+        // Generate zip blob dari currentZip (JSZip)
+        const blob = await currentZip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        if (blob.size > 80 * 1024 * 1024) {
+          setLog('ZIP terlalu besar (' + Math.round(blob.size / 1024 / 1024) + ' MB). Maks ~80 MB.', false);
+          return;
+        }
+
+        const fd = new FormData();
+        fd.append('game_slot', String(slot));
+        fd.append('zip', blob, 'game-package.zip');
+        const msg = (msgEl && msgEl.value) ? msgEl.value.trim() : '';
+        if (msg) fd.append('message', msg);
+
+        setLog('Upload + commit ke GitHub Edu-network (game-' + slot + ')… ini bisa 30–120 detik.');
+
+        const res = await fetch('/api/hosting/upload', { method: 'POST', body: fd });
+        const data = await res.json().catch(function () { return {}; });
+
+        if (!res.ok || !data.ok) {
+          setLog('Gagal: ' + (data.error || res.status) + (data.detail ? '\n' + JSON.stringify(data.detail).slice(0, 400) : ''), false);
+          return;
+        }
+
+        setLog(
+          'Berhasil! ' + data.files + ' file → game-' + data.game_slot + '\n' +
+          'Commit: ' + (data.commit || '').slice(0, 12) + '\n' +
+          'Live (setelah Pages deploy ~1–3 mnt):\n' + data.live_url + '\n' +
+          (data.commit_url || ''),
+          true
+        );
+
+        if (data.live_url && window.confirm('Upload OK. Buka live URL sekarang?\n' + data.live_url)) {
+          window.open(data.live_url, '_blank', 'noopener');
+        }
+      } catch (e) {
+        setLog('Error: ' + (e && e.message ? e.message : e), false);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     // ========== Live capture UI + incomplete panel ==========
