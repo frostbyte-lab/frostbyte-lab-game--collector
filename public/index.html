@@ -2111,9 +2111,26 @@
       .gc-incomplete .btn-ws { background: #475569; color: #fff; }
 
 
-        .gc-install-app { position: fixed; right: 16px; bottom: 16px; z-index: 1200; display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(125,211,252,.45); border-radius: 999px; background: linear-gradient(135deg,#2563eb,#0891b2); color: #fff; font: 600 12px/1 system-ui,sans-serif; box-shadow: 0 10px 28px rgba(8,47,73,.42); cursor: pointer; transition: transform .2s ease, filter .2s ease; }
-    .gc-install-app:hover { transform: translateY(-2px); filter: brightness(1.08); }
-    .gc-install-app[hidden] { display: none; }
+    .gc-install-app {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 14px; border: 1px solid rgba(125,211,252,.45); border-radius: 999px;
+      background: linear-gradient(135deg,#2563eb,#0891b2); color: #fff;
+      font: 600 12px/1 system-ui,sans-serif; cursor: pointer;
+      transition: transform .2s ease, filter .2s ease;
+      box-shadow: 0 6px 16px rgba(8,47,73,.28);
+    }
+    .gc-install-app:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    .gc-install-app[hidden] { display: none !important; }
+    .gc-install-app.nav {
+      padding: 6px 10px; font-size: 11px; box-shadow: none;
+      white-space: nowrap;
+    }
+    .gc-install-under-repair {
+      margin-top: 10px; display: flex; justify-content: center;
+    }
+    @media (max-width: 640px) {
+      .gc-install-app.nav { padding: 5px 8px; font-size: 10px; }
+    }
     .gc-update-note { position: fixed; left: 50%; bottom: 18px; z-index: 1201; transform: translateX(-50%); padding: 10px 14px; border: 1px solid rgba(74,222,128,.4); border-radius: 10px; background: #123322; color: #d1fae5; font-size: 12px; box-shadow: 0 10px 28px rgba(0,0,0,.28); }
     .gc-update-note[hidden] { display: none; }
 
@@ -2219,7 +2236,6 @@
   <div class="gc-loading-overlay" id="gc-loading-overlay" hidden aria-live="polite" aria-busy="true">
       <div class="gc-loading-card"><div class="gc-loading-spinner" aria-hidden="true"></div><div class="gc-loading-title" id="gc-loading-title">Memproses file...</div><div class="gc-loading-detail" id="gc-loading-detail">Mohon tunggu sebentar</div><div class="gc-loading-track" aria-hidden="true"><div class="gc-loading-bar"></div></div></div>
     </div>
-      <button type="button" class="gc-install-app" id="gc-install-app" hidden aria-label="Instal Game Collector Pro ke HP">＋ Pasang ke HP</button>
   <div class="gc-update-note" id="gc-update-note" hidden role="status"></div>
   <div class="app-container">
     <!-- Header -->
@@ -2240,6 +2256,7 @@
         <button class="nav-btn active" data-panel="collect">Collect</button>
         <button class="nav-btn" data-panel="workspace">Workspace</button>
         <button class="nav-btn" data-panel="history">History</button>
+        <button type="button" class="gc-install-app nav" id="gc-install-app" hidden aria-label="Instal Game Collector Pro ke HP">＋ Pasang ke HP</button>
       </nav>
     </header>
 
@@ -2315,6 +2332,9 @@
             <svg class="icon ui-icon-feature" aria-hidden="true"><use href="#icon-tools"></use></svg>
             <div class="title">Auto Repair</div>
             <div class="desc">Perbaiki dependency otomatis</div>
+            <div class="gc-install-under-repair">
+              <button type="button" class="gc-install-app" id="gc-install-app-feature" hidden aria-label="Instal Game Collector Pro ke HP">＋ Pasang ke HP</button>
+            </div>
           </div>
         </div>
       </div>
@@ -5361,9 +5381,15 @@
   
       // ===== PWA install + automatic update =====
       (function setupPWA() {
-        const installButton = document.getElementById('gc-install-app');
+        const installButtons = [
+          document.getElementById('gc-install-app'),
+          document.getElementById('gc-install-app-feature')
+        ].filter(Boolean);
         const updateNote = document.getElementById('gc-update-note');
         let deferredInstall = null;
+        const setInstallVisible = (visible) => {
+          installButtons.forEach((btn) => { btn.hidden = !visible; });
+        };
         const showUpdateNote = (message) => {
           if (!updateNote) return;
           updateNote.textContent = message;
@@ -5373,9 +5399,9 @@
         window.addEventListener('beforeinstallprompt', (event) => {
           event.preventDefault();
           deferredInstall = event;
-          if (installButton) installButton.hidden = false;
+          setInstallVisible(true);
         });
-        installButton?.addEventListener('click', async () => {
+        const onInstallClick = async () => {
           if (!deferredInstall) {
             showUpdateNote('Di Chrome HP: buka menu ⋮ lalu pilih “Tambahkan ke layar utama”.');
             return;
@@ -5383,9 +5409,10 @@
           deferredInstall.prompt();
           await deferredInstall.userChoice.catch(() => null);
           deferredInstall = null;
-          installButton.hidden = true;
-        });
-        window.addEventListener('appinstalled', () => { deferredInstall = null; if (installButton) installButton.hidden = true; showUpdateNote('Game Collector Pro sudah terpasang di HP.'); });
+          setInstallVisible(false);
+        };
+        installButtons.forEach((btn) => btn.addEventListener('click', onInstallClick));
+        window.addEventListener('appinstalled', () => { deferredInstall = null; setInstallVisible(false); showUpdateNote('Game Collector Pro sudah terpasang di HP.'); });
         if (!('serviceWorker' in navigator)) return;
         navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => {
           const hadController = Boolean(navigator.serviceWorker.controller);
