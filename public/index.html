@@ -5584,9 +5584,14 @@
 
             if (data.conclusion === 'success' && data.artifact && data.artifact.id) {
               var artSizeMb = data.artifact.size ? (data.artifact.size / 1024 / 1024).toFixed(1) : '?';
+              var artId = data.artifact.id;
               statusEl.textContent = 'Status: Selesai — mengunduh ZIP (~' + artSizeMb + ' MB)...';
               try {
-                const zipRes = await fetch('/api/github/artifact?artifact_id=' + encodeURIComponent(data.artifact.id));
+                var artUrl = '/api/github/artifact?artifact_id=' + encodeURIComponent(artId);
+                var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                var to = setTimeout(function () { try { if (ctrl) ctrl.abort(); } catch (_) {} }, 180000);
+                const zipRes = await fetch(artUrl, ctrl ? { signal: ctrl.signal } : undefined);
+                clearTimeout(to);
                 if (!zipRes.ok) {
                   var errTxt = '';
                   try { errTxt = await zipRes.text(); } catch (_) {}
@@ -5598,20 +5603,43 @@
                   statusEl.textContent = 'Status: Selesai tapi ZIP kosong (' + (blob && blob.size) + ' byte)';
                   return;
                 }
-                const zipInput = document.getElementById('zip-input');
-                if (!zipInput) throw new Error('Input ZIP tidak ditemukan');
-                const transfer = new DataTransfer();
-                transfer.items.add(new File([blob], 'game-resources.zip', { type: 'application/zip' }));
-                zipInput.files = transfer.files;
-                zipInput.dispatchEvent(new Event('change', { bubbles: true }));
-                statusEl.textContent = 'Status: Selesai — ZIP ' + (blob.size / 1024 / 1024).toFixed(1) + ' MB dimuat ke Workspace';
-                // buka tab Workspace otomatis jika ada tombol nav
+                var sizeMb = (blob.size / 1024 / 1024).toFixed(1);
+                // 1) Unduh file ke HP (cadangan kalau auto-load Workspace gagal di Android)
                 try {
-                  var wsBtn = document.querySelector('.nav-btn[data-panel="workspace"], button[onclick*="workspace"]');
-                  if (wsBtn) wsBtn.click();
+                  var a = document.createElement('a');
+                  a.href = URL.createObjectURL(blob);
+                  a.download = 'game-resources.zip';
+                  document.body.appendChild(a);
+                  a.click();
+                  setTimeout(function () { try { URL.revokeObjectURL(a.href); } catch (_) {} }, 60000);
+                  a.remove();
                 } catch (_) {}
+                // 2) Coba load ke Workspace
+                var loadedWs = false;
+                try {
+                  const zipInput = document.getElementById('zip-input');
+                  if (zipInput && typeof DataTransfer !== 'undefined') {
+                    const transfer = new DataTransfer();
+                    transfer.items.add(new File([blob], 'game-resources.zip', { type: 'application/zip' }));
+                    zipInput.files = transfer.files;
+                    zipInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    loadedWs = true;
+                    try {
+                      var wsBtn = document.querySelector('.nav-btn[data-panel="workspace"], button[onclick*="workspace"]');
+                      if (wsBtn) wsBtn.click();
+                    } catch (_) {}
+                  }
+                } catch (_) { loadedWs = false; }
+                if (loadedWs) {
+                  statusEl.textContent = 'Status: Selesai — ZIP ' + sizeMb + ' MB diunduh & dimuat ke Workspace';
+                } else {
+                  statusEl.textContent = 'Status: Selesai — ZIP ' + sizeMb + ' MB diunduh ke Download. Buka Workspace → Load ZIP manual.';
+                }
               } catch (dlErr) {
-                statusEl.textContent = 'Status: Selesai tapi unduh gagal — ' + (dlErr && dlErr.message ? dlErr.message : dlErr) + '. Coba WiFi / Capture (Cloudflare).';
+                var msg = (dlErr && dlErr.name === 'AbortError')
+                  ? 'timeout unduh (jaringan lambat). Coba WiFi / Capture (Cloudflare).'
+                  : (dlErr && dlErr.message ? dlErr.message : String(dlErr));
+                statusEl.textContent = 'Status: Selesai tapi unduh gagal — ' + msg;
               }
             } else {
               statusEl.textContent = 'Status: Selesai (conclusion: ' + (data.conclusion || '?') + ') — tidak ada artifact';
