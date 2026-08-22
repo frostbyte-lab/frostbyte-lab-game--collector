@@ -644,6 +644,9 @@ export default {
     const manifest = [];
     const seen = new Set();
     const zipFiles = {};
+    const recentCapture = [];
+    let lastCaptureReport = 0;
+    const expectedRefs = new Set(); // skema/referensi yang ditemukan di HTML/JS
     // Tracker ukuran untuk guard tanpa R2
     const sizeState = { rawBytes: 0, skippedLarge: 0, stoppedForSize: false };
 
@@ -764,6 +767,35 @@ export default {
             entry.apiTopKeys = apiMeta.topKeys;
           }
           manifest.push(entry);
+          // Live capture ticker (throttle progress updates)
+          try {
+            recentCapture.push({
+              name: name.slice(0, 80),
+              path: localPath,
+              type,
+              category: classified.category,
+              size: buffer.byteLength,
+              apiKind: apiMeta?.kind || null
+            });
+            if (recentCapture.length > 40) recentCapture.shift();
+            const now = Date.now();
+            if (now - lastCaptureReport > 700) {
+              lastCaptureReport = now;
+              const expectedHint = expectedRefs.size || null;
+              report(
+                Math.min(48, 12 + Math.floor(manifest.length / 3)),
+                "capture",
+                `Menangkap resource… ${manifest.length} file`,
+                {
+                  files: manifest.length,
+                  recentFiles: recentCapture.slice(-18).reverse(),
+                  schema: expectedHint
+                    ? { expectedRefs: expectedHint, captured: manifest.length, gap: Math.max(0, expectedHint - manifest.length) }
+                    : { captured: manifest.length }
+                }
+              ).catch(() => {});
+            }
+          } catch {}
         } catch {}
       });
 
@@ -1262,15 +1294,65 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
         );
       }
 
-      await report(100, "done", "Selesai", { files: manifest.length, done: true });
+      // Kelengkapan vs skema (referensi di HTML/JS + stillMissing fill)
+      const stillN = (fillReport.stillMissing || []).length;
+      const missingFound = fillReport.missingFound || 0;
+      const overallScore = analysis?.scores?.overall;
+      const incomplete =
+        stillN > 0 ||
+        (missingFound > 0 && (fillReport.fetched || 0) < missingFound) ||
+        (typeof overallScore === "number" && overallScore < 55) ||
+        gameCount === 0;
+      const suggestions = [];
+      if (stillN > 0) {
+        suggestions.push("Jalankan Resume missing untuk fetch sisa referensi (" + stillN + " URL).");
+      }
+      if (gameCount < 5) {
+        suggestions.push("Capture ulang dengan Collect via GitHub (auto_spins=3) agar spin/balance ikut tertangkap.");
+      }
+      if ((apiCount || 0) === 0) {
+        suggestions.push("Belum ada response API. Aktifkan Auto Spin / klik Spin di game lalu collect lagi.");
+      }
+      if (typeof overallScore === "number" && overallScore < 70) {
+        suggestions.push("Skor kelengkapan " + overallScore + "/100 — cek panel Workspace → kelengkapan (symbols/paytable/audio).");
+      }
+      if (!incomplete) {
+        suggestions.push("Paket cukup lengkap. Load ZIP di Workspace → Preview Hybrid.");
+      }
+      const completeness = {
+        incomplete: Boolean(incomplete),
+        overallScore: overallScore ?? null,
+        expectedRefs: missingFound + manifest.length,
+        captured: manifest.length,
+        stillMissing: stillN,
+        fillFound: missingFound,
+        fillOk: fillReport.fetched || 0,
+        game: gameCount,
+        api: apiCount,
+        server: serverCount
+      };
+      await report(100, incomplete ? "done_incomplete" : "done", incomplete ? "Selesai — ada file kurang" : "Selesai", {
+        files: manifest.length,
+        done: true,
+        recentFiles: recentCapture.slice(-20).reverse(),
+        completeness,
+        suggestions,
+        schema: {
+          expectedFromRefs: missingFound,
+          captured: manifest.length,
+          gap: stillN
+        }
+      });
 
       const commonHeaders = {
         "X-GC-Ok": "1",
+        "X-GC-Incomplete": incomplete ? "1" : "0",
         "X-GC-Id": id,
         "X-GC-Progress-Id": progressId,
         "X-GC-Session-Id": resumeSessionId || "",
-        "X-GC-Still-Missing": String((fillReport.stillMissing || []).length),
+        "X-GC-Still-Missing": String(stillN),
         "X-GC-Files": String(manifest.length),
+        "X-GC-Overall-Score": overallScore != null ? String(overallScore) : "",
         "X-GC-Zip-Size": String(zipData.byteLength),
         "X-GC-Raw-Bytes": String(rawTotal),
         "X-GC-Smart-Rewritten": String(smart.rewritten || 0),

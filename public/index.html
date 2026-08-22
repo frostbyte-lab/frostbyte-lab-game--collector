@@ -2083,6 +2083,33 @@
       .gc-loading-bar { width: 32%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #22d3ee, #2563eb); background-size: 220% 100%; animation: gc-progress 1.25s ease-in-out infinite; }
       @keyframes gc-spin { to { transform: rotate(360deg); } }
       @keyframes gc-progress { 0% { transform: translateX(-120%); background-position: 0 0; } 100% { transform: translateX(330%); background-position: 100% 0; } }
+      .gc-live-capture { margin-top: 12px; border: 1px solid rgba(34,211,238,.25); border-radius: 12px; background: rgba(15,23,42,.65); overflow: hidden; }
+      .gc-live-capture.hidden { display: none; }
+      .gc-live-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid rgba(148,163,184,.15); }
+      .gc-live-head .title { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+      .gc-live-head .meta { font-size: 12px; color: #94a3b8; }
+      .gc-live-bar-wrap { height: 4px; background: rgba(30,41,59,.9); }
+      .gc-live-bar { height: 100%; width: 0%; background: linear-gradient(90deg,#2563eb,#22d3ee); transition: width .35s ease; }
+      .gc-live-files { max-height: 220px; overflow-y: auto; padding: 6px 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+      .gc-live-file { display: flex; gap: 8px; align-items: center; padding: 5px 14px; color: #cbd5e1; animation: gc-file-in .35s ease; border-left: 2px solid transparent; }
+      .gc-live-file.game { border-left-color: #22c55e; }
+      .gc-live-file.api { border-left-color: #f59e0b; }
+      .gc-live-file.server { border-left-color: #a78bfa; }
+      .gc-live-file .tag { flex-shrink: 0; font-size: 10px; text-transform: uppercase; color: #64748b; min-width: 52px; }
+      .gc-live-file .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gc-live-file .sz { margin-left: auto; color: #64748b; flex-shrink: 0; }
+      @keyframes gc-file-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+      .gc-incomplete { margin-top: 12px; border: 1px solid rgba(239,68,68,.45); background: rgba(127,29,29,.25); border-radius: 12px; padding: 14px 16px; }
+      .gc-incomplete.hidden { display: none; }
+      .gc-incomplete h4 { margin: 0 0 6px; color: #fca5a5; font-size: 14px; }
+      .gc-incomplete p { margin: 0 0 8px; color: #fecaca; font-size: 13px; line-height: 1.45; }
+      .gc-incomplete ul { margin: 0 0 10px; padding-left: 18px; color: #fed7aa; font-size: 12.5px; }
+      .gc-incomplete .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+      .gc-incomplete .btn-sm { font-size: 12px; padding: 6px 12px; border-radius: 8px; border: 0; cursor: pointer; }
+      .gc-incomplete .btn-resume { background: #2563eb; color: #fff; }
+      .gc-incomplete .btn-gh { background: #16a34a; color: #fff; }
+      .gc-incomplete .btn-ws { background: #475569; color: #fff; }
+
 
         .gc-install-app { position: fixed; right: 16px; bottom: 16px; z-index: 1200; display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(125,211,252,.45); border-radius: 999px; background: linear-gradient(135deg,#2563eb,#0891b2); color: #fff; font: 600 12px/1 system-ui,sans-serif; box-shadow: 0 10px 28px rgba(8,47,73,.42); cursor: pointer; transition: transform .2s ease, filter .2s ease; }
     .gc-install-app:hover { transform: translateY(-2px); filter: brightness(1.08); }
@@ -2253,6 +2280,24 @@
 
         <div class="collect-card" style="padding: 16px;">
           <div id="status" class="status-box">Status: Ready</div>
+          <div id="gc-live-capture" class="gc-live-capture hidden">
+            <div class="gc-live-head">
+              <span class="title">File tertangkap (live)</span>
+              <span class="meta" id="gc-live-meta">0 file</span>
+            </div>
+            <div class="gc-live-bar-wrap"><div class="gc-live-bar" id="gc-live-bar"></div></div>
+            <div class="gc-live-files" id="gc-live-files"></div>
+          </div>
+          <div id="gc-incomplete" class="gc-incomplete hidden">
+            <h4>⚠ Collect belum lengkap</h4>
+            <p id="gc-incomplete-msg">Beberapa aset/referensi dari skema awal belum tertangkap.</p>
+            <ul id="gc-incomplete-list"></ul>
+            <div class="actions">
+              <button type="button" class="btn-sm btn-resume" onclick="gcResumeMissing()">Resume missing</button>
+              <button type="button" class="btn-sm btn-gh" onclick="runGitHubCollect()">Collect via GitHub (auto-spin)</button>
+              <button type="button" class="btn-sm btn-ws" onclick="document.querySelector('[data-panel=workspace]')?.click()">Buka Workspace</button>
+            </div>
+          </div>
         </div>
 
         <div class="feature-grid">
@@ -4944,6 +4989,101 @@
       appendLog('Pack Game: ZIP diunduh (game-repacked.zip)', 'ok');
     }
 
+
+    // ========== Live capture UI + incomplete panel ==========
+    function gcShowLiveCapture(show) {
+      const el = document.getElementById('gc-live-capture');
+      if (!el) return;
+      el.classList.toggle('hidden', !show);
+      if (show) {
+        const list = document.getElementById('gc-live-files');
+        if (list) list.innerHTML = '';
+      }
+    }
+    function gcRenderLiveFiles(files, total, pct) {
+      const list = document.getElementById('gc-live-files');
+      const meta = document.getElementById('gc-live-meta');
+      const bar = document.getElementById('gc-live-bar');
+      const wrap = document.getElementById('gc-live-capture');
+      if (wrap) wrap.classList.remove('hidden');
+      if (meta) meta.textContent = (total || (files && files.length) || 0) + ' file' + (pct ? ' · ' + pct + '%' : '');
+      if (bar) bar.style.width = Math.max(0, Math.min(100, Number(pct) || 0)) + '%';
+      if (!list || !Array.isArray(files)) return;
+      // Render newest first; keep DOM light
+      const slice = files.slice(0, 24);
+      list.innerHTML = slice.map(function (f) {
+        const cat = (f.category || f.type || 'other');
+        const nm = (f.name || f.path || '?');
+        const sz = f.size ? (f.size > 1024 ? Math.round(f.size / 1024) + ' KB' : f.size + ' B') : '';
+        const tag = (f.apiKind || cat || '').toString().slice(0, 10);
+        return '<div class="gc-live-file ' + cat + '"><span class="tag">' + tag + '</span><span class="name" title="' + nm + '">' + nm + '</span><span class="sz">' + sz + '</span></div>';
+      }).join('');
+    }
+    function gcShowIncomplete(completeness, suggestions) {
+      const box = document.getElementById('gc-incomplete');
+      if (!box) return;
+      if (!completeness || !completeness.incomplete) {
+        box.classList.add('hidden');
+        return;
+      }
+      box.classList.remove('hidden');
+      const msg = document.getElementById('gc-incomplete-msg');
+      const ul = document.getElementById('gc-incomplete-list');
+      const parts = [];
+      if (completeness.captured != null) parts.push(completeness.captured + ' file tertangkap');
+      if (completeness.stillMissing) parts.push(completeness.stillMissing + ' masih missing');
+      if (completeness.game != null) parts.push('game ' + completeness.game);
+      if (completeness.api != null) parts.push('api ' + completeness.api);
+      if (completeness.overallScore != null) parts.push('skor ' + completeness.overallScore);
+      if (msg) msg.textContent = 'Hasil collect kurang dari skema/referensi awal. ' + parts.join(' · ') + '.';
+      if (ul) {
+        const tips = suggestions && suggestions.length ? suggestions : [
+          'Resume missing untuk melengkapi referensi.',
+          'Collect via GitHub dengan auto_spins agar API spin ikut.',
+          'Buka Workspace → cek kelengkapan.json.'
+        ];
+        ul.innerHTML = tips.map(function (t) { return '<li>' + t + '</li>'; }).join('');
+      }
+    }
+    async function gcResumeMissing() {
+      const statusEl = document.getElementById('status');
+      const sid = window.__gcLastSessionId;
+      if (!sid) {
+        alert('Session resume tidak tersedia. Collect ulang dulu atau load kelengkapan.json di Workspace.');
+        return;
+      }
+      statusEl.textContent = 'Status: Resume missing...';
+      try {
+        const res = await fetch('/api/resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sid })
+        });
+        const ct = res.headers.get('Content-Type') || '';
+        if (ct.includes('zip') || ct.includes('octet-stream')) {
+          const blob = await res.blob();
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'game-resume.zip';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          statusEl.textContent = 'Status: Resume selesai — ZIP diunduh';
+          gcShowIncomplete(null);
+          return;
+        }
+        const data = await res.json().catch(function () { return {}; });
+        statusEl.textContent = 'Status: Resume — ' + (data.message || res.status);
+        if (data.stillMissing && data.stillMissing.length) {
+          gcShowIncomplete({ incomplete: true, stillMissing: data.stillMissing.length, captured: data.fetched }, [
+            'Masih ada ' + data.stillMissing.length + ' URL gagal. Coba Collect via GitHub.'
+          ]);
+        }
+      } catch (e) {
+        statusEl.textContent = 'Status: Resume error — ' + e.message;
+      }
+    }
+
     // ========== Collect via Cloudflare (Playwright) ==========
     // ========== Collect via Cloudflare (Playwright) ==========
     // Semua status & unduhan tetap di web ini — tidak buka tab GitHub.
@@ -4964,7 +5104,9 @@
       statusEl.textContent = 'Status: Collecting (Cloudflare)...';
       try {
         const progressId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-        // Optional: poll progress di web
+        gcShowLiveCapture(true);
+        gcRenderLiveFiles([], 0, 2);
+        // Poll progress + live file list
         const progressTimer = setInterval(async () => {
           try {
             const pr = await fetch('/api/progress?id=' + encodeURIComponent(progressId));
@@ -4972,9 +5114,15 @@
             if (pd && (pd.label || pd.phase)) {
               statusEl.textContent = 'Status: ' + (pd.phase || '') + (pd.label ? ' — ' + pd.label : '') + (pd.pct != null ? ' (' + pd.pct + '%)' : '');
             }
+            if (pd) {
+              gcRenderLiveFiles(pd.recentFiles || [], pd.files || 0, pd.pct || 0);
+              if (pd.done && pd.completeness && pd.completeness.incomplete) {
+                gcShowIncomplete(pd.completeness, pd.suggestions || []);
+              }
+            }
             if (pd && pd.done) clearInterval(progressTimer);
           } catch (_) {}
-        }, 800);
+        }, 600);
 
         const res = await fetch('/api/collect', {
           method: 'POST',
@@ -4995,6 +5143,16 @@
 
         const ct = res.headers.get('Content-Type') || '';
         if (ct.includes('application/zip') || ct.includes('octet-stream')) {
+          const incomplete = res.headers.get('X-GC-Incomplete') === '1';
+          const stillMissing = parseInt(res.headers.get('X-GC-Still-Missing') || '0', 10) || 0;
+          const gameFiles = parseInt(res.headers.get('X-GC-Game-Files') || '0', 10) || 0;
+          const apiFiles = parseInt(res.headers.get('X-GC-Api-Files') || '0', 10) || 0;
+          const totalFiles = parseInt(res.headers.get('X-GC-Files') || '0', 10) || 0;
+          const overall = res.headers.get('X-GC-Overall-Score') || '';
+          const sessionId = res.headers.get('X-GC-Session-Id') || '';
+          window.__gcLastSessionId = sessionId;
+          window.__gcLastCollectMeta = { stillMissing, gameFiles, apiFiles, totalFiles, overall, incomplete };
+
           const blob = await res.blob();
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
@@ -5003,7 +5161,36 @@
           a.click();
           a.remove();
           URL.revokeObjectURL(a.href);
-          statusEl.textContent = 'Status: Selesai — ZIP diunduh (tetap di web ini)';
+
+          // Auto-load ZIP ke Workspace
+          try {
+            const zipInput = document.getElementById('zip-input');
+            if (zipInput) {
+              const transfer = new DataTransfer();
+              transfer.items.add(new File([blob], 'game-package.zip', { type: 'application/zip' }));
+              zipInput.files = transfer.files;
+              zipInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          } catch (_) {}
+
+          if (incomplete || stillMissing > 0) {
+            statusEl.textContent = 'Status: Selesai tapi BELUM LENGKAP — ' + totalFiles + ' file · missing ' + stillMissing + (overall ? ' · skor ' + overall : '');
+            gcShowIncomplete({
+              incomplete: true,
+              stillMissing,
+              captured: totalFiles,
+              game: gameFiles,
+              api: apiFiles,
+              overallScore: overall ? Number(overall) : null
+            }, [
+              stillMissing > 0 ? 'Resume missing: fetch ' + stillMissing + ' referensi yang kurang.' : null,
+              apiFiles === 0 ? 'Belum ada API spin/balance — pakai Collect via GitHub + auto_spins.' : null,
+              'Load ZIP di Workspace, cek kelengkapan.json / api-map.'
+            ].filter(Boolean));
+          } else {
+            statusEl.textContent = 'Status: Selesai — ZIP diunduh & dimuat ke Workspace (' + totalFiles + ' file)';
+            gcShowIncomplete(null);
+          }
           return;
         }
 
