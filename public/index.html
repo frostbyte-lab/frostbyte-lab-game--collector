@@ -348,14 +348,74 @@
     }
 
     .workspace-header {
-      padding: 16px 20px;
+      padding: 6px 12px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 8px;
+      flex-wrap: nowrap;
+      min-height: 0;
+    }
+    .workspace-header .workspace-actions {
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+    .workspace-header .btn-sm {
+      padding: 5px 10px !important;
+      font-size: 11px !important;
+    }
+    .fb-labb-name {
+      font-size: 15px !important;
+    }
+    /* Hosting page (dalam workspace) */
+    #hosting-mode {
+      display: none;
+      flex-direction: column;
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: auto;
+      background: var(--bg);
+      padding: 12px 14px 20px;
+    }
+    #hosting-mode.active {
+      display: flex;
+    }
+    .hosting-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
       flex-wrap: wrap;
+    }
+    .hosting-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .hosting-card h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      color: #e2e8f0;
+    }
+    .hosting-card p, .hosting-card li {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .hosting-card ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+    .hosting-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
     }
 
     .workspace-actions {
@@ -503,10 +563,14 @@
       justify-content: center;
     }
     .workspace-header {
-      padding: 10px 14px !important;
+      padding: 4px 10px !important;
       background: var(--surface) !important;
       border-bottom: 1px solid var(--border) !important;
+      gap: 6px !important;
     }
+    .fb-labb-title { gap: 6px !important; }
+    .fb-labb-name { font-size: 14px !important; }
+    .workspace-actions { gap: 5px !important; }
     .file-tree {
       flex: 1 1 0;
       min-height: 0;
@@ -2368,8 +2432,39 @@
         </div>
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-hosting-top" onclick="openHostingPage()" title="Hosting paket game">Hosting</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Custom AI — multi API failover">Custom AI</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
+        </div>
+      </div>
+
+      <!-- Halaman Hosting (kembali → editor) -->
+      <div id="hosting-mode">
+        <div class="hosting-top">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage()" title="Kembali ke editor">← Kembali ke Editor</button>
+          <strong style="color:#e2e8f0;font-size:14px;">Hosting</strong>
+        </div>
+        <div class="hosting-card">
+          <h3>Status paket</h3>
+          <p id="hosting-status">Belum ada ZIP di Workspace. Load ZIP collect dulu, lalu kembali ke sini.</p>
+        </div>
+        <div class="hosting-card">
+          <h3>Opsi hosting</h3>
+          <ul>
+            <li><strong>Preview Hybrid</strong> — jalankan di browser dengan asset lokal + network server.</li>
+            <li><strong>Sandbox offline</strong> — preview tanpa jaringan (client-side saja).</li>
+            <li><strong>Unduh ZIP</strong> — host manual di Netlify / Cloudflare Pages / static server.</li>
+          </ul>
+          <div class="hosting-actions">
+            <button type="button" class="btn btn-success btn-sm" onclick="closeHostingPage(); startPreview('hybrid');">Buka Hybrid</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage(); startPreview('sandbox');">Buka Sandbox</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage(); repackage();">Unduh ZIP</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage();">← Kembali ke Editor</button>
+          </div>
+        </div>
+        <div class="hosting-card">
+          <h3>Custom domain / server baru</h3>
+          <p>Collector ini sudah portable: ganti domain di Cloudflare Dashboard, API tetap <code>/api/*</code>. Lihat docs <code>CUSTOM_DOMAIN_AND_AUTO_DETECT.md</code> di repo.</p>
         </div>
       </div>
 
@@ -4622,6 +4717,7 @@
 
     function exitPreviewMode() {
       releasePreviewAssets();
+      if (typeof closeHostingPage === 'function') closeHostingPage();
       const pm = document.getElementById('preview-mode');
       const main = document.getElementById('workspace-main');
       const wh = document.querySelector('#panel-workspace .workspace-header');
@@ -4726,6 +4822,7 @@
         return;
       }
       releasePreviewAssets();
+      if (typeof closeHostingPage === 'function') closeHostingPage();
 
       // Masuk mode preview split (tetap di Workspace, tidak pindah tab browser)
       const pm = document.getElementById('preview-mode');
@@ -5008,6 +5105,39 @@
       appendLog('Pack Game: ZIP diunduh (game-repacked.zip)', 'ok');
     }
 
+
+
+    function openHostingPage() {
+      const host = document.getElementById('hosting-mode');
+      const main = document.querySelector('#panel-workspace .workspace-main') || document.getElementById('workspace-main');
+      const prev = document.getElementById('preview-mode');
+      const wh = document.querySelector('#panel-workspace .workspace-header');
+      if (prev) prev.style.display = 'none';
+      if (main) main.style.display = 'none';
+      if (wh) wh.style.display = '';
+      if (host) {
+        host.classList.add('active');
+        host.style.display = 'flex';
+      }
+      const st = document.getElementById('hosting-status');
+      if (st) {
+        if (typeof currentZip !== 'undefined' && currentZip) {
+          const n = currentZip.files ? Object.keys(currentZip.files).length : 0;
+          st.textContent = 'ZIP aktif di Workspace' + (n ? ' · ~' + n + ' path file' : '') + '. Siap di-preview atau diunduh untuk di-host.';
+        } else {
+          st.textContent = 'Belum ada ZIP di Workspace. Load ZIP collect dulu, lalu kembali ke sini.';
+        }
+      }
+    }
+    function closeHostingPage() {
+      const host = document.getElementById('hosting-mode');
+      const main = document.querySelector('#panel-workspace .workspace-main');
+      if (host) {
+        host.classList.remove('active');
+        host.style.display = 'none';
+      }
+      if (main) main.style.display = '';
+    }
 
     // ========== Live capture UI + incomplete panel ==========
     function gcShowLiveCapture(show) {
