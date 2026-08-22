@@ -2256,7 +2256,6 @@
         <button class="nav-btn active" data-panel="collect">Collect</button>
         <button class="nav-btn" data-panel="workspace">Workspace</button>
         <button class="nav-btn" data-panel="history">History</button>
-        <button type="button" class="gc-install-app nav" id="gc-install-app" hidden aria-label="Instal Game Collector Pro ke HP">＋ Pasang ke HP</button>
       </nav>
     </header>
 
@@ -2333,7 +2332,7 @@
             <div class="title">Auto Repair</div>
             <div class="desc">Perbaiki dependency otomatis</div>
             <div class="gc-install-under-repair">
-              <button type="button" class="gc-install-app" id="gc-install-app-feature" hidden aria-label="Instal Game Collector Pro ke HP">＋ Pasang ke HP</button>
+              <button type="button" class="gc-install-app" id="gc-install-app" hidden aria-label="Instal Game Collector Pro ke HP">＋ Pasang ke HP</button>
             </div>
           </div>
         </div>
@@ -5381,15 +5380,9 @@
   
       // ===== PWA install + automatic update =====
       (function setupPWA() {
-        const installButtons = [
-          document.getElementById('gc-install-app'),
-          document.getElementById('gc-install-app-feature')
-        ].filter(Boolean);
+        const installButton = document.getElementById('gc-install-app');
         const updateNote = document.getElementById('gc-update-note');
         let deferredInstall = null;
-        const setInstallVisible = (visible) => {
-          installButtons.forEach((btn) => { btn.hidden = !visible; });
-        };
         const showUpdateNote = (message) => {
           if (!updateNote) return;
           updateNote.textContent = message;
@@ -5399,9 +5392,9 @@
         window.addEventListener('beforeinstallprompt', (event) => {
           event.preventDefault();
           deferredInstall = event;
-          setInstallVisible(true);
+          if (installButton) installButton.hidden = false;
         });
-        const onInstallClick = async () => {
+        installButton?.addEventListener('click', async () => {
           if (!deferredInstall) {
             showUpdateNote('Di Chrome HP: buka menu ⋮ lalu pilih “Tambahkan ke layar utama”.');
             return;
@@ -5409,10 +5402,9 @@
           deferredInstall.prompt();
           await deferredInstall.userChoice.catch(() => null);
           deferredInstall = null;
-          setInstallVisible(false);
-        };
-        installButtons.forEach((btn) => btn.addEventListener('click', onInstallClick));
-        window.addEventListener('appinstalled', () => { deferredInstall = null; setInstallVisible(false); showUpdateNote('Game Collector Pro sudah terpasang di HP.'); });
+          if (installButton) installButton.hidden = true;
+        });
+        window.addEventListener('appinstalled', () => { deferredInstall = null; if (installButton) installButton.hidden = true; showUpdateNote('Game Collector Pro sudah terpasang di HP.'); });
         if (!('serviceWorker' in navigator)) return;
         navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => {
           const hadController = Boolean(navigator.serviceWorker.controller);
