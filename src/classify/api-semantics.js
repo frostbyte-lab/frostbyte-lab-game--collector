@@ -19,12 +19,12 @@ export function classifyApiSemantics(url, type, contentType, bodyText) {
 
   const pathBag = pathname + " " + search;
 
-  // Path-based kind
-  if (/launch|initgame|init[_-]?game|gamedata|game[_-]?info|config/i.test(pathBag)) {
+  // Path-based kind (expanded: PG Soft / slot Asia + common patterns)
+  if (/launch|initgame|init[_-]?game|gamedata|game[_-]?info|config|gameinfo|verifysession/i.test(pathBag)) {
     out.kind = "launch";
     out.signals.push("path-launch");
   }
-  if (/auth|login|oauth|token|signin|sign-in/i.test(pathBag)) {
+  if (/auth|login|oauth|token|signin|sign-in|verifysession/i.test(pathBag)) {
     out.kind = "auth";
     out.signals.push("path-auth");
   }
@@ -32,17 +32,25 @@ export function classifyApiSemantics(url, type, contentType, bodyText) {
     out.kind = "session";
     out.signals.push("path-session");
   }
-  if (/balance|wallet|credit|cashier|funds/i.test(pathBag)) {
+  if (/balance|wallet|credit|cashier|funds|gamewallet/i.test(pathBag)) {
     out.kind = "balance";
     out.signals.push("path-balance");
   }
-  if (/spin|play|bet|wager|do[_-]?spin|start[_-]?spin|action=spin/i.test(pathBag)) {
+  if (/spin|play|bet|wager|do[_-]?spin|start[_-]?spin|action=spin|\/spin\b|mahjong/i.test(pathBag)) {
     out.kind = "spin-request";
     out.signals.push("path-spin");
   }
   if (/result|outcome|round|settle|win/i.test(pathBag) && out.kind === "unknown") {
     out.kind = "spin-result";
     out.signals.push("path-result");
+  }
+  if (/history|riwayat|bet[_-]?history|game[_-]?history|round[_-]?history/i.test(pathBag)) {
+    out.kind = "history";
+    out.signals.push("path-history");
+  }
+  if (/game-api|game-proxy|gameapi|gameproxy/i.test(pathBag)) {
+    out.signals.push("path-game-api");
+    if (out.kind === "unknown") out.kind = "launch";
   }
   if (/error|fail|status/i.test(pathBag) && out.kind === "unknown") {
     out.kind = "error-or-status";

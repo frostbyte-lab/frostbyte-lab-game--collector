@@ -15,5 +15,11 @@
   },
   "kv_namespaces": [
     { "binding": "GC_HISTORY", "id": "3869a97c9eaf49129a666476fcb672e8" }
-  ]
+  ],
+  "vars": {
+    "GH_OWNER": "frostbyte-lab",
+    "GH_REPO": "frostbyte-lab-game--collector",
+    "GH_WORKFLOW": "collect.yml",
+    "PUBLIC_APP_NAME": "Game Collector Pro"
+  }
 }

@@ -1,19 +1,37 @@
 /**
- * GitHub Actions collect — diperkuat mendekati Worker:
+ * GitHub Actions collect — enhanced:
  * - status HTTP dokumen utama
  * - filter resource status >= 400
- * - auto-click Play/Start (main + iframe)
- * - scroll lazy-load
- * - smart rewrite + frame-buster
+ * - strict auto-interact: Play → Spin×N → History (scripts/auto-interact.js)
+ * - zip-aware detect profile (SEED_ZIP + live page)
+ * - critical API tagging (spin/balance/history)
+ * - scroll lazy-load, smart rewrite + frame-buster
  * - quality gate (403/empty → exit 2)
+ *
+ * Env:
+ *   TARGET_URL (wajib)
+ *   WAIT_SECONDS     default 12
+ *   AUTO_SPINS       default 3
+ *   AUTO_HISTORY     default 1
+ *   SPIN_DELAY_MS    default 2200
+ *   SEED_ZIP         optional path to seed ZIP
  */
 import { chromium } from "playwright";
 import { zipSync, strToU8 } from "fflate";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
+import { runStrictAutoInteract } from "./auto-interact.js";
+import {
+  detectAll,
+  isCriticalApiUrl,
+  classifyApiResource
+} from "./zip-aware-detect.js";
 
 const TARGET_URL = process.env.TARGET_URL;
 const WAIT_SECONDS = Math.max(5, parseInt(process.env.WAIT_SECONDS || "12", 10));
+const AUTO_SPINS = process.env.AUTO_SPINS || "3";
+const AUTO_HISTORY = process.env.AUTO_HISTORY || "1";
+const SPIN_DELAY_MS = process.env.SPIN_DELAY_MS || "2200";
 
 if (!TARGET_URL) {
   console.error("ERROR: TARGET_URL tidak diisi");
@@ -28,12 +46,6 @@ const EXCLUDE = [
   /google-analytics\.com/i, /googletagmanager\.com/i, /facebook\.net/i,
   /doubleclick\.net/i, /googlesyndication\.com/i, /hotjar\.com/i,
   /clarity\.ms/i, /segment\.(com|io)/i, /mixpanel\.com/i, /sentry\.io/i
-];
-
-const PLAY_KEYWORDS = [
-  "play", "start", "mulai", "continue", "lanjut", "main", "go", "enter",
-  "tap to play", "click to play", "klik untuk main", "start game", "play now",
-  "mulai game", "lanjutkan", "ok", "yes", "accept", "agree", "demo"
 ];
 
 function safe(s) {
@@ -111,7 +123,6 @@ function smartPackage(zipFiles, resources) {
         }
       }
     }
-    // protocol-relative
     text = text.replace(/(["'])\/\/([^"']+)/g, (full, q, rest) => {
       const abs = "https://" + rest;
       if (urlMap.has(abs)) {
@@ -138,56 +149,6 @@ function isBlockedHtml(html) {
   );
 }
 
-/** Auto-click tombol Play/Start di satu frame */
-async function autoClickPlayInFrame(frame) {
-  try {
-    await frame.evaluate((keywords) => {
-      const all = document.querySelectorAll(
-        "button, a, div, span, input[type=button], input[type=submit], [role=button], .btn, .button"
-      );
-      const scored = [];
-      for (const el of all) {
-        try {
-          const text = (
-            (el.textContent || "") +
-            " " +
-            (el.getAttribute("aria-label") || "") +
-            " " +
-            (el.id || "") +
-            " " +
-            (el.className || "")
-          ).toLowerCase();
-          if (!keywords.some((k) => text.includes(k))) continue;
-          const style = window.getComputedStyle(el);
-          if (style.display === "none" || style.visibility === "hidden") continue;
-          const r = el.getBoundingClientRect();
-          if (r.width < 2 || r.height < 2) continue;
-          scored.push(el);
-        } catch {}
-      }
-      for (const el of scored.slice(0, 8)) {
-        try {
-          el.click();
-        } catch {}
-      }
-      return scored.length;
-    }, PLAY_KEYWORDS);
-  } catch {}
-}
-
-async function autoClickAllFrames(page) {
-  console.log("PROGRESS: auto_click");
-  await autoClickPlayInFrame(page.mainFrame());
-  const frames = page.frames();
-  for (const frame of frames) {
-    if (frame === page.mainFrame()) continue;
-    const fu = frame.url();
-    if (!fu || fu === "about:blank" || fu.startsWith("chrome")) continue;
-    console.log("PROGRESS: iframe", fu.slice(0, 120));
-    await autoClickPlayInFrame(frame);
-  }
-}
-
 async function scrollPage(page) {
   console.log("PROGRESS: scroll");
   try {
@@ -210,6 +171,8 @@ async function main() {
   console.log("PROGRESS: init");
   console.log("Target:", TARGET_URL);
   console.log("Wait seconds:", WAIT_SECONDS);
+  console.log("AUTO_SPINS:", AUTO_SPINS, "AUTO_HISTORY:", AUTO_HISTORY, "SPIN_DELAY_MS:", SPIN_DELAY_MS);
+  if (process.env.SEED_ZIP) console.log("SEED_ZIP:", process.env.SEED_ZIP);
 
   const browser = await chromium.launch({
     headless: true,
@@ -226,6 +189,8 @@ async function main() {
   const resources = [];
   const zipFiles = {};
   const seen = new Set();
+  const criticalApis = [];
+  let detectProfile = null;
   let mainDocStatus = 0;
   let mainDocUrl = TARGET_URL;
 
@@ -262,7 +227,19 @@ async function main() {
         else if (ct.includes("mp3") || ct.includes("audio")) name += ".mp3";
       }
 
-      const folder = folderOf(type);
+      const critical = isCriticalApiUrl(url, detectProfile);
+      const apiKind = (type === "xhr" || type === "fetch") ? classifyApiResource(url, ct) : null;
+
+      let folder = folderOf(type);
+      // Tag critical API responses into named files for easier analysis
+      if (critical && (type === "xhr" || type === "fetch") && ct.includes("json")) {
+        const tag = apiKind && apiKind !== "other" ? apiKind : "critical";
+        name = `${tag}-${name}`;
+        folder = "assets/data";
+        criticalApis.push({ url, kind: apiKind || "critical", size: buffer.length });
+        console.log("PROGRESS: critical_api", apiKind || "critical", url.slice(0, 140));
+      }
+
       const localPath = `${folder}/${String(resources.length + 1).padStart(4, "0")}-${name}`;
       zipFiles[localPath] = new Uint8Array(buffer);
       resources.push({
@@ -271,7 +248,9 @@ async function main() {
         status,
         localPath,
         size: buffer.length,
-        contentType: ct
+        contentType: ct,
+        critical: Boolean(critical),
+        apiKind: apiKind || undefined
       });
     } catch {}
   });
@@ -308,19 +287,22 @@ async function main() {
     console.warn("PROGRESS: blocked_doc HTTP", mainDocStatus);
   }
 
-  // Interaksi: auto-click + tunggu resource
-  await page.waitForTimeout(1500);
-  await autoClickAllFrames(page);
-  await page.waitForTimeout(1500);
-  await autoClickAllFrames(page);
+  // Zip-aware + live detect profile
+  console.log("PROGRESS: detect_profile");
+  detectProfile = await detectAll(page);
+
+  // Strict auto-interact: Play → Spin×N → History
+  await page.waitForTimeout(1200);
+  const interactResult = await runStrictAutoInteract(page, {
+    autoSpins: AUTO_SPINS,
+    autoHistory: AUTO_HISTORY,
+    spinDelayMs: SPIN_DELAY_MS
+  });
 
   console.log("PROGRESS: wait_resources", WAIT_SECONDS, "s");
   await page.waitForTimeout(WAIT_SECONDS * 1000);
 
   await scrollPage(page);
-  await page.waitForTimeout(2000);
-  // klik lagi setelah scroll (lazy UI)
-  await autoClickAllFrames(page);
   await page.waitForTimeout(2000);
 
   // HTML akhir
@@ -333,14 +315,53 @@ async function main() {
   console.log("PROGRESS: rewrite");
   const smart = smartPackage(zipFiles, resources);
 
+  // api-map summary
+  const apiMap = {};
+  for (const r of resources) {
+    if (r.type !== "xhr" && r.type !== "fetch") continue;
+    const kind = r.apiKind || "other";
+    if (!apiMap[kind]) apiMap[kind] = [];
+    if (apiMap[kind].length < 20) {
+      apiMap[kind].push({ url: r.url, path: r.localPath, size: r.size, critical: r.critical });
+    }
+  }
+  zipFiles["api-map.json"] = strToU8(
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        criticalCount: criticalApis.length,
+        byKind: apiMap,
+        profile: {
+          spinKeywords: detectProfile?.spinKeywords?.slice(0, 20),
+          historyKeywords: detectProfile?.historyKeywords?.slice(0, 12),
+          apiPaths: detectProfile?.apiPaths?.slice(0, 30),
+          apiHosts: detectProfile?.apiHosts?.slice(0, 15)
+        },
+        autoInteract: {
+          autoSpins: interactResult?.autoSpins,
+          autoHistory: interactResult?.autoHistory,
+          spinDelayMs: interactResult?.spinDelayMs
+        }
+      },
+      null,
+      2
+    )
+  );
+
   const manifest = {
     target: TARGET_URL,
     mainDocStatus,
     mainDocUrl,
     collectedAt: new Date().toISOString(),
     totalFiles: resources.length,
+    criticalApis: criticalApis.length,
     smartRewrite: smart,
     via: "github-actions",
+    autoInteract: {
+      autoSpins: Number(AUTO_SPINS),
+      autoHistory: AUTO_HISTORY !== "0",
+      spinDelayMs: Number(SPIN_DELAY_MS)
+    },
     resources
   };
   zipFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
@@ -349,8 +370,10 @@ Target: ${TARGET_URL}
 Main document status: ${mainDocStatus}
 Tanggal: ${new Date().toISOString()}
 Total: ${resources.length} file
+Critical API: ${criticalApis.length}
 Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
-Via: GitHub Actions (enhanced)
+Auto spins: ${AUTO_SPINS} · history: ${AUTO_HISTORY}
+Via: GitHub Actions (auto-detect + strict interact)
 
 Cara pakai: extract → npx serve . → buka browser
 Atau load di Workspace Game Collector Pro.
@@ -397,6 +420,7 @@ Atau load di Workspace Game Collector Pro.
   console.log("PROGRESS: zip_done");
   console.log("Selesai!");
   console.log("Total resource:", resources.length);
+  console.log("Critical API:", criticalApis.length);
   console.log("Main doc status:", mainDocStatus);
   console.log("Smart rewrite:", smart.rewritten, "· frame-buster:", smart.neutralized);
   console.log("ZIP:", zipName);

@@ -1,0 +1,335 @@
+================================================================================
+  ANALISIS REPO + DAFTAR TAMBAHAN UNTUK SISTEM BARU
+  Repo: https://github.com/frostbyte-lab/frostbyte-lab-game--collector
+  Live saat ini: https://game-resource-collector.technologiesfrostbyte.workers.dev
+  Tujuan: jalan di server baru, domain baru, dengan konsep auto-detect
+           (ZIP + link utama), analisis API, custom domain.
+  Tanggal: 2026-08-22
+================================================================================
+
+
+1. GAMBARAN SISTEM SEKARANG
+--------------------------------------------------------------------------------
+
+Stack:
+  - Frontend PWA     : public/index.html, sw.js, manifest.json
+  - Worker CF        : src/index.js (collect, API, AI, history, resume, progress)
+  - Modul            : src/collect/*, classify/*, analyze/*, package/*, history/*,
+                       progress/*, repair/*, ai.js
+  - GitHub Actions   : scripts/collect.js + .github/workflows/collect.yml
+  - Deploy           : wrangler.jsonc → Cloudflare Workers + Browser Rendering
+  - Storage          : KV GC_HISTORY (sudah di-bind), R2 opsional, artifact GH
+
+Alur collect:
+  UI → POST /api/collect (Worker Playwright)
+     → jika ZIP besar / limit → POST /api/github/collect → Actions → artifact
+  Workspace load ZIP → analisis → repair → preview (sandbox / hybrid)
+
+API Worker yang sudah ada:
+  GET  /api/health
+  POST /api/collect
+  POST /api/collect/stop
+  GET  /api/progress
+  POST /api/resume
+  GET|POST|DELETE /api/history
+  POST /api/history/import-log
+  POST /api/github/collect
+  GET  /api/github/status
+  GET  /api/github/artifact
+  GET  /api/r2/download
+  POST /api/ai
+  POST /api/ai/analyze
+
+Yang SUDAH bagus:
+  - Auto-click Play/Start/Mulai (main + iframe)
+  - Capture network XHR/fetch
+  - Klasifikasi resource + api-semantics.js (path spin/balance/launch dll.)
+  - Smart rewrite path, frame-buster neutralize
+  - Fill missing, resume, history KV
+  - Analisis slot (symbols, paytable, atlas, audio)
+  - Preview hybrid + repair deep
+
+
+2. YANG BELUM ADA (GAP vs KONSEP KITA)
+--------------------------------------------------------------------------------
+
+  [G1] Auto-click SPIN berulang + tunggu settle animasi/network
+  [G2] Auto buka HISTORY lalu tutup
+  [G3] Deteksi tombol KETAT (skor keyword + node name + visible + area + posisi)
+  [G4] Profil deteksi dari ZIP seed + halaman live (zip-aware-detect)
+  [G5] Prioritas simpan response kritis (Spin/Bet/Wallet/History) dengan tag
+  [G6] Env/workflow: AUTO_SPINS, AUTO_HISTORY, SPIN_DELAY_MS, SEED_ZIP
+  [G7] Dokumentasi + checklist domain baru / server baru (portable config)
+  [G8] Proxy asset same-origin (/api/asset-proxy) — masih ❌ di README
+  [G9] Config terpusat (domain, GH owner/repo, CORS) — masih hardcode sebagian
+
+
+3. HARDCODE / ASUMSI YANG HARUS DILEPAS UNTUK DOMAIN & SERVER BARU
+--------------------------------------------------------------------------------
+
+  src/index.js:
+    const GH_OWNER = "frostbyte-lab";
+    const GH_REPO  = "frostbyte-lab-game--collector";
+    → Ganti ke env: env.GH_OWNER, env.GH_REPO (atau wrangler vars)
+
+  wrangler.jsonc:
+    name: "game-resource-collector"
+    → Boleh diganti nama worker baru
+    kv_namespaces id → id namespace KV di akun CF BARU
+    browser binding MYBROWSER → pastikan Browser Rendering aktif di akun baru
+    ai binding → opsional
+
+  Live URL lama:
+    *.workers.dev / technologiesfrostbyte
+    → Di custom domain baru TIDAK perlu ubah kode path API (/api/* tetap same-origin)
+    → Frontend pakai relative URL (/api/collect) → sudah aman untuk domain baru
+
+  Secrets yang wajib di akun/server baru:
+    CLOUDFLARE_API_TOKEN
+    CLOUDFLARE_ACCOUNT_ID
+    GITHUB_TOKEN          (dispatch Actions + artifact)
+    (opsional) AI / Groq key jika /api/ai dipakai
+
+  GitHub:
+    Repo boleh fork/rename; sesuaikan GH_OWNER, GH_REPO, workflow file name
+    Actions: scripts/collect.js harus ada di repo yang di-dispatch
+
+
+4. CUSTOM DOMAIN (SERVER / DOMAIN BARU)
+--------------------------------------------------------------------------------
+
+  Tidak perlu ubah logika collect. Yang perlu:
+
+  A. Cloudflare Dashboard (akun baru)
+     1. Workers → deploy worker (nama bebas)
+     2. Settings → Domains & Routes → Add Custom Domain
+        contoh: collector.domain-baru.com
+     3. DNS: CNAME ke workers (otomatis jika domain di CF)
+     4. KV: buat namespace baru → isi id di wrangler.jsonc → redeploy
+     5. (Opsional) R2 bucket → bind COLLECTOR_BUCKET
+     6. Browser Rendering: enable di account
+     7. Secrets: GITHUB_TOKEN, dll. via `wrangler secret put`
+
+  B. Kode yang membantu portability (TAMBAHKAN)
+
+     // wrangler.jsonc — contoh vars
+     "vars": {
+       "GH_OWNER": "frostbyte-lab",
+       "GH_REPO": "frostbyte-lab-game--collector",
+       "GH_WORKFLOW": "collect.yml",
+       "PUBLIC_APP_NAME": "Game Collector Pro"
+     }
+
+     // src/index.js — jangan hardcode owner/repo
+     const GH_OWNER = env.GH_OWNER || "frostbyte-lab";
+     const GH_REPO  = env.GH_REPO  || "frostbyte-lab-game--collector";
+
+  C. CORS (jika UI dipisah domain lain)
+     Saat ini UI = assets Worker (same origin) → CORS tidak masalah.
+     Jika nanti frontend di domain lain:
+       Response API harus header:
+         Access-Control-Allow-Origin: https://ui.domain-baru.com
+         Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS
+         Access-Control-Allow-Headers: Content-Type, Authorization
+       Handle OPTIONS preflight di fetch handler.
+
+  D. Frontend
+     Semua fetch ke `/api/...` (relative) → otomatis ikut domain baru.
+     Cek tidak ada hardcode workers.dev di public/index.html (previewBaseUrl
+     sudah window.location.origin → OK).
+
+
+5. ANALISIS API — YANG PERLU DITAMBAH
+--------------------------------------------------------------------------------
+
+  Sudah ada: src/classify/api-semantics.js
+    kind: launch, auth, balance, bet, spin-request, spin-result, history, ...
+
+  Tambahan yang direkomendasikan:
+
+  [A1] Perluas pattern PG Soft / slot Asia:
+         GameWallet, GameInfo, verifySession, game-api/, game-proxy/,
+         /Spin, /Bet, mahjong-ways, dll. (selaras CRITICAL_API_PATTERNS)
+
+  [A2] Output per package:
+         api-map.json = daftar endpoint unik + method + kind + sample keys
+         (bisa digabung ke keterangan.json)
+
+  [A3] Saat auto-spin jalan, tag file:
+         assets/data/spin-*.json, balance-*.json, history-*.json
+
+  [A4] Di Workspace UI: panel "API map" dari api-map.json / keterangan
+
+  Ini mendukung konsep "deteksi semua dari ZIP + link utama".
+
+
+6. MODUL BARU YANG HARUS DITAMBAHKAN KE REPO
+--------------------------------------------------------------------------------
+
+  scripts/auto-interact.js          ← dari artifacts (strict Play/Spin/History)
+  scripts/zip-aware-detect.js       ← dari artifacts (profil ZIP + live)
+  (opsional mirror) src/collect/auto-interact.js
+  (opsional mirror) src/collect/zip-aware-detect.js
+
+  Patch scripts/collect.js:
+    - import detectAll, runStrictAutoInteract, classifyApiResource
+    - env AUTO_SPINS, AUTO_HISTORY, SPIN_DELAY_MS, SEED_ZIP
+    - ganti blok autoClickAllFrames-only dengan pipeline ketat
+    - critical API wajib disimpan + di-tag
+
+  Patch .github/workflows/collect.yml:
+    inputs:
+      auto_spins: default "3"
+      auto_history: default "1"
+      spin_delay_ms: default "2200"
+      seed_zip: optional path/artifact
+    env ke step Capture
+
+  Patch src/index.js (Worker) — prioritas sekunder:
+    - setelah Play: loop spin 2–3x + history 1x (versi ringan)
+    - GH_OWNER/GH_REPO dari env.vars
+    - isCriticalApiUrl saat simpan manifest
+
+  Patch src/classify/api-semantics.js:
+    - pattern GameWallet, game-proxy, verifySession, dll.
+
+  Docs:
+    CATATAN_SISTEM_AUTO_DETECT_COLLECTOR.txt (sudah ada di artifacts)
+    README: section Auto Spin + Custom domain + Env vars
+
+
+7. URUTAN PENGERJAAN YANG DISARANKAN (SISTEM BARU)
+--------------------------------------------------------------------------------
+
+  Fase 0 — Porting ke akun/domain baru (tanpa fitur spin dulu)
+    [ ] Fork/clone repo ke tempat kerja
+    [ ] wrangler.jsonc: nama worker, KV id baru, vars GH_*
+    [ ] Secret: GITHUB_TOKEN, (AI key)
+    [ ] npx wrangler deploy
+    [ ] Custom domain di Dashboard
+    [ ] Uji /api/health di domain baru
+    [ ] Uji collect kecil + GitHub Actions fallback
+
+  Fase 1 — Auto-detect + auto spin (konsep inti)
+    [ ] Commit auto-interact.js + zip-aware-detect.js
+    [ ] Patch collect.js + collect.yml
+    [ ] Uji TARGET_URL + AUTO_SPINS=2 + SEED_ZIP (Mahjong Ways zip)
+    [ ] Pastikan log critical_api spin/balance/history muncul
+    [ ] Perluas api-semantics.js
+
+  Fase 2 — Worker parity (opsional)
+    [ ] Spin/history ringan di /api/collect Worker
+    [ ] Tag critical di manifest Worker
+
+  Fase 3 — Produksi domain baru
+    [ ] CORS jika UI terpisah
+    [ ] R2 jika ZIP besar rutin
+    [ ] Monitoring /api/health + quota Browser Rendering
+    [ ] Ganti branding (logo, nama) di public/ jika perlu
+
+
+8. KONFIGURASI MINIMAL DOMAIN / SERVER BARU (TEMPLATE)
+--------------------------------------------------------------------------------
+
+  # wrangler.jsonc (inti)
+  {
+    "name": "game-collector-PROD",
+    "main": "src/index.js",
+    "compatibility_date": "2026-08-13",
+    "compatibility_flags": ["nodejs_compat"],
+    "browser": { "binding": "MYBROWSER" },
+    "assets": { "directory": "./public" },
+    "kv_namespaces": [
+      { "binding": "GC_HISTORY", "id": "ISI_KV_ID_AKUN_BARU" }
+    ],
+    "vars": {
+      "GH_OWNER": "ORG_ATAU_USER_GITHUB",
+      "GH_REPO": "NAMA_REPO",
+      "GH_WORKFLOW": "collect.yml"
+    }
+  }
+
+  # Secrets
+  wrangler secret put GITHUB_TOKEN
+  # wrangler secret put AI_API_KEY   (opsional)
+
+  # Custom domain
+  collector.domain-baru.com → Worker game-collector-PROD
+
+  # GitHub Actions di repo yang sama
+  Settings → Actions enabled
+  GITHUB_TOKEN dari PAT dengan scope repo + actions
+
+
+9. PEMETAAN KONSEP → FILE
+--------------------------------------------------------------------------------
+
+  Konsep                         | File yang disentuh
+  ------------------------------ | ------------------------------------------
+  Auto Play (sudah)              | scripts/collect.js, src/index.js
+  Auto Spin + settle (baru)      | scripts/auto-interact.js + patch collect.js
+  Auto History (baru)            | scripts/auto-interact.js
+  Deteksi dari ZIP               | scripts/zip-aware-detect.js
+  Deteksi dari link utama        | zip-aware-detect buildProfileFromLivePage
+  Analisis API lebih dalam       | src/classify/api-semantics.js + api-map.json
+  Simpan response kritis         | collect.js / index.js response handler
+  Custom domain                  | CF Dashboard + vars (tanpa hardcode host)
+  Server/akun baru               | wrangler.jsonc + secrets + KV/R2 baru
+  Portable GH repo               | env.GH_OWNER / GH_REPO (hapus hardcode)
+
+
+10. RISIKO & BATASAN (TETAP BERLAKU DI SISTEM BARU)
+--------------------------------------------------------------------------------
+
+  - Spin/bet/result tidak ada di ZIP jika tidak pernah di-trigger
+  - Canvas-only game: fallback koordinat bisa meleset
+  - Browser Rendering quota & 429 di Worker
+  - ZIP besar tanpa R2 → andalkan GitHub Actions artifact
+  - Offline 100% tidak realistis jika logic hanya di server
+  - Jangan mengklaim bypass DRM / login orang lain
+
+
+11. CHECKLIST “SEMUA BERJALAN SESUAI KONSEP”
+--------------------------------------------------------------------------------
+
+  Domain baru membuka UI, /api/health = ok
+  Collect URL game → progress → ZIP terunduh
+  ZIP berisi assets + (jika auto spin on) response wallet/spin/history
+  SEED_ZIP + live page → log profile_spin_kw / profile_apis terisi
+  AUTO_SPINS=3 → 3x attempt spin + settle di log
+  History auto terbuka sekali
+  api-semantics / keterangan memetakan endpoint dengan kind yang benar
+  Preview hybrid jalan di domain baru (origin relatif)
+  History server (KV) tulis-baca di domain baru
+  Ganti domain lagi hanya lewat Dashboard + DNS, tanpa rewrite kode API
+
+
+12. ARTIFACT TERKAIT (SIAP SALIN KE REPO)
+--------------------------------------------------------------------------------
+
+  artifacts/auto-interact.js
+  artifacts/zip-aware-detect.js
+  artifacts/AUTO_INTERACT_INTEGRATION.md
+  artifacts/CATATAN_SISTEM_AUTO_DETECT_COLLECTOR.txt
+  artifacts/ANALISIS_REPO_DAN_TAMBAHAN_SYSTEM_BARU.txt  (file ini)
+
+
+13. KESIMPULAN
+--------------------------------------------------------------------------------
+
+  Repo sudah kuat sebagai collector + workspace + repair + preview.
+  Agar konsep “deteksi dari ZIP + link utama, auto spin/history, analisis API,
+  domain/server baru” lengkap, yang WAJIB ditambah:
+
+    1. Modul auto-interact + zip-aware-detect + patch collect.js/workflow
+    2. Perluas api-semantics + tag critical response
+    3. Config portable (GH_* vars, KV/R2 id akun baru, secrets)
+    4. Custom domain murni di Cloudflare Dashboard (kode API tetap /api/*)
+
+  Custom domain dan pindah server TIDAK membutuhkan rewrite path API selama
+  frontend tetap di-serve dari Worker yang sama (same-origin).
+
+
+================================================================================
+  END
+================================================================================

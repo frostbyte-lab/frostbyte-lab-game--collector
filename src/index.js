@@ -44,9 +44,14 @@ import {
   clearStop
 } from "./progress/store.js";
 
-const GH_OWNER = "frostbyte-lab";
-const GH_REPO = "frostbyte-lab-game--collector";
-const GH_WORKFLOW = "collect.yml";
+/** Portable GH config — override via wrangler vars (domain/server baru) */
+function ghConfig(env = {}) {
+  return {
+    owner: env.GH_OWNER || "frostbyte-lab",
+    repo: env.GH_REPO || "frostbyte-lab-game--collector",
+    workflow: env.GH_WORKFLOW || "collect.yml"
+  };
+}
 const AI_MODELS = { llama: "@cf/meta/llama-3.1-8b-instruct", "qwen3-coder": "@cf/qwen/qwen3-30b-a3b-fp8" };
 
 function cleanAiJson(text) {
@@ -244,25 +249,32 @@ export default {
         return Response.json({ error: "URL http/https tidak valid" }, { status: 400 });
       }
 
-      const dispatch = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${GH_WORKFLOW}/dispatches`, {
+      const dispatch = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/workflows/${ghConfig(env).workflow}/dispatches`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ref: "main",
-          inputs: { url: gameUrl, wait_seconds: waitSeconds }
+          inputs: {
+            url: gameUrl,
+            wait_seconds: waitSeconds,
+            auto_spins: String(body.auto_spins ?? body.autoSpins ?? "3"),
+            auto_history: String(body.auto_history ?? body.autoHistory ?? "1"),
+            spin_delay_ms: String(body.spin_delay_ms ?? body.spinDelayMs ?? "2200"),
+            seed_zip: String(body.seed_zip ?? body.seedZip ?? "")
+          }
         })
       });
 
       if (dispatch.status === 204 || dispatch.ok) {
         // Ambil run terbaru (sedikit delay di client; di sini coba list)
         await new Promise(r => setTimeout(r, 1500));
-        const runs = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${GH_WORKFLOW}/runs?per_page=5&event=workflow_dispatch`);
+        const runs = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/workflows/${ghConfig(env).workflow}/runs?per_page=5&event=workflow_dispatch`);
         const run = runs.data?.workflow_runs?.[0] || null;
         return Response.json({
           ok: true,
           message: "GitHub Actions dimulai. Tunggu 1–3 menit, lalu cek status.",
           run_id: run?.id || null,
-          run_url: run?.html_url || `https://github.com/${GH_OWNER}/${GH_REPO}/actions`,
+          run_url: run?.html_url || `https://github.com/${ghConfig(env).owner}/${ghConfig(env).repo}/actions`,
           status: run?.status || "queued",
           conclusion: run?.conclusion || null
         });
@@ -277,7 +289,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/api/github/status") {
       const runId = url.searchParams.get("run_id");
       if (!runId) return Response.json({ error: "run_id wajib" }, { status: 400 });
-      const run = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${runId}`);
+      const run = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/runs/${runId}`);
       if (!run.ok) return Response.json({ error: "Gagal ambil status", detail: run.data }, { status: run.status });
       const r = run.data;
 
@@ -285,7 +297,7 @@ export default {
       let jobsOut = [];
       let currentStep = null;
       try {
-        const jobs = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${runId}/jobs`);
+        const jobs = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/runs/${runId}/jobs`);
         const list = jobs.data?.jobs || [];
         for (const job of list) {
           const steps = (job.steps || []).map(s => ({
@@ -325,7 +337,7 @@ export default {
 
       let artifact = null;
       if (r.status === "completed" && r.conclusion === "success") {
-        const arts = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${runId}/artifacts`);
+        const arts = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/runs/${runId}/artifacts`);
         artifact = arts.data?.artifacts?.[0] || null;
       }
       return Response.json({
@@ -349,7 +361,7 @@ export default {
       if (!artifactId) return Response.json({ error: "artifact_id wajib" }, { status: 400 });
       const token = env.GITHUB_TOKEN;
       if (!token) return Response.json({ error: "GITHUB_TOKEN belum di-set" }, { status: 500 });
-      const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/actions/artifacts/${artifactId}/zip`, {
+      const res = await fetch(`https://api.github.com/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/artifacts/${artifactId}/zip`, {
         headers: {
           Accept: "application/vnd.github+json",
           Authorization: `Bearer ${token}`,
@@ -427,7 +439,7 @@ export default {
       const sourcePath = typeof body.path === "string" ? body.path.trim() : "";
       if (!raw && sourcePath) {
         const safePath = sourcePath.replace(/^\/+/, "").split("/").map(encodeURIComponent).join("/");
-        const file = await ghFetch(env, `/repos/${GH_OWNER}/${GH_REPO}/contents/${safePath}?ref=${encodeURIComponent(String(body.ref || "main"))}`);
+        const file = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/contents/${safePath}?ref=${encodeURIComponent(String(body.ref || "main"))}`);
         if (!file.ok || !file.data?.content) return Response.json({ ok: false, error: "GITHUB_LOG_NOT_FOUND", detail: file.data }, { status: file.status || 404 });
         raw = atob(String(file.data.content).replace(/\s/g, ""));
       }
