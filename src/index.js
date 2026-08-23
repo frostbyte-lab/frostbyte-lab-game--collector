@@ -672,6 +672,55 @@ export default {
       } catch (e) {
         return Response.json({ ok: false, error: "Body tidak valid: " + (e?.message || e) }, { status: 400 });
       }
+
+      const wantStream =
+        url.searchParams.get("stream") === "1" ||
+        (request.headers.get("accept") || "").includes("application/x-ndjson");
+
+      if (wantStream) {
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        const enc = new TextEncoder();
+        const send = async (obj) => {
+          await writer.write(enc.encode(JSON.stringify(obj) + "\n"));
+        };
+        // jalankan upload di background stream
+        (async () => {
+          try {
+            await send({ type: "phase", phase: "start", message: "Server menerima paket…", pct: 5 });
+            const result = await uploadGameToEduNetwork(
+              env,
+              gameSlot,
+              filesMap,
+              commitMessage || undefined,
+              async (ev) => {
+                await send(ev);
+              }
+            );
+            if (!result.ok) {
+              await send({ type: "error", error: result.error, detail: result.detail, status: result.status });
+            } else if (!result._emitted_done) {
+              // done sudah di-emit di dalam upload; pastikan ada result
+            }
+          } catch (e) {
+            try {
+              await send({ type: "error", error: e?.message || String(e) });
+            } catch (_) {}
+          } finally {
+            try {
+              await writer.close();
+            } catch (_) {}
+          }
+        })();
+        return new Response(readable, {
+          headers: {
+            "Content-Type": "application/x-ndjson; charset=utf-8",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff"
+          }
+        });
+      }
+
       const result = await uploadGameToEduNetwork(env, gameSlot, filesMap, commitMessage || undefined);
       return Response.json(result, { status: result.ok ? 200 : result.status || 500 });
     }

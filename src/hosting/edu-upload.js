@@ -55,8 +55,15 @@ function normalizeGamePath(rawPath) {
  * @param {number} gameSlot 1–150
  * @param {Record<string, Uint8Array>} files path -> bytes (isi ZIP sudah di-extract)
  * @param {string} [message]
+ * @param {(ev: object) => void|Promise<void>} [onProgress]
  */
-export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
+export async function uploadGameToEduNetwork(env, gameSlot, files, message, onProgress) {
+  const emit = async (ev) => {
+    try {
+      if (typeof onProgress === "function") await onProgress(ev);
+    } catch (_) {}
+  };
+
   const slot = Number(gameSlot);
   if (!Number.isInteger(slot) || slot < 1 || slot > 150) {
     return { ok: false, status: 400, error: "game_slot harus integer 1–150" };
@@ -73,10 +80,24 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
   const prefix = `game-${slot}`;
   const gameId = prefix; // game-12 → game_id di API EDU
 
+  await emit({ type: "phase", phase: "patch", message: "Auto-patch API + path + SDK…", pct: 8 });
+
   // Auto-patch: rewrite API host → EDU + inject SDK + gameId
   const { files: patchedFiles, report: patchReport } = patchFilesForEdu(files || {}, {
     eduBase: cfg.baseUrl,
     gameId
+  });
+
+  await emit({
+    type: "phase",
+    phase: "patch_done",
+    message: `Patch ${patchReport.patched}/${patchReport.scanned} file`,
+    pct: 12,
+    patch: {
+      scanned: patchReport.scanned,
+      patched: patchReport.patched,
+      injected_html: patchReport.injectedHtml
+    }
   });
 
   // Build path list
@@ -93,7 +114,7 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
       };
     }
     totalBytes += data.byteLength;
-    entries.push({ path: `${prefix}/${rel}`, data });
+    entries.push({ path: `${prefix}/${rel}`, rel, data, size: data.byteLength });
   }
 
   if (!entries.length) {
@@ -115,9 +136,19 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
     }
   }
 
+  await emit({
+    type: "phase",
+    phase: "list",
+    message: `${entries.length} file siap di-upload ke Git`,
+    pct: 15,
+    total: entries.length,
+    files: entries.map((e) => ({ path: e.rel, size: e.size }))
+  });
+
   const apiBase = `/repos/${cfg.owner}/${cfg.repo}`;
 
   // 1) ref → commit SHA
+  await emit({ type: "phase", phase: "git_ref", message: "Baca branch Edu-network…", pct: 18 });
   const refRes = await ghFetch(env, `${apiBase}/git/ref/heads/${cfg.branch}`);
   if (!refRes.ok) {
     return {
@@ -139,14 +170,33 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
   }
   const baseTreeSha = commitRes.data?.tree?.sha;
 
-  // 3) create blobs (parallel batch)
+  // 3) create blobs — sequential batches, progress per file
+  // pct range for blobs: 20 → 85
   const treeItems = [];
-  const BATCH = 8;
+  const BATCH = 4;
+  const total = entries.length;
+  let doneCount = 0;
+
+  await emit({ type: "phase", phase: "blobs", message: "Upload file ke GitHub…", pct: 20, total });
+
   for (let i = 0; i < entries.length; i += BATCH) {
     const slice = entries.slice(i, i + BATCH);
+    // mark batch as running
+    for (const e of slice) {
+      const idx = entries.indexOf(e);
+      await emit({
+        type: "file",
+        path: e.rel,
+        fullPath: e.path,
+        index: idx + 1,
+        total,
+        size: e.size,
+        status: "uploading",
+        pct: 20 + Math.round((doneCount / total) * 65)
+      });
+    }
     const results = await Promise.all(
       slice.map(async (e) => {
-        // GitHub expects base64 content for blob
         let binary = "";
         const bytes = e.data;
         const chunk = 0x8000;
@@ -163,16 +213,32 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
         }
         return {
           path: e.path,
+          rel: e.rel,
+          size: e.size,
           mode: "100644",
           type: "blob",
           sha: blobRes.data.sha
         };
       })
     );
-    treeItems.push(...results);
+    for (const r of results) {
+      doneCount++;
+      treeItems.push({ path: r.path, mode: r.mode, type: r.type, sha: r.sha });
+      await emit({
+        type: "file",
+        path: r.rel,
+        fullPath: r.path,
+        index: doneCount,
+        total,
+        size: r.size,
+        status: "ok",
+        pct: 20 + Math.round((doneCount / total) * 65)
+      });
+    }
   }
 
   // 4) create tree (base_tree agar file lain di repo tetap)
+  await emit({ type: "phase", phase: "tree", message: "Membangun Git tree…", pct: 88 });
   const treeRes = await ghFetch(env, `${apiBase}/git/trees`, {
     method: "POST",
     body: JSON.stringify({
@@ -186,6 +252,7 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
   const newTreeSha = treeRes.data.sha;
 
   // 5) commit
+  await emit({ type: "phase", phase: "commit", message: "Membuat commit…", pct: 92 });
   const msg =
     message ||
     `feat(hosting): upload ${prefix} via Game Collector (${entries.length} files, ${Math.round(totalBytes / 1024)} KB)`;
@@ -203,6 +270,7 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
   const newCommitSha = newCommitRes.data.sha;
 
   // 6) update ref
+  await emit({ type: "phase", phase: "ref", message: "Update branch main…", pct: 96 });
   const updateRef = await ghFetch(env, `${apiBase}/git/refs/heads/${cfg.branch}`, {
     method: "PATCH",
     body: JSON.stringify({ sha: newCommitSha, force: false })
@@ -212,7 +280,7 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
   }
 
   const liveUrl = `${cfg.baseUrl}/${prefix}/`;
-  return {
+  const result = {
     ok: true,
     status: 200,
     game_slot: slot,
@@ -232,6 +300,8 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message) {
     },
     note: "Cloudflare Pages biasanya deploy dalam 1–3 menit setelah push. API auto-patch: base → EDU + SDK inject."
   };
+  await emit({ type: "done", pct: 100, result });
+  return result;
 }
 
 export { eduConfig, normalizeGamePath, MAX_FILE_BYTES };

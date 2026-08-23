@@ -538,6 +538,28 @@
     .hp-file-table td.path { color: #cbd5e1; word-break: break-all; }
     .hp-file-table td.size { color: #64748b; white-space: nowrap; }
     .hp-file-table tr.patched td.path { color: #5ee1c0; }
+    .hp-file-table tr.uploading td.path { color: #67e8f9; }
+    .hp-file-table tr.ok td.path { color: #86efac; }
+    .hp-file-table tr.err td.path { color: #fca5a5; }
+    .hp-mini {
+      height: 6px;
+      background: #1e293b;
+      border-radius: 4px;
+      overflow: hidden;
+      min-width: 56px;
+      max-width: 100px;
+    }
+    .hp-mini > i {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: #22d3ee;
+      border-radius: 4px;
+      transition: width 0.2s ease;
+    }
+    .hp-file-table tr.ok .hp-mini > i { background: #34d399; width: 100% !important; }
+    .hp-file-table tr.err .hp-mini > i { background: #f87171; }
+    .hp-pct-cell { color: #94a3b8; white-space: nowrap; font-variant-numeric: tabular-nums; width: 1%; }
     .hp-log {
       font-size: 12px;
       line-height: 1.55;
@@ -2650,7 +2672,7 @@
             <h3>File dalam paket <span id="hp-file-count" style="font-weight:500;color:var(--text-muted);font-size:12px;"></span></h3>
             <div class="hp-file-table">
               <table>
-                <thead><tr><th>#</th><th>Path</th><th>Ukuran</th></tr></thead>
+                <thead><tr><th>#</th><th>Path</th><th>Ukuran</th><th>Progress</th></tr></thead>
                 <tbody id="hp-file-tbody"></tbody>
               </table>
             </div>
@@ -5533,33 +5555,60 @@
         }
         var tbody = document.getElementById('hp-file-tbody');
         var htmlRows = '';
-        var maxShow = 200;
+        var maxShow = 250;
+        var pathToRow = Object.create(null);
         for (var j = 0; j < Math.min(fileRows.length, maxShow); j++) {
-          htmlRows += '<tr><td>' + (j + 1) + '</td><td class="path">' +
-            fileRows[j].path.replace(/</g, '&lt;') + '</td><td class="size">' +
-            hpFormatSize(fileRows[j].size) + '</td></tr>';
+          var psafe = fileRows[j].path.replace(/</g, '&lt;');
+          htmlRows += '<tr data-path="' + fileRows[j].path.replace(/"/g, '&quot;') + '">' +
+            '<td>' + (j + 1) + '</td>' +
+            '<td class="path">' + psafe + '</td>' +
+            '<td class="size">' + hpFormatSize(fileRows[j].size) + '</td>' +
+            '<td class="hp-pct-cell"><div class="hp-mini"><i style="width:0%"></i></div> <span class="hp-fp">0%</span></td></tr>';
         }
         if (fileRows.length > maxShow) {
-          htmlRows += '<tr><td colspan="3">… +' + (fileRows.length - maxShow) + ' file lainnya</td></tr>';
+          htmlRows += '<tr><td colspan="4">… +' + (fileRows.length - maxShow) + ' file lainnya</td></tr>';
         }
         if (tbody) tbody.innerHTML = htmlRows;
         document.getElementById('hp-file-count').textContent =
           '(' + fileRows.length + ' file · ~' + hpFormatSize(totalUncompressed) + ')';
         hpLog('Ditemukan ' + fileRows.length + ' file · total ~' + hpFormatSize(totalUncompressed));
         hpStep(1, 'ok');
-        hpProgress(15, 'Daftar file siap', 'langkah 2/6');
+        hpProgress(8, 'Daftar file siap', 'langkah 2/6');
+
+        function hpSetFileProgress(relPath, status, pctFile) {
+          if (!tbody) return;
+          var rows = tbody.querySelectorAll('tr[data-path]');
+          var target = null;
+          // match exact or endsWith (server path may strip prefix)
+          for (var r = 0; r < rows.length; r++) {
+            var dp = rows[r].getAttribute('data-path') || '';
+            if (dp === relPath || dp.endsWith('/' + relPath) || relPath.endsWith(dp) ||
+                dp.replace(/^.*\//, '') === String(relPath).replace(/^.*\//, '')) {
+              target = rows[r];
+              break;
+            }
+          }
+          if (!target) return;
+          target.classList.remove('uploading', 'ok', 'err', 'patched');
+          if (status) target.classList.add(status);
+          var bar = target.querySelector('.hp-mini > i');
+          var lab = target.querySelector('.hp-fp');
+          var p = Math.max(0, Math.min(100, Math.round(pctFile == null ? (status === 'ok' ? 100 : 0) : pctFile)));
+          if (bar) bar.style.width = p + '%';
+          if (lab) lab.textContent = status === 'uploading' ? ('↑' + p + '%') : (status === 'ok' ? '100%' : (status === 'err' ? 'ERR' : p + '%'));
+        }
 
         // —— Step 2: compress ——
         hpStep(2, 'run');
         hpLog('Compress ZIP (DEFLATE)…');
-        hpProgress(20, 'Compress paket…', 'bisa 5–30 dtk');
+        hpProgress(10, 'Compress paket…', 'bisa 5–30 dtk');
         const blob = await zip.generateAsync({
           type: 'blob',
           compression: 'DEFLATE',
           compressionOptions: { level: 6 }
         }, function (meta) {
           if (meta && meta.percent != null) {
-            var p = 20 + (meta.percent * 0.25);
+            var p = 10 + (meta.percent * 0.12);
             hpProgress(p, 'Compress ' + Math.round(meta.percent) + '%…', meta.currentFile || '');
           }
         });
@@ -5572,15 +5621,11 @@
           return;
         }
         hpStep(2, 'ok');
-        hpProgress(50, 'ZIP ' + hpFormatSize(blob.size), 'langkah 3/6');
+        hpProgress(22, 'ZIP ' + hpFormatSize(blob.size) + ' — kirim ke server', 'langkah 3/6');
 
-        // —— Step 3: kirim ——
+        // —— Step 3–5: stream progress dari server ——
         hpStep(3, 'run');
-        hpStep(4, 'run');
-        hpStep(5, 'run');
-        hpLog('Kirim ke Worker /api/hosting/upload …');
-        hpLog('(server: extract → patch API/path/SDK → Git blobs → commit)');
-        hpProgress(55, 'Upload + patch + commit di server…', '30–120 dtk');
+        hpLog('Kirim ke Worker (stream progress per file)…');
 
         const fd = new FormData();
         fd.append('game_slot', String(slot));
@@ -5589,16 +5634,92 @@
         if (msg) fd.append('message', msg);
 
         const t0 = Date.now();
-        const res = await fetch('/api/hosting/upload', { method: 'POST', body: fd });
-        const data = await res.json().catch(function () { return {}; });
-        const took = ((Date.now() - t0) / 1000).toFixed(1);
-        hpLog('Respon server ' + res.status + ' dalam ' + took + 's');
+        const res = await fetch('/api/hosting/upload?stream=1', {
+          method: 'POST',
+          body: fd,
+          headers: { Accept: 'application/x-ndjson' }
+        });
 
-        if (!res.ok || !data.ok) {
+        if (!res.ok && !res.body) {
+          var errTxt = await res.text().catch(function () { return ''; });
+          hpStep(3, 'err');
+          hpLog('GAGAL HTTP ' + res.status + ' ' + String(errTxt).slice(0, 200));
+          setLog('Gagal upload', false);
+          document.getElementById('hp-btn-back').style.display = '';
+          return;
+        }
+
+        var data = null;
+        var lastFileLog = 0;
+        if (res.body && res.headers.get('content-type') && res.headers.get('content-type').indexOf('ndjson') >= 0) {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          var buf = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            var lines = buf.split('\n');
+            buf = lines.pop() || '';
+            for (var li = 0; li < lines.length; li++) {
+              var line = lines[li].trim();
+              if (!line) continue;
+              var ev;
+              try { ev = JSON.parse(line); } catch (_) { continue; }
+              if (ev.type === 'phase') {
+                if (ev.pct != null) hpProgress(ev.pct, ev.message || ev.phase, ev.phase || '');
+                if (ev.phase === 'patch' || ev.phase === 'patch_done') {
+                  hpStep(3, 'ok');
+                  hpStep(4, 'run');
+                }
+                if (ev.phase === 'blobs') {
+                  hpStep(4, 'ok');
+                  hpStep(5, 'run');
+                }
+                if (ev.phase === 'tree' || ev.phase === 'commit' || ev.phase === 'ref') {
+                  hpStep(5, 'run');
+                }
+                if (ev.message) hpLog(ev.message);
+              } else if (ev.type === 'file') {
+                var filePct = ev.status === 'ok' ? 100 : (ev.status === 'uploading' ? 40 : 0);
+                hpSetFileProgress(ev.path, ev.status === 'ok' ? 'ok' : (ev.status === 'uploading' ? 'uploading' : 'err'), filePct);
+                if (ev.pct != null) {
+                  hpProgress(ev.pct, 'Git: ' + (ev.index || '?') + '/' + (ev.total || '?') + ' · ' + (ev.path || ''), ev.status || '');
+                }
+                // log setiap ~8 file agar tidak banjir
+                if (ev.status === 'ok' && ev.index) {
+                  if (ev.index - lastFileLog >= 8 || ev.index === ev.total) {
+                    hpLog('✓ ' + ev.index + '/' + ev.total + ' ' + ev.path + (ev.size != null ? ' (' + hpFormatSize(ev.size) + ')' : ''));
+                    lastFileLog = ev.index;
+                  }
+                }
+              } else if (ev.type === 'done' && ev.result) {
+                data = ev.result;
+              } else if (ev.type === 'error') {
+                hpLog('GAGAL: ' + (ev.error || 'unknown'));
+                hpStep(3, 'err');
+                hpStep(4, 'err');
+                hpStep(5, 'err');
+                setLog('Gagal: ' + (ev.error || ''), false);
+                hpProgress(100, 'Gagal', 'error');
+                document.getElementById('hp-btn-back').style.display = '';
+                return;
+              }
+            }
+          }
+        } else {
+          // fallback non-stream
+          data = await res.json().catch(function () { return {}; });
+        }
+
+        const took = ((Date.now() - t0) / 1000).toFixed(1);
+        hpLog('Selesai stream dalam ' + took + 's');
+
+        if (!data || !data.ok) {
           hpStep(3, 'err');
           hpStep(4, 'err');
           hpStep(5, 'err');
-          var errMsg = (data.error || res.status) + (data.detail ? '\n' + JSON.stringify(data.detail).slice(0, 400) : '');
+          var errMsg = (data && data.error) || 'Upload gagal / tidak ada hasil';
           hpLog('GAGAL: ' + errMsg);
           setLog('Gagal: ' + errMsg, false);
           hpProgress(100, 'Gagal', 'error');
@@ -5610,7 +5731,21 @@
         hpStep(4, 'ok');
         hpStep(5, 'ok');
         hpStep(6, 'run');
-        hpProgress(90, 'Commit berhasil', 'langkah 6/6');
+        hpProgress(98, 'Commit berhasil', 'langkah 6/6');
+
+        // tandai semua row ok jika belum
+        if (tbody) {
+          var allRows = tbody.querySelectorAll('tr[data-path]');
+          for (var ar = 0; ar < allRows.length; ar++) {
+            if (!allRows[ar].classList.contains('ok')) {
+              allRows[ar].classList.add('ok');
+              var bi = allRows[ar].querySelector('.hp-mini > i');
+              var lb = allRows[ar].querySelector('.hp-fp');
+              if (bi) bi.style.width = '100%';
+              if (lb) lb.textContent = '100%';
+            }
+          }
+        }
 
         hpLog('—— Hasil ——');
         hpLog('Slot: game-' + data.game_slot + ' · game_id=' + (data.game_id || ''));
@@ -5620,18 +5755,11 @@
           hpLog('SDK inject: ' + ((data.patch.injected_html && data.patch.injected_html.join(', ')) || '—'));
           hpLog('EDU base: ' + (data.patch.edu_base || ''));
           if (data.patch.details && data.patch.details.length) {
-            hpLog('File ter-patch:');
-            for (var k = 0; k < Math.min(data.patch.details.length, 30); k++) {
+            for (var k = 0; k < Math.min(data.patch.details.length, 20); k++) {
               var d = data.patch.details[k];
-              hpLog('  • ' + d.path + ' [' + (d.changes || []).join(', ') + ']');
-              // highlight di tabel
-              var rows = document.querySelectorAll('#hp-file-tbody tr');
-              for (var r = 0; r < rows.length; r++) {
-                var cell = rows[r].querySelector('td.path');
-                if (cell && cell.textContent === d.path) rows[r].classList.add('patched');
-              }
+              hpLog('  • patch ' + d.path + ' [' + (d.changes || []).join(', ') + ']');
+              hpSetFileProgress(d.path, 'patched', 100);
             }
-            if (data.patch.details.length > 30) hpLog('  … +' + (data.patch.details.length - 30) + ' lagi');
           }
         }
         hpLog('Commit: ' + (data.commit || '').slice(0, 12));
