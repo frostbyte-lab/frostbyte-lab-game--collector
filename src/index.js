@@ -701,8 +701,25 @@ export default {
               },
               rawZipBytes
             );
-            if (!result.ok && !result.continue) {
-              await send({ type: "error", error: result.error, detail: result.detail, status: result.status });
+            if (result && result.continue) {
+              await send({
+                type: "continue",
+                session_id: result.session_id,
+                done: result.done,
+                total: result.total,
+                remaining: result.remaining,
+                pct: result.total ? 20 + Math.round((result.done / result.total) * 65) : 50,
+                message: `Batch 1 selesai (${result.done}/${result.total}). Lanjut ${result.remaining} file…`
+              });
+            } else if (result && result.ok) {
+              await send({ type: "done", pct: 100, result });
+            } else {
+              await send({
+                type: "error",
+                error: (result && result.error) || "upload gagal",
+                detail: result && result.detail,
+                status: result && result.status
+              });
             }
           } catch (e) {
             try {
@@ -808,12 +825,25 @@ export default {
             const result = await continueEduUpload(env, sessionId, filesMap, async (ev) => {
               await send(ev);
             });
-            if (!result.ok && !result.continue) {
+            // Event penutup eksplisit — client butuh done/continue/error
+            if (result && result.continue) {
+              await send({
+                type: "continue",
+                session_id: result.session_id,
+                done: result.done,
+                total: result.total,
+                remaining: result.remaining,
+                pct: result.total ? 20 + Math.round((result.done / result.total) * 65) : 50,
+                message: `Batch selesai (${result.done}/${result.total}). Lanjut ${result.remaining} file…`
+              });
+            } else if (result && result.ok) {
+              await send({ type: "done", pct: 100, result });
+            } else {
               await send({
                 type: "error",
-                error: result.error || "continue gagal",
-                detail: result.detail,
-                status: result.status
+                error: (result && result.error) || "continue gagal",
+                detail: result && result.detail,
+                status: result && result.status
               });
             }
           } catch (e) {
