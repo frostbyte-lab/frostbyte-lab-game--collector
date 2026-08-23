@@ -4629,6 +4629,29 @@
         appendLog('API belum terlihat: ' + missingApis.join(', '), 'warn');
       }
 
+      // --- EDU system markers (setelah Terapkan System) ---
+      appendLog('—— Deteksi system EDU ——', 'ok');
+      let eduApiHits = 0;
+      let eduSdk = false;
+      let eduOrigin = false;
+      for (const [path, content] of scanned) {
+        if (!content) continue;
+        if (content.includes('__EDU_API_PATHS__') || content.includes('__EDU_API__')) eduApiHits++;
+        if (content.includes('edu-game-client.js') || content.includes('EduGameClient')) eduSdk = true;
+        if (content.includes('__EDU_ORIGIN__') || content.includes('edu-network.pages.dev')) eduOrigin = true;
+        for (const p of DETECT_API_PATHS) {
+          if (content.includes(p) && !apiMap.has(p)) {
+            if (!apiMap.has(p)) apiMap.set(p, []);
+            apiMap.get(p).push(path);
+          }
+        }
+      }
+      if (eduApiHits || eduSdk) {
+        appendLog('EDU markers: API map ' + (eduApiHits ? '✓' : '·') + ' · SDK ' + (eduSdk ? '✓' : '·') + ' · origin ' + (eduOrigin ? '✓' : '·'), 'ok');
+      } else {
+        appendLog('EDU markers: belum ada — buka Hosting → Terapkan System dulu.', 'warn');
+      }
+
       // --- Balance fields ---
       appendLog('—— Deteksi field balance ——', 'ok');
       let anyBal = false;
@@ -4666,7 +4689,11 @@
 
       const total = domainMap.size + apiMap.size + balanceMap.size;
       appendLog('Deteksi AI selesai. Temuan unik: domain ' + domainMap.size + ', API ' + apiMap.size + ', balance ' + balanceMap.size + '.', total ? 'ok' : 'warn');
-      alert('Deteksi AI selesai.\nDomain: ' + domainMap.size + '\nAPI: ' + apiMap.size + '\nBalance: ' + balanceMap.size + '\n\nLihat log / panel AI.');
+      var tip = '';
+      if (apiMap.size === 0) {
+        tip = '\n\nAPI = 0 artinya path /api/game/* belum ada di file.\nBuka Hosting → isi form → tombol Terapkan System, lalu Deteksi AI lagi.';
+      }
+      alert('Deteksi AI selesai.\nDomain: ' + domainMap.size + '\nAPI: ' + apiMap.size + '\nBalance: ' + balanceMap.size + tip + '\n\nLihat log / panel AI.');
     }
 
     function analyzeCurrentCode() {
@@ -5658,17 +5685,101 @@
       }
       function rewrite(text) {
         var ch = [];
-        var o = text.replace(/https?:\\/\\/(?:[a-z0-9-]+\\.)*(?:pgsoft|pragmatic|habanero|spadegaming|jili|jokergaming|fastspin|cq9|hacksaw|relax|playtech|evolution)[a-z0-9.-]*/gi, function(){ ch.push('provider_host'); return eduBase; });
-        o = o.replace(/\\b((?:const|let|var)\\s+(?:API_BASE|API_URL|BASE_URL|SERVER_URL|apiBase|apiUrl|baseUrl)\\s*=\\s*)(["'\`])https?:\\/\\/[^"'\`]+?\\2/gi, function(m, pre, q){ ch.push('api_base'); return pre + q + eduBase + q; });
-        o = o.replace(/(["'\`])https?:\\/\\/[^"'\`]+(\\/api\\/(?:game|slot|admin)[^"'\`]*)\\1/gi, function(m,q,path){ ch.push('api_path'); return q + eduBase + path + q; });
+        var o = text;
+        // provider hosts → EDU
+        o = o.replace(/https?:\/\/(?:[a-z0-9-]+\.)*(?:pgsoft|pragmatic|habanero|spadegaming|jili|jokergaming|fastspin|cq9|hacksaw|relax|playtech|evolution|netent|redtiger|btg|nolimit|pushgaming|playngo|yggdrasil)[a-z0-9.-]*/gi, function(){ ch.push("provider_host"); return eduBase; });
+        // API_BASE = "https://..."
+        o = o.replace(/\b((?:const|let|var)\s+(?:API_BASE|API_URL|BASE_URL|SERVER_URL|HOST_URL|apiBase|apiUrl|baseUrl|serverUrl)\s*=\s*)(["'`])https?:\/\/[^"'`]+?\2/gi, function(m, pre, q){ ch.push("api_base"); return pre + q + eduBase + q; });
+        // absolute URL + /api/...
+        o = o.replace(/(["'`])https?:\/\/[^"'`]+(\/api\/(?:game|slot|admin)[^"'`]*)\1/gi, function(m, q, path){ ch.push("api_path"); return q + eduBase + path + q; });
+        // relative /api/xxx (non-game) often used by providers — point comment marker for EDU
+        if (/\/api\/(?!game\/|slot\/|admin\/)/i.test(o) && o.indexOf("/api/game/spin") < 0) {
+          // don't mass-rewrite relative paths (breaks assets); mark for inject only
+          ch.push("api_relative_seen");
+        }
         return { text: o, changes: ch };
       }
+
       function inject(html) {
-        if (/edu-game-client\\.js/i.test(html) && /EDU_GAME_ID|__eduClient|__EDU_GAME_ID__/i.test(html)) return { html: html, injected: false };
-        var sn = '\\n<!-- EDU Network auto-patch -->\\n<script>window.__EDU_GAME_ID__=' + JSON.stringify(gameId) + ';window.__EDU_ORIGIN__=' + JSON.stringify(eduBase) + ';window.EDU_API_BASE=' + JSON.stringify(eduBase) + ';window.EDU_GAME_ID=' + JSON.stringify(gameId) + ';</script>\\n<script src="' + eduBase + '/sdk/edu-game-client.js" defer></script>\\n';
-        sn += '<script>window.__EDU_RNG_LEVEL__=' + rngLevel + ';(function(){var _r=Math.random.bind(Math);if(' + rngLevel + '===2)return;Math.random=function(){var x=_r();return ' + rngLevel + '===1?(x*x):Math.sqrt(x);};})();</script>\\n';
+        if (/edu-game-client\.js/i.test(html) && /__EDU_API_PATHS__|__EDU_GAME_ID__/i.test(html)) {
+          return { html: html, injected: false };
+        }
+        /* Path API EDU — sengaja tertulis agar Deteksi AI & runtime punya /api/game/* */
+        var apiPaths = {
+          config: "/api/game/config",
+          init: "/api/game/init",
+          session: "/api/game/session",
+          balance: "/api/game/balance",
+          bet: "/api/game/bet",
+          spin: "/api/game/spin",
+          result: "/api/game/result",
+          history: "/api/game/history",
+          collect: "/api/game/collect",
+          bonus: "/api/game/bonus",
+          health: "/api/game/health"
+        };
+        var sn = "\n<!-- EDU Network auto-patch -->\n<script>\n";
+        sn += "window.__EDU_GAME_ID__=" + JSON.stringify(gameId) + ";\n";
+        sn += "window.__EDU_ORIGIN__=" + JSON.stringify(eduBase) + ";\n";
+        sn += "window.EDU_API_BASE=" + JSON.stringify(eduBase) + ";\n";
+        sn += "window.EDU_GAME_ID=" + JSON.stringify(gameId) + ";\n";
+        sn += "window.__EDU_API_PATHS__=" + JSON.stringify(apiPaths) + ";\n";
+        sn += "window.__EDU_API__={config:" + JSON.stringify(eduBase + "/api/game/config");
+        sn += ",init:" + JSON.stringify(eduBase + "/api/game/init");
+        sn += ",session:" + JSON.stringify(eduBase + "/api/game/session");
+        sn += ",balance:" + JSON.stringify(eduBase + "/api/game/balance");
+        sn += ",bet:" + JSON.stringify(eduBase + "/api/game/bet");
+        sn += ",spin:" + JSON.stringify(eduBase + "/api/game/spin");
+        sn += ",result:" + JSON.stringify(eduBase + "/api/game/result");
+        sn += ",history:" + JSON.stringify(eduBase + "/api/game/history");
+        sn += ",collect:" + JSON.stringify(eduBase + "/api/game/collect");
+        sn += ",bonus:" + JSON.stringify(eduBase + "/api/game/bonus") + "};\n";
+        sn += "</script>\n";
+        sn += '<script src="' + eduBase + '/sdk/edu-game-client.js" defer></script>\n';
+        sn += "<script>\n(function(){\n";
+        sn += "  var BASE=" + JSON.stringify(eduBase) + ";\n";
+        sn += "  var PATHS=window.__EDU_API_PATHS__||{};\n";
+        sn += "  function mapUrl(u){\n";
+        sn += "    if(typeof u!=='string')return u;\n";
+        sn += "    try{\n";
+        sn += "      if(/\\/api\\/game\\//i.test(u)){\n";
+        sn += "        if(u.indexOf('http')===0) return u.replace(/^https?:\\/\\/[^/]+/i, BASE);\n";
+        sn += "        return BASE + (u.charAt(0)==='/'?u:('/'+u));\n";
+        sn += "      }\n";
+        sn += "      // generic provider API → EDU spin/balance when path looks like game action\n";
+        sn += "      if(/\\/(spin|bet|balance|session|init|collect|bonus|wager|play)\\b/i.test(u) && !/edu-network/i.test(u)){\n";
+        sn += "        var key='spin';\n";
+        sn += "        if(/balance/i.test(u)) key='balance';\n";
+        sn += "        else if(/session/i.test(u)) key='session';\n";
+        sn += "        else if(/init/i.test(u)) key='init';\n";
+        sn += "        else if(/bet|wager/i.test(u)) key='bet';\n";
+        sn += "        else if(/collect/i.test(u)) key='collect';\n";
+        sn += "        else if(/bonus/i.test(u)) key='bonus';\n";
+        sn += "        return BASE + (PATHS[key]||'/api/game/spin');\n";
+        sn += "      }\n";
+        sn += "    }catch(e){}\n";
+        sn += "    return u;\n";
+        sn += "  }\n";
+        sn += "  try{\n";
+        sn += "    var _f=window.fetch;\n";
+        sn += "    if(typeof _f==='function'){\n";
+        sn += "      window.fetch=function(input, init){\n";
+        sn += "        if(typeof input==='string') input=mapUrl(input);\n";
+        sn += "        else if(input&&typeof input.url==='string'){\n";
+        sn += "          try{ input=new Request(mapUrl(input.url), input); }catch(_e){}\n";
+        sn += "        }\n";
+        sn += "        return _f.call(this, input, init);\n";
+        sn += "      };\n";
+        sn += "    }\n";
+        sn += "  }catch(e1){}\n";
+        sn += "  window.__EDU_RNG_LEVEL__=" + rngLevel + ";\n";
+        sn += "  var _r=Math.random.bind(Math);\n";
+        sn += "  if(" + rngLevel + "!==2){\n";
+        sn += "    Math.random=function(){ var x=_r(); return " + rngLevel + "===1?(x*x):Math.sqrt(x); };\n";
+        sn += "  }\n";
+        sn += "})();\n</script>\n";
         var o = html;
-        if (/<\\/head>/i.test(o)) o = o.replace(/<\\/head>/i, sn + '</head>');
+        if (/<\/head>/i.test(o)) o = o.replace(/<\/head>/i, sn + "</head>");
         else o = sn + o;
         return { html: o, injected: true };
       }
@@ -5696,7 +5807,7 @@
       report.patched++;
       report.files.push({ path: 'edu-meta.json', changes: ['meta'] });
       report.systems = [
-        { id: 'api', label: 'Custom API EDU', ok: report.patched > 0 },
+        { id: 'api', label: 'Custom API EDU', ok: report.injectedHtml.length > 0 || report.files.some(function(f){ return (f.changes||[]).some(function(c){ return /api|provider|sdk/i.test(c); }); }) },
         { id: 'domain', label: 'Domain EDU', ok: true, value: eduBase },
         { id: 'sdk', label: 'SDK inject', ok: report.injectedHtml.length > 0 },
         { id: 'balance', label: 'Saldo bawaan → 0', ok: zeroBalance },
