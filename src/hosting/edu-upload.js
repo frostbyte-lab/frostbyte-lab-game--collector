@@ -170,57 +170,138 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message, onPr
   }
   const baseTreeSha = commitRes.data?.tree?.sha;
 
-  // 3) create blobs — sequential batches, progress per file
-  // pct range for blobs: 20 → 85
-  const treeItems = [];
-  const BATCH = 4;
+  // 3) Build tree items
+  // Text files: inline `content` di tree API (tanpa 1 request/blob) → hemat subrequest & waktu
+  // Binary: blob API base64 (batch)
+  const TEXT_RE = /\.(html?|js|mjs|cjs|json|css|txt|svg|xml|map|md|csv|tsv|vtt|glsl|vert|frag)$/i;
+  function isMostlyText(bytes) {
+    const n = Math.min(bytes.length, 800);
+    let bad = 0;
+    for (let i = 0; i < n; i++) {
+      const c = bytes[i];
+      if (c === 0) return false;
+      if (c < 7 && c !== 9 && c !== 10 && c !== 13) bad++;
+    }
+    return bad < n * 0.05;
+  }
+  function bytesToUtf8(bytes) {
+    if (typeof TextDecoder !== "undefined") {
+      return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    }
+    let s = "";
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    try {
+      return decodeURIComponent(escape(s));
+    } catch {
+      return s;
+    }
+  }
+  function bytesToBase64(bytes) {
+    let binary = "";
+    const chunk = 0x8000;
+    for (let j = 0; j < bytes.length; j += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(j, j + chunk));
+    }
+    return btoa(binary);
+  }
+
   const total = entries.length;
+  const treeItems = [];
   let doneCount = 0;
 
-  await emit({ type: "phase", phase: "blobs", message: "Upload file ke GitHub…", pct: 20, total });
+  const textEntries = [];
+  const binEntries = [];
+  for (const e of entries) {
+    if (TEXT_RE.test(e.rel) && e.size < 900_000 && isMostlyText(e.data)) textEntries.push(e);
+    else binEntries.push(e);
+  }
 
-  for (let i = 0; i < entries.length; i += BATCH) {
-    const slice = entries.slice(i, i + BATCH);
-    // mark batch as running
+  await emit({
+    type: "phase",
+    phase: "blobs",
+    message: `Siapkan tree: ${textEntries.length} teks inline + ${binEntries.length} binary blob…`,
+    pct: 20,
+    total
+  });
+
+  // 3a) text → tree content (langsung, progress cepat)
+  for (const e of textEntries) {
+    await emit({
+      type: "file",
+      path: e.rel,
+      fullPath: e.path,
+      index: doneCount + 1,
+      total,
+      size: e.size,
+      status: "uploading",
+      pct: 20 + Math.round((doneCount / total) * 65)
+    });
+    treeItems.push({
+      path: e.path,
+      mode: "100644",
+      type: "blob",
+      content: bytesToUtf8(e.data)
+    });
+    doneCount++;
+    await emit({
+      type: "file",
+      path: e.rel,
+      fullPath: e.path,
+      index: doneCount,
+      total,
+      size: e.size,
+      status: "ok",
+      pct: 20 + Math.round((doneCount / total) * 65)
+    });
+  }
+
+  // 3b) binary → blob API (batch 6)
+  const BATCH = 6;
+  for (let i = 0; i < binEntries.length; i += BATCH) {
+    const slice = binEntries.slice(i, i + BATCH);
     for (const e of slice) {
-      const idx = entries.indexOf(e);
       await emit({
         type: "file",
         path: e.rel,
         fullPath: e.path,
-        index: idx + 1,
+        index: doneCount + slice.indexOf(e) + 1,
         total,
         size: e.size,
         status: "uploading",
         pct: 20 + Math.round((doneCount / total) * 65)
       });
     }
-    const results = await Promise.all(
-      slice.map(async (e) => {
-        let binary = "";
-        const bytes = e.data;
-        const chunk = 0x8000;
-        for (let j = 0; j < bytes.length; j += chunk) {
-          binary += String.fromCharCode.apply(null, bytes.subarray(j, j + chunk));
-        }
-        const content = btoa(binary);
-        const blobRes = await ghFetch(env, `${apiBase}/git/blobs`, {
-          method: "POST",
-          body: JSON.stringify({ content, encoding: "base64" })
-        });
-        if (!blobRes.ok) {
-          throw new Error(`Blob gagal ${e.path}: ${blobRes.status} ${JSON.stringify(blobRes.data)}`);
-        }
-        return {
-          path: e.path,
-          rel: e.rel,
-          size: e.size,
-          mode: "100644",
-          type: "blob",
-          sha: blobRes.data.sha
-        };
-      })
-    );
+    let results;
+    try {
+      results = await Promise.all(
+        slice.map(async (e) => {
+          const content = bytesToBase64(e.data);
+          const blobRes = await ghFetch(env, `${apiBase}/git/blobs`, {
+            method: "POST",
+            body: JSON.stringify({ content, encoding: "base64" })
+          });
+          if (!blobRes.ok) {
+            const detail = JSON.stringify(blobRes.data).slice(0, 200);
+            throw new Error(`Blob gagal ${e.rel}: HTTP ${blobRes.status} ${detail}`);
+          }
+          return {
+            path: e.path,
+            rel: e.rel,
+            size: e.size,
+            mode: "100644",
+            type: "blob",
+            sha: blobRes.data.sha
+          };
+        })
+      );
+    } catch (err) {
+      await emit({
+        type: "error",
+        error: err?.message || String(err),
+        pct: 20 + Math.round((doneCount / total) * 65)
+      });
+      return { ok: false, status: 502, error: err?.message || String(err) };
+    }
     for (const r of results) {
       doneCount++;
       treeItems.push({ path: r.path, mode: r.mode, type: r.type, sha: r.sha });
@@ -237,19 +318,44 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message, onPr
     }
   }
 
-  // 4) create tree (base_tree agar file lain di repo tetap)
-  await emit({ type: "phase", phase: "tree", message: "Membangun Git tree…", pct: 88 });
-  const treeRes = await ghFetch(env, `${apiBase}/git/trees`, {
-    method: "POST",
-    body: JSON.stringify({
-      base_tree: baseTreeSha,
-      tree: treeItems
-    })
-  });
-  if (!treeRes.ok) {
-    return { ok: false, status: treeRes.status, error: "Gagal buat tree", detail: treeRes.data };
+  // GitHub tree API: jangan kirim >~100 item content sekaligus (body besar)
+  // Jika terlalu banyak, pecah create tree berantai
+  async function createTreeChained(items, startBase) {
+    const CHUNK = 80;
+    let base = startBase;
+    for (let i = 0; i < items.length; i += CHUNK) {
+      const slice = items.slice(i, i + CHUNK);
+      await emit({
+        type: "phase",
+        phase: "tree",
+        message: `Git tree ${Math.min(i + slice.length, items.length)}/${items.length}…`,
+        pct: 85 + Math.round((i / items.length) * 5)
+      });
+      const treeRes = await ghFetch(env, `${apiBase}/git/trees`, {
+        method: "POST",
+        body: JSON.stringify({ base_tree: base, tree: slice })
+      });
+      if (!treeRes.ok) {
+        return {
+          ok: false,
+          status: treeRes.status,
+          error: "Gagal buat tree: " + JSON.stringify(treeRes.data).slice(0, 300),
+          detail: treeRes.data
+        };
+      }
+      base = treeRes.data.sha;
+    }
+    return { ok: true, sha: base };
   }
-  const newTreeSha = treeRes.data.sha;
+
+  // 4) create tree (base_tree agar file lain di repo tetap) — berantai jika banyak
+  await emit({ type: "phase", phase: "tree", message: "Membangun Git tree…", pct: 88 });
+  const treeChain = await createTreeChained(treeItems, baseTreeSha);
+  if (!treeChain.ok) {
+    await emit({ type: "error", error: treeChain.error, pct: 88 });
+    return treeChain;
+  }
+  const newTreeSha = treeChain.sha;
 
   // 5) commit
   await emit({ type: "phase", phase: "commit", message: "Membuat commit…", pct: 92 });
