@@ -5623,42 +5623,35 @@
         hpStep(2, 'ok');
         hpProgress(22, 'ZIP ' + hpFormatSize(blob.size) + ' — kirim ke server', 'langkah 3/6');
 
-        // —— Step 3–5: stream progress dari server ——
+        // —— Step 3–5: stream progress (+ auto-continue batch) ——
         hpStep(3, 'run');
-        hpLog('Kirim ke Worker (stream progress per file)…');
+        hpLog('Kirim ke Worker (batch aman, anti subrequest limit)…');
 
-        const fd = new FormData();
-        fd.append('game_slot', String(slot));
-        fd.append('zip', blob, 'game-package.zip');
         const msg = (msgEl && msgEl.value) ? msgEl.value.trim() : '';
-        if (msg) fd.append('message', msg);
-
         const t0 = Date.now();
-        const res = await fetch('/api/hosting/upload?stream=1', {
-          method: 'POST',
-          body: fd,
-          headers: { Accept: 'application/x-ndjson' }
-        });
-
-        if (!res.ok && !res.body) {
-          var errTxt = await res.text().catch(function () { return ''; });
-          hpStep(3, 'err');
-          hpLog('GAGAL HTTP ' + res.status + ' ' + String(errTxt).slice(0, 200));
-          setLog('Gagal upload', false);
-          document.getElementById('hp-btn-back').style.display = '';
-          return;
-        }
-
         var data = null;
         var lastFileLog = 0;
-        if (res.body && res.headers.get('content-type') && res.headers.get('content-type').indexOf('ndjson') >= 0) {
+        var sessionId = null;
+        var batchRound = 0;
+
+        async function readNdjsonStream(res) {
+          var cont = null;
+          var result = null;
+          var failed = null;
+          if (!(res.body && res.headers.get('content-type') && res.headers.get('content-type').indexOf('ndjson') >= 0)) {
+            var j = await res.json().catch(function () { return {}; });
+            if (j.continue && j.session_id) cont = j;
+            else if (j.ok) result = j;
+            else failed = j.error || 'Upload gagal';
+            return { cont: cont, result: result, failed: failed };
+          }
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           var buf = '';
           while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            buf += decoder.decode(chunk.value, { stream: true });
             var lines = buf.split('\n');
             buf = lines.pop() || '';
             for (var li = 0; li < lines.length; li++) {
@@ -5686,34 +5679,90 @@
                 if (ev.pct != null) {
                   hpProgress(ev.pct, 'Git: ' + (ev.index || '?') + '/' + (ev.total || '?') + ' · ' + (ev.path || ''), ev.status || '');
                 }
-                // log setiap ~8 file agar tidak banjir
                 if (ev.status === 'ok' && ev.index) {
                   if (ev.index - lastFileLog >= 8 || ev.index === ev.total) {
                     hpLog('✓ ' + ev.index + '/' + ev.total + ' ' + ev.path + (ev.size != null ? ' (' + hpFormatSize(ev.size) + ')' : ''));
                     lastFileLog = ev.index;
                   }
                 }
+              } else if (ev.type === 'continue') {
+                cont = ev;
+                if (ev.message) hpLog(ev.message);
               } else if (ev.type === 'done' && ev.result) {
-                data = ev.result;
+                result = ev.result;
               } else if (ev.type === 'error') {
-                hpLog('GAGAL: ' + (ev.error || 'unknown'));
-                hpStep(3, 'err');
-                hpStep(4, 'err');
-                hpStep(5, 'err');
-                setLog('Gagal: ' + (ev.error || ''), false);
-                hpProgress(100, 'Gagal', 'error');
-                document.getElementById('hp-btn-back').style.display = '';
-                return;
+                failed = ev.error || 'unknown';
               }
             }
           }
-        } else {
-          // fallback non-stream
-          data = await res.json().catch(function () { return {}; });
+          return { cont: cont, result: result, failed: failed };
+        }
+
+        // Batch 1
+        batchRound = 1;
+        var fd0 = new FormData();
+        fd0.append('game_slot', String(slot));
+        fd0.append('zip', blob, 'game-package.zip');
+        if (msg) fd0.append('message', msg);
+        var res = await fetch('/api/hosting/upload?stream=1', {
+          method: 'POST',
+          body: fd0,
+          headers: { Accept: 'application/x-ndjson' }
+        });
+        if (!res.ok && !res.body) {
+          var errTxt = await res.text().catch(function () { return ''; });
+          hpStep(3, 'err');
+          hpLog('GAGAL HTTP ' + res.status + ' ' + String(errTxt).slice(0, 200));
+          setLog('Gagal upload', false);
+          document.getElementById('hp-btn-back').style.display = '';
+          return;
+        }
+        var parsed = await readNdjsonStream(res);
+        if (parsed.failed) {
+          hpLog('GAGAL: ' + parsed.failed);
+          hpStep(3, 'err');
+          hpStep(4, 'err');
+          hpStep(5, 'err');
+          setLog('Gagal: ' + parsed.failed, false);
+          hpProgress(100, 'Gagal', 'error');
+          document.getElementById('hp-btn-back').style.display = '';
+          return;
+        }
+        data = parsed.result;
+        sessionId = parsed.cont && parsed.cont.session_id;
+
+        // Batch 2..N (auto-continue)
+        while (sessionId && !data) {
+          batchRound++;
+          hpLog('Lanjut batch #' + batchRound + ' (session ' + sessionId.slice(0, 8) + '…)');
+          hpProgress(50, 'Batch #' + batchRound + ' — sisa file binary…', 'continue');
+          var fdC = new FormData();
+          fdC.append('session_id', sessionId);
+          fdC.append('zip', blob, 'game-package.zip');
+          var resC = await fetch('/api/hosting/upload-continue?stream=1', {
+            method: 'POST',
+            body: fdC,
+            headers: { Accept: 'application/x-ndjson' }
+          });
+          parsed = await readNdjsonStream(resC);
+          if (parsed.failed) {
+            hpLog('GAGAL batch #' + batchRound + ': ' + parsed.failed);
+            hpStep(5, 'err');
+            setLog('Gagal: ' + parsed.failed, false);
+            hpProgress(100, 'Gagal', 'error');
+            document.getElementById('hp-btn-back').style.display = '';
+            return;
+          }
+          if (parsed.result) data = parsed.result;
+          sessionId = parsed.cont && parsed.cont.session_id ? parsed.cont.session_id : null;
+          if (batchRound > 40) {
+            hpLog('GAGAL: terlalu banyak batch');
+            break;
+          }
         }
 
         const took = ((Date.now() - t0) / 1000).toFixed(1);
-        hpLog('Selesai stream dalam ' + took + 's');
+        hpLog('Selesai stream dalam ' + took + 's · ' + batchRound + ' batch');
 
         if (!data || !data.ok) {
           hpStep(3, 'err');

@@ -4,7 +4,7 @@ import { analyzeGame, repairMetadata, recommendGames, chatAboutGames } from "./a
  */
 import { launch } from "@cloudflare/playwright";
 import { zipSync, strToU8, unzipSync } from "fflate";
-import { uploadGameToEduNetwork, eduConfig } from "./hosting/edu-upload.js";
+import { uploadGameToEduNetwork, continueEduUpload, eduConfig } from "./hosting/edu-upload.js";
 
 import { safe } from "./lib/safe.js";
 import { TYPES, isExcluded, classifyResource } from "./classify/resource.js";
@@ -677,6 +677,10 @@ export default {
         url.searchParams.get("stream") === "1" ||
         (request.headers.get("accept") || "").includes("application/x-ndjson");
 
+      // raw zip bytes for multi-batch session (optional)
+      let rawZipBytes = null;
+      // re-read not possible; extract from filesMap size estimate only — client continue sends zip again
+
       if (wantStream) {
         const { readable, writable } = new TransformStream();
         const writer = writable.getWriter();
@@ -684,7 +688,6 @@ export default {
         const send = async (obj) => {
           await writer.write(enc.encode(JSON.stringify(obj) + "\n"));
         };
-        // jalankan upload di background stream
         (async () => {
           try {
             await send({ type: "phase", phase: "start", message: "Server menerima paket…", pct: 5 });
@@ -695,12 +698,11 @@ export default {
               commitMessage || undefined,
               async (ev) => {
                 await send(ev);
-              }
+              },
+              rawZipBytes
             );
-            if (!result.ok) {
+            if (!result.ok && !result.continue) {
               await send({ type: "error", error: result.error, detail: result.detail, status: result.status });
-            } else if (!result._emitted_done) {
-              // done sudah di-emit di dalam upload; pastikan ada result
             }
           } catch (e) {
             try {
@@ -722,7 +724,86 @@ export default {
       }
 
       const result = await uploadGameToEduNetwork(env, gameSlot, filesMap, commitMessage || undefined);
-      return Response.json(result, { status: result.ok ? 200 : result.status || 500 });
+      return Response.json(result, { status: result.ok || result.continue ? 200 : result.status || 500 });
+    }
+
+    // Lanjut batch upload (hindari "Too many subrequests")
+    if (request.method === "POST" && url.pathname === "/api/hosting/upload-continue") {
+      const wantStream =
+        url.searchParams.get("stream") === "1" ||
+        (request.headers.get("accept") || "").includes("application/x-ndjson");
+      let sessionId = "";
+      let filesMap = {};
+      try {
+        const ct = (request.headers.get("content-type") || "").toLowerCase();
+        if (ct.includes("multipart/form-data")) {
+          const form = await request.formData();
+          sessionId = String(form.get("session_id") || "");
+          const zipFile = form.get("zip") || form.get("file");
+          if (zipFile && typeof zipFile.arrayBuffer === "function") {
+            const buf = new Uint8Array(await zipFile.arrayBuffer());
+            const unzipped = unzipSync(buf);
+            for (const [name, data] of Object.entries(unzipped)) {
+              if (!name.endsWith("/")) filesMap[name] = data;
+            }
+          }
+        } else {
+          const body = await request.json();
+          sessionId = String(body.session_id || "");
+          for (const [name, b64] of Object.entries(body.files || {})) {
+            if (typeof b64 !== "string") continue;
+            try {
+              const binary = atob(b64);
+              const out = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+              filesMap[name] = out;
+            } catch {
+              /* skip */
+            }
+          }
+        }
+      } catch (e) {
+        return Response.json({ ok: false, error: "Body tidak valid: " + (e?.message || e) }, { status: 400 });
+      }
+      if (!sessionId) {
+        return Response.json({ ok: false, error: "session_id wajib" }, { status: 400 });
+      }
+
+      if (wantStream) {
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        const enc = new TextEncoder();
+        const send = async (obj) => {
+          await writer.write(enc.encode(JSON.stringify(obj) + "\n"));
+        };
+        (async () => {
+          try {
+            const result = await continueEduUpload(env, sessionId, filesMap, async (ev) => {
+              await send(ev);
+            });
+            if (!result.ok && !result.continue) {
+              await send({ type: "error", error: result.error, detail: result.detail, status: result.status });
+            }
+          } catch (e) {
+            try {
+              await send({ type: "error", error: e?.message || String(e) });
+            } catch (_) {}
+          } finally {
+            try {
+              await writer.close();
+            } catch (_) {}
+          }
+        })();
+        return new Response(readable, {
+          headers: {
+            "Content-Type": "application/x-ndjson; charset=utf-8",
+            "Cache-Control": "no-store"
+          }
+        });
+      }
+
+      const result = await continueEduUpload(env, sessionId, filesMap);
+      return Response.json(result, { status: result.ok || result.continue ? 200 : result.status || 500 });
     }
 
     // Cloudflare browser collect
