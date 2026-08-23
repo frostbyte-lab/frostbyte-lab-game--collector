@@ -5632,6 +5632,7 @@
         var data = null;
         var lastFileLog = 0;
         var sessionId = null;
+        var needZipOnContinue = true;
         var batchRound = 0;
 
         async function readNdjsonStream(res) {
@@ -5689,6 +5690,7 @@
                 }
               } else if (ev.type === 'continue') {
                 cont = ev;
+                if (ev.need_zip === false) needZipOnContinue = false;
                 if (ev.message) hpLog(ev.message);
               } else if (ev.type === 'done' && ev.result) {
                 result = ev.result;
@@ -5732,15 +5734,19 @@
         }
         data = parsed.result;
         sessionId = parsed.cont && parsed.cont.session_id;
+        if (parsed.cont && parsed.cont.need_zip === false) needZipOnContinue = false;
 
-        // Batch 2..N (auto-continue)
+        // Batch 2..N (auto-continue) — jangan kirim ZIP 16MB lagi jika sudah di KV
         while (sessionId && !data) {
           batchRound++;
-          hpLog('Lanjut batch #' + batchRound + ' (session ' + sessionId.slice(0, 8) + '…)');
+          hpLog('Lanjut batch #' + batchRound + ' (session ' + sessionId.slice(0, 8) + '…)' +
+            (needZipOnContinue ? ' +ZIP' : ' (ZIP dari server)'));
           hpProgress(50, 'Batch #' + batchRound + ' — sisa file binary…', 'continue');
           var fdC = new FormData();
           fdC.append('session_id', sessionId);
-          fdC.append('zip', blob, 'game-package.zip');
+          if (needZipOnContinue) {
+            fdC.append('zip', blob, 'game-package.zip');
+          }
           var resC = await fetch('/api/hosting/upload-continue?stream=1', {
             method: 'POST',
             body: fdC,
@@ -5748,15 +5754,45 @@
           });
           parsed = await readNdjsonStream(resC);
           if (parsed.failed) {
-            hpLog('GAGAL batch #' + batchRound + ': ' + parsed.failed);
-            hpStep(5, 'err');
-            setLog('Gagal: ' + parsed.failed, false);
-            hpProgress(100, 'Gagal', 'error');
-            document.getElementById('hp-btn-back').style.display = '';
-            return;
+            // satu kali retry dengan ZIP jika session-only gagal
+            if (!needZipOnContinue) {
+              hpLog('Retry batch #' + batchRound + ' dengan ZIP…');
+              needZipOnContinue = true;
+              fdC = new FormData();
+              fdC.append('session_id', sessionId);
+              fdC.append('zip', blob, 'game-package.zip');
+              resC = await fetch('/api/hosting/upload-continue?stream=1', {
+                method: 'POST',
+                body: fdC,
+                headers: { Accept: 'application/x-ndjson' }
+              });
+              parsed = await readNdjsonStream(resC);
+            }
+            if (parsed.failed) {
+              hpLog('GAGAL batch #' + batchRound + ': ' + parsed.failed);
+              hpStep(5, 'err');
+              setLog('Gagal: ' + parsed.failed, false);
+              hpProgress(100, 'Gagal', 'error');
+              document.getElementById('hp-btn-back').style.display = '';
+              return;
+            }
           }
           if (parsed.result) data = parsed.result;
-          sessionId = parsed.cont && parsed.cont.session_id ? parsed.cont.session_id : null;
+          if (parsed.cont && parsed.cont.session_id) {
+            sessionId = parsed.cont.session_id;
+            if (parsed.cont.need_zip === false) needZipOnContinue = false;
+          } else {
+            sessionId = null;
+          }
+          if (!parsed.result && !parsed.cont && !parsed.failed) {
+            hpLog('GAGAL batch #' + batchRound + ': stream kosong (tidak ada done/continue)');
+            // retry once with zip
+            if (batchRound <= 40) {
+              needZipOnContinue = true;
+              sessionId = (parsed.cont && parsed.cont.session_id) || sessionId;
+            }
+            if (!sessionId) break;
+          }
           if (batchRound > 40) {
             hpLog('GAGAL: terlalu banyak batch');
             break;

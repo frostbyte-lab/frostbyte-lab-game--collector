@@ -625,6 +625,8 @@ export default {
       let commitMessage = "";
       /** @type {Record<string, Uint8Array>} */
       let filesMap = {};
+      /** @type {Uint8Array|null} */
+      let rawZipBytes = null;
       const ct = (request.headers.get("content-type") || "").toLowerCase();
       try {
         if (ct.includes("multipart/form-data")) {
@@ -642,8 +644,7 @@ export default {
           if (buf.byteLength > 80 * 1024 * 1024) {
             return Response.json({ ok: false, error: "ZIP terlalu besar (maks ~80 MB raw)" }, { status: 400 });
           }
-          // dipakai session multi-batch (KV)
-          request.__eduRawZip = buf;
+          rawZipBytes = buf;
           let unzipped;
           try {
             unzipped = unzipSync(buf);
@@ -679,8 +680,6 @@ export default {
         url.searchParams.get("stream") === "1" ||
         (request.headers.get("accept") || "").includes("application/x-ndjson");
 
-      const rawZipBytes = request.__eduRawZip || null;
-
       if (wantStream) {
         const { readable, writable } = new TransformStream();
         const writer = writable.getWriter();
@@ -708,6 +707,7 @@ export default {
                 done: result.done,
                 total: result.total,
                 remaining: result.remaining,
+                need_zip: false,
                 pct: result.total ? 20 + Math.round((result.done / result.total) * 65) : 50,
                 message: `Batch 1 selesai (${result.done}/${result.total}). Lanjut ${result.remaining} file…`
               });
@@ -833,6 +833,7 @@ export default {
                 done: result.done,
                 total: result.total,
                 remaining: result.remaining,
+                need_zip: false,
                 pct: result.total ? 20 + Math.round((result.done / result.total) * 65) : 50,
                 message: `Batch selesai (${result.done}/${result.total}). Lanjut ${result.remaining} file…`
               });
