@@ -19,7 +19,7 @@ const DEFAULT_EDU = {
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_FILES = 400;
 /** Max GitHub blob subrequests per Worker invocation (sisakan headroom utk tree/commit/ref) */
-const MAX_BLOB_PER_INVOKE = 35;
+const MAX_BLOB_PER_INVOKE = 25;
 const SESSION_TTL = 900;
 const TEXT_RE = /\.(html?|js|mjs|cjs|json|css|txt|svg|xml|map|md|csv|tsv|vtt|glsl|vert|frag)$/i;
 
@@ -412,11 +412,27 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message, onPr
         error: `Sisa ${remainingBin.length} file binary, tapi KV tidak tersedia untuk multi-batch. Kurangi aset atau aktifkan KV.`
       };
     }
-    // Store original patched files map is too big — store list of remaining rels + re-send zip from client is better
-    // Client will continue with same zip; server stores only session meta + tree state
     const sessionId = uid();
+    // Simpan sisa binary sebagai base64 di KV (bukan ZIP penuh) — continue ringan, anti-503
+    const binPack = {};
+    let packBytes = 0;
+    for (const e of remainingBin) {
+      const b64 = bytesToBase64(e.data);
+      binPack[e.rel] = b64;
+      packBytes += b64.length;
+    }
+    if (packBytes > 23 * 1024 * 1024) {
+      return {
+        ok: false,
+        status: 413,
+        error: `Sisa binary terlalu besar untuk session (${Math.round(packBytes / 1024 / 1024)} MB). Kurangi aset gambar/audio.`
+      };
+    }
+    await env.GC_HISTORY.put(`edu-bin:${sessionId}`, JSON.stringify(binPack), {
+      expirationTtl: SESSION_TTL
+    });
     const session = {
-      v: 1,
+      v: 2,
       slot,
       message: message || "",
       prefix,
@@ -427,6 +443,7 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message, onPr
       total,
       totalBytes,
       remainingRels: remainingBin.map((e) => e.rel),
+      hasBinPack: true,
       patchReport: {
         scanned: patchReport.scanned,
         patched: patchReport.patched,
@@ -438,12 +455,6 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message, onPr
     await env.GC_HISTORY.put(`edu-up:${sessionId}`, JSON.stringify(session), {
       expirationTtl: SESSION_TTL
     });
-    // Keep zip for continue (if fits KV 25MB)
-    if (rawZipBytes && rawZipBytes.byteLength < 24 * 1024 * 1024) {
-      await env.GC_HISTORY.put(`edu-zip:${sessionId}`, rawZipBytes, {
-        expirationTtl: SESSION_TTL
-      });
-    }
 
     await emit({
       type: "continue",
@@ -453,7 +464,7 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message, onPr
       remaining: remainingBin.length,
       pct: 20 + Math.round((doneCount / total) * 65),
       message: `Batch 1 selesai (${doneCount}/${total}). Lanjut ${remainingBin.length} file…`,
-      need_zip: !(rawZipBytes && rawZipBytes.byteLength < 24 * 1024 * 1024)
+      need_zip: false
     });
     return {
       ok: true,
@@ -529,34 +540,41 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
   } = session;
   let { treeSha, doneCount, remainingRels } = session;
 
-  // Resolve file bytes for remaining rels
-  let sourceFiles = filesMap || null;
-  if (!sourceFiles) {
-    const zipBuf = await env.GC_HISTORY.get(`edu-zip:${sessionId}`, { type: "arrayBuffer" });
-    if (!zipBuf) {
-      return {
-        ok: false,
-        status: 400,
-        error: "ZIP session hilang. Kirim ulang ZIP pada continue, atau upload dari awal."
-      };
+  // Resolve bytes: prefer edu-bin pack (base64) — no unzip, anti-503
+  const byRel = Object.create(null);
+  if (session.hasBinPack) {
+    try {
+      const packRaw = await env.GC_HISTORY.get(`edu-bin:${sessionId}`);
+      if (!packRaw) {
+        return { ok: false, status: 400, error: "Bin pack session hilang. Upload ulang." };
+      }
+      const pack = JSON.parse(packRaw);
+      for (const [rel, b64] of Object.entries(pack)) {
+        try {
+          const binary = atob(b64);
+          const out = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+          byRel[rel] = out;
+        } catch (_) {}
+      }
+    } catch (e) {
+      return { ok: false, status: 500, error: "Gagal baca bin pack: " + (e?.message || e) };
     }
-    // unzip in caller ideally — here expect filesMap from route
+  } else if (filesMap && Object.keys(filesMap).length) {
+    const { files: patched } = patchFilesForEdu(filesMap, {
+      eduBase: cfg.baseUrl,
+      gameId
+    });
+    for (const [raw, data] of Object.entries(patched)) {
+      const rel = normalizeGamePath(raw);
+      if (rel && data instanceof Uint8Array) byRel[rel] = data;
+    }
+  } else {
     return {
       ok: false,
       status: 400,
-      error: "Server butuh filesMap dari ZIP pada continue"
+      error: "Tidak ada data file untuk continue. Upload ulang dari awal."
     };
-  }
-
-  // Re-patch map to get same paths
-  const { files: patched } = patchFilesForEdu(sourceFiles, {
-    eduBase: cfg.baseUrl,
-    gameId
-  });
-  const byRel = Object.create(null);
-  for (const [raw, data] of Object.entries(patched)) {
-    const rel = normalizeGamePath(raw);
-    if (rel && data instanceof Uint8Array) byRel[rel] = data;
   }
 
   const batchRels = remainingRels.slice(0, MAX_BLOB_PER_INVOKE);
@@ -570,15 +588,15 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
     total
   });
 
-  const BATCH = 5;
+  const BATCH = 4;
   for (let i = 0; i < batchRels.length; i += BATCH) {
     const slice = batchRels.slice(i, i + BATCH);
     const entries = [];
     for (const rel of slice) {
       const data = byRel[rel];
       if (!data) {
-        await emit({ type: "error", error: `File hilang di ZIP: ${rel}` });
-        return { ok: false, status: 400, error: `File hilang di ZIP: ${rel}` };
+        await emit({ type: "error", error: `File hilang di session: ${rel}` });
+        return { ok: false, status: 400, error: `File hilang di session: ${rel}` };
       }
       entries.push({ path: `${prefix}/${rel}`, rel, data, size: data.byteLength });
       await emit({
@@ -637,6 +655,22 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
     session.treeSha = treeSha;
     session.doneCount = doneCount;
     session.remainingRels = stillLeft;
+    // trim bin pack agar KV lebih kecil
+    if (session.hasBinPack) {
+      try {
+        const packRaw = await env.GC_HISTORY.get(`edu-bin:${sessionId}`);
+        if (packRaw) {
+          const pack = JSON.parse(packRaw);
+          const next = {};
+          for (const rel of stillLeft) {
+            if (pack[rel] != null) next[rel] = pack[rel];
+          }
+          await env.GC_HISTORY.put(`edu-bin:${sessionId}`, JSON.stringify(next), {
+            expirationTtl: SESSION_TTL
+          });
+        }
+      } catch (_) {}
+    }
     await env.GC_HISTORY.put(`edu-up:${sessionId}`, JSON.stringify(session), {
       expirationTtl: SESSION_TTL
     });
@@ -646,6 +680,7 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
       done: doneCount,
       total,
       remaining: stillLeft.length,
+      need_zip: false,
       pct: 20 + Math.round((doneCount / total) * 65),
       message: `Batch selesai (${doneCount}/${total}). Lanjut ${stillLeft.length} file…`
     });
@@ -663,6 +698,7 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
   try {
     await env.GC_HISTORY.delete(`edu-up:${sessionId}`);
     await env.GC_HISTORY.delete(`edu-zip:${sessionId}`);
+    await env.GC_HISTORY.delete(`edu-bin:${sessionId}`);
   } catch (_) {}
 
   return finalizeCommit(
