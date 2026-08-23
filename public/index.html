@@ -1878,7 +1878,13 @@
       background: linear-gradient(135deg, rgba(30, 64, 175, 0.1), rgba(6, 182, 212, 0.1));
       border-radius: 8px;
       margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      max-height: min(52vh, 480px);
+      overflow: hidden;
     }
+    .ai-panel.hidden { display: none !important; }
 
     .ai-label {
       font-size: 11px;
@@ -1912,21 +1918,26 @@
     }
 
     .ai-response {
-      margin-top: 12px;
+      margin-top: 10px;
       padding: 12px 14px;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: 8px;
       font-size: 12px;
       color: var(--text-secondary);
-      max-height: 280px;
+      flex: 1 1 auto;
+      min-height: 120px;
+      max-height: min(36vh, 360px);
       overflow-y: auto;
       overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
       font-family: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
       line-height: 1.55;
       white-space: pre-wrap;
       word-break: break-word;
       overflow-wrap: anywhere;
+      touch-action: pan-y;
     }
 
     /* ===== COLLECT PANEL ===== */
@@ -2927,13 +2938,25 @@
     </section>
 
 
-    <!-- Custom settings panel (modal sederhana) -->
+    <!-- Custom settings + file custom EDU -->
     <div id="custom-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; align-items:center; justify-content:center;">
-      <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; width:min(420px,92vw); max-height:80vh; overflow:auto; padding:16px 18px;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; width:min(520px,94vw); max-height:88vh; overflow:auto; padding:16px 18px; -webkit-overflow-scrolling:touch;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
           <strong style="display:flex;align-items:center;gap:6px;"><svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom</strong>
           <button class="btn btn-secondary btn-sm" onclick="closeCustomPanel()">Tutup</button>
         </div>
+
+        <div style="margin-bottom:14px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text);">File sudah di-custom (EDU)</div>
+          <div id="custom-patched-list" style="font-size:11px;line-height:1.45;color:var(--text-muted);max-height:140px;overflow:auto;-webkit-overflow-scrolling:touch;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;">Belum ada. Load ZIP → Hosting → Terapkan System, atau pakai AI di bawah.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="refreshCustomPatchedList()">Refresh list</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="scanCustomTargetsAI()">AI: pilih file API/RNG</button>
+            <button type="button" class="btn btn-success btn-sm" onclick="applyEduToSuggestedFiles()">Custom API+RNG ke file terpilih</button>
+          </div>
+          <div id="custom-ai-targets" style="margin-top:8px;font-size:11px;color:var(--text-secondary);max-height:100px;overflow:auto;white-space:pre-wrap;"></div>
+        </div>
+
         <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Filter ekstensi file tree (pisah koma)</label>
         <input id="custom-ext-filter" type="text" placeholder="html,css,js,json" style="width:100%; padding:8px; margin-bottom:12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
         <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13px;">
@@ -4457,7 +4480,92 @@
         if (key) key.value = s.aiKey || '';
       } catch (_) {}
       m.style.display = 'flex';
+      try { refreshCustomPatchedList(); } catch (_) {}
     }
+
+    function refreshCustomPatchedList() {
+      var el = document.getElementById('custom-patched-list');
+      if (!el) return;
+      var report = window.__eduSystemReport;
+      if (!report || !report.files || !report.files.length) {
+        el.textContent = 'Belum ada file di-custom.\nLoad ZIP → Hosting → Terapkan System\natau pakai tombol AI di bawah.';
+        return;
+      }
+      var lines = [];
+      lines.push('Slot/game: ' + (report.gameId || '-') + ' · RNG ' + (report.rngLevel || 2));
+      lines.push('Origin: ' + (report.eduBase || '-'));
+      lines.push('Total file dipatch: ' + (report.patched || report.files.length));
+      lines.push('');
+      report.files.slice(0, 80).forEach(function (f) {
+        var ch = (f.changes || []).join(', ');
+        lines.push('• ' + f.path + (ch ? '  [' + ch + ']' : ''));
+      });
+      if (report.files.length > 80) lines.push('… +' + (report.files.length - 80) + ' file lain');
+      el.textContent = lines.join('\n');
+    }
+
+    /** Heuristik + AI ringkas: file yang layak di-custom API/RNG */
+    window.__customSuggestedFiles = [];
+    async function scanCustomTargetsAI() {
+      var box = document.getElementById('custom-ai-targets');
+      if (box) box.textContent = 'Memindai file JS/HTML/JSON untuk API & RNG…';
+      var zip = typeof getWorkspaceZip === 'function' ? getWorkspaceZip() : null;
+      if (!zip || !zip.files) {
+        if (box) box.textContent = 'Load ZIP dulu.';
+        return;
+      }
+      var names = Object.keys(zip.files).filter(function (k) {
+        return zip.files[k] && !zip.files[k].dir && /\.(html?|js|mjs|cjs|json)$/i.test(k);
+      });
+      var scored = [];
+      var maxScan = Math.min(names.length, 60);
+      for (var i = 0; i < maxScan; i++) {
+        var path = names[i];
+        try {
+          var text = await zip.files[path].async('string');
+          if (!text || text.length > 800000) continue;
+          var score = 0;
+          var tags = [];
+          if (/https?:\/\//i.test(text) || /apiBase|API_URL|BASE_URL|fetch\s*\(/i.test(text)) { score += 3; tags.push('api'); }
+          if (/\/api\//i.test(text) || /spin|balance|session|wager/i.test(text)) { score += 4; tags.push('game-api'); }
+          if (/Math\.random|rng|rtp|Math\.floor\s*\(\s*Math\.random/i.test(text)) { score += 3; tags.push('rng'); }
+          if (/balance\s*[:=]|credits?\s*[:=]|setBalance/i.test(text)) { score += 2; tags.push('balance'); }
+          if (/index\.html?$/i.test(path)) { score += 2; tags.push('entry'); }
+          if (score >= 3) scored.push({ path: path, score: score, tags: tags });
+        } catch (_) {}
+      }
+      scored.sort(function (a, b) { return b.score - a.score; });
+      window.__customSuggestedFiles = scored.slice(0, 25);
+      if (!box) return;
+      if (!window.__customSuggestedFiles.length) {
+        box.textContent = 'Tidak ketemu kandidat kuat. Tetap bisa Hosting → Terapkan System (semua file teks).';
+        return;
+      }
+      box.textContent = window.__customSuggestedFiles.map(function (s) {
+        return '• ' + s.path + '  (' + s.tags.join(', ') + ' · skor ' + s.score + ')';
+      }).join('\n');
+      if (typeof appendLog === 'function') appendLog('Custom AI targets: ' + window.__customSuggestedFiles.length + ' file', 'ok');
+    }
+
+    async function applyEduToSuggestedFiles() {
+      var list = window.__customSuggestedFiles || [];
+      if (!list.length) {
+        await scanCustomTargetsAI();
+        list = window.__customSuggestedFiles || [];
+      }
+      if (!list.length) {
+        alert('Tidak ada file target. Load ZIP dulu atau Hosting → Terapkan System.');
+        return;
+      }
+      // Reuse full apply (lebih aman): patch seluruh teks + injeksi API/RNG
+      if (typeof applyEduSystem === 'function') {
+        await applyEduSystem();
+        refreshCustomPatchedList();
+        return;
+      }
+      alert('applyEduSystem tidak tersedia. Buka tab Hosting.');
+    }
+
     function closeCustomPanel() {
       const m = document.getElementById('custom-modal');
       if (m) m.style.display = 'none';
@@ -4710,6 +4818,7 @@
         }
         aiResp.style.display = 'block';
         aiResp.textContent = lines.join('\n');
+        try { aiResp.scrollTop = 0; setTimeout(function(){ aiResp.scrollIntoView({block:'nearest'}); }, 50); } catch(_){}
       }
 
       const total = domainMap.size + apiMap.size + balanceMap.size;
@@ -5678,6 +5787,7 @@
         } catch (_) {}
 
         window.__eduSystemReport = patched.report;
+        try { refreshCustomPatchedList(); } catch (_) {}
         eduRenderSystemList(patched.report);
         var allOk = (patched.report.systems || []).every(function(s) { return s.ok; });
         eduNotify(allOk
