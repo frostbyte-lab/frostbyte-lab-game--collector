@@ -378,6 +378,9 @@
       overflow: auto;
       background: var(--bg);
       padding: 12px 14px 20px;
+      position: relative;
+      z-index: 20;
+      -webkit-overflow-scrolling: touch;
     }
     #hosting-mode.active {
       display: flex;
@@ -388,6 +391,20 @@
       gap: 10px;
       margin-bottom: 14px;
       flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: var(--bg);
+      padding: 4px 0 8px;
+      pointer-events: auto;
+    }
+    #btn-hosting-back {
+      pointer-events: auto !important;
+      cursor: pointer !important;
+      touch-action: manipulation;
+      min-height: 36px;
+      z-index: 31;
+      position: relative;
     }
     .hosting-card {
       background: var(--surface);
@@ -5290,31 +5307,69 @@
 
 
 
+    function getWorkspaceZip() {
+      try {
+        if (typeof currentZip !== 'undefined' && currentZip && currentZip.files) return currentZip;
+      } catch (_) {}
+      return null;
+    }
+
+    function countZipFiles(zip) {
+      if (!zip || !zip.files) return 0;
+      return Object.keys(zip.files).filter(function (k) {
+        return zip.files[k] && !zip.files[k].dir;
+      }).length;
+    }
+
+    function bindHostingBackButton(handler) {
+      var back = document.getElementById('btn-hosting-back');
+      if (!back) return;
+      back.onclick = null;
+      back.ontouchend = null;
+      back.onclick = function (ev) {
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        handler();
+        return false;
+      };
+      // Android kadang lebih responsif ke touchend
+      back.ontouchend = function (ev) {
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        handler();
+        return false;
+      };
+    }
+
     function openHostingPage() {
       const host = document.getElementById('hosting-mode');
-      const main = document.querySelector('#panel-workspace .workspace-main') || document.getElementById('workspace-main');
+      const main = document.getElementById('workspace-main') || document.querySelector('#panel-workspace .workspace-main');
       const prev = document.getElementById('preview-mode');
       const wh = document.querySelector('#panel-workspace .workspace-header');
       if (prev) prev.style.display = 'none';
-      if (main) main.style.display = 'none';
+      if (main) {
+        main.style.display = 'none';
+        main.setAttribute('aria-hidden', 'true');
+      }
       if (wh) wh.style.display = '';
       if (host) {
         host.classList.add('active');
         host.style.display = 'flex';
+        host.style.pointerEvents = 'auto';
       }
-      // selalu tampil form dulu
       hostingShowForm();
       const st = document.getElementById('hosting-status');
+      const zip = getWorkspaceZip();
+      const n = countZipFiles(zip);
       if (st) {
-        if (typeof currentZip !== 'undefined' && currentZip) {
-          const n = currentZip.files ? Object.keys(currentZip.files).filter(function (k) {
-            return currentZip.files[k] && !currentZip.files[k].dir;
-          }).length : 0;
+        if (zip && n > 0) {
           st.textContent = 'ZIP aktif di Workspace · ~' + n + ' file. Siap di-upload ke slot game EDU Network.';
+        } else if (zip) {
+          st.textContent = 'ZIP ada tapi kosong (0 file). Load ulang ZIP.';
         } else {
           st.textContent = 'Belum ada ZIP di Workspace. Load ZIP collect dulu, lalu kembali ke sini.';
         }
       }
+      const logEl = document.getElementById('hosting-upload-log');
+      if (logEl) { logEl.textContent = ''; logEl.style.color = 'var(--text-secondary)'; }
       const slotEl = document.getElementById('hosting-slot');
       if (slotEl) {
         slotEl.oninput = function () {
@@ -5328,12 +5383,18 @@
 
     function closeHostingPage() {
       const host = document.getElementById('hosting-mode');
-      const main = document.querySelector('#panel-workspace .workspace-main');
+      const main = document.getElementById('workspace-main') || document.querySelector('#panel-workspace .workspace-main');
+      const prev = document.getElementById('preview-mode');
       if (host) {
         host.classList.remove('active');
         host.style.display = 'none';
       }
-      if (main) main.style.display = '';
+      if (prev) prev.style.display = 'none';
+      if (main) {
+        main.style.display = 'flex';
+        main.style.visibility = 'visible';
+        main.removeAttribute('aria-hidden');
+      }
       hostingShowForm();
     }
 
@@ -5344,8 +5405,7 @@
       if (prog) prog.classList.remove('active');
       var title = document.getElementById('hosting-title');
       if (title) title.textContent = 'Hosting → EDU Network';
-      var back = document.getElementById('btn-hosting-back');
-      if (back) back.onclick = function () { closeHostingPage(); };
+      bindHostingBackButton(function () { closeHostingPage(); });
     }
 
     function hostingShowProgress(slot) {
@@ -5355,8 +5415,7 @@
       if (prog) prog.classList.add('active');
       var title = document.getElementById('hosting-title');
       if (title) title.textContent = 'Upload → game-' + slot;
-      var back = document.getElementById('btn-hosting-back');
-      if (back) back.onclick = function () { hostingProgressBack(); };
+      bindHostingBackButton(function () { hostingProgressBack(); });
       var heading = document.getElementById('hp-heading');
       if (heading) heading.textContent = 'Upload ke EDU · game-' + slot;
       document.getElementById('hp-btn-back').style.display = 'none';
@@ -5377,6 +5436,7 @@
     }
 
     function hostingProgressBack() {
+      // dari progress → form (bukan tutup hosting)
       hostingShowForm();
       var btn = document.getElementById('btn-hosting-upload');
       if (btn) btn.disabled = false;
@@ -5440,14 +5500,16 @@
         }
       }
 
-      if (typeof currentZip === 'undefined' || !currentZip) {
-        setLog('Tidak ada ZIP di Workspace. Collect / load ZIP dulu.', false);
+      var zip = getWorkspaceZip();
+      var nFiles = countZipFiles(zip);
+      if (!zip || nFiles === 0) {
+        setLog('Tidak ada ZIP di Workspace (terdeteksi ' + nFiles + ' file). Collect / load ZIP dulu, atau refresh halaman.', false);
         return;
       }
 
       if (btn) btn.disabled = true;
       hostingShowProgress(slot);
-      hpLog('Mulai upload → slot game-' + slot);
+      hpLog('Mulai upload → slot game-' + slot + ' · ' + nFiles + ' file');
       setLog('Upload game-' + slot + '…');
 
       try {
@@ -5456,11 +5518,11 @@
         hpProgress(5, 'Scan file di ZIP…', 'langkah 1/6');
         var fileRows = [];
         var totalUncompressed = 0;
-        var names = Object.keys(currentZip.files || {}).filter(function (k) {
-          return currentZip.files[k] && !currentZip.files[k].dir;
+        var names = Object.keys(zip.files || {}).filter(function (k) {
+          return zip.files[k] && !zip.files[k].dir;
         }).sort();
         for (var i = 0; i < names.length; i++) {
-          var f = currentZip.files[names[i]];
+          var f = zip.files[names[i]];
           var sz = 0;
           try {
             if (f._data && typeof f._data.uncompressedSize === 'number') sz = f._data.uncompressedSize;
@@ -5491,7 +5553,7 @@
         hpStep(2, 'run');
         hpLog('Compress ZIP (DEFLATE)…');
         hpProgress(20, 'Compress paket…', 'bisa 5–30 dtk');
-        const blob = await currentZip.generateAsync({
+        const blob = await zip.generateAsync({
           type: 'blob',
           compression: 'DEFLATE',
           compressionOptions: { level: 6 }
