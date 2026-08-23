@@ -165,6 +165,24 @@ export function rewriteContent(text, urlMap, isHtml, opts = {}) {
   const sm = stripSourceMaps(out);
   out = sm.text;
 
+  // Absolute root paths (/shared/..., /assets/...) break under blob: preview
+  // and under /game-N/ on Pages — force relative.
+  {
+    const rootDirs =
+      "shared|assets|static|resource|resources|cdn|files|game|games|media|res|bundle|bundles|dist|build|public|data|config|configs|symbols|spine|atlas|audio|sound|sounds|img|images|texture|textures";
+    out = out.replace(
+      new RegExp(`(["'\`])\\/(${rootDirs})(\\/[^"'\`\\s]*)?\\1`, "gi"),
+      (_, q, dir, rest) => q + "./" + dir + (rest || "") + q
+    );
+    out = out.replace(
+      new RegExp(`url\\(\\s*(['"]?)\\/(${rootDirs})(/[^)'"]*)\\1\\s*\\)`, "gi"),
+      (_, q, dir, rest) => `url(${q || ""}./${dir}${rest || ""}${q || ""})`
+    );
+    // broken host https://api./...
+    out = out.replace(/https?:\/\/api\.(\/)/gi, "https://ea29118c.edu-network.pages.dev$1");
+    out = out.replace(/https?:\/\/[^"'`\s]*what-is-my-ip[^"'`\s]*/gi, "https://ea29118c.edu-network.pages.dev/api/game/health");
+  }
+
   return out;
 }
 

@@ -56,13 +56,83 @@ function isBinaryLikely(bytes) {
 }
 
 /**
- * Rewrite string content to point API traffic at EDU base.
+ * Path absolut root (/shared/, /assets/, ...) gagal di blob: preview & di /game-N/ Pages.
+ * Ubah jadi relatif agar resolve ke folder game.
+ */
+function rewriteRootAbsolutePaths(text, changes) {
+  let out = text;
+  // "/shared/..." '/shared/...' `/shared/...`
+  const rootDirs =
+    "shared|assets|static|resource|resources|cdn|files|game|games|media|res|bundle|bundles|dist|build|public|data|config|configs|symbols|spine|atlas|audio|sound|sounds|img|images|texture|textures";
+  const re = new RegExp(
+    `(["'\`])\\/(${rootDirs})(\\/[^"'\`\\s]*)?\\1`,
+    "gi"
+  );
+  out = out.replace(re, (full, q, dir, rest) => {
+    changes.push("root_abs_path");
+    return q + "./" + dir + (rest || "") + q;
+  });
+  // JSON without quotes edge: "url":"/shared/...
+  out = out.replace(
+    new RegExp(`(:\\s*)"\\/(${rootDirs})(/[^"]*)"`, "gi"),
+    (full, pre, dir, rest) => {
+      changes.push("root_abs_path_json");
+      return `${pre}"./${dir}${rest || ""}"`;
+    }
+  );
+  // CSS url(/shared/...)
+  out = out.replace(
+    new RegExp(`url\\(\\s*(['"]?)\\/(${rootDirs})(/[^)'"]*)\\1\\s*\\)`, "gi"),
+    (full, q, dir, rest) => {
+      changes.push("root_abs_path_css");
+      return `url(${q || ""}./${dir}${rest || ""}${q || ""})`;
+    }
+  );
+  return out;
+}
+
+/** Perbaiki host patah hasil rewrite: https://api./path */
+function fixBrokenHosts(text, eduBase, changes) {
+  let out = text;
+  const base = String(eduBase || DEFAULT_EDU_BASE).replace(/\/$/, "");
+  // https://api./xxx  or https://api.  (empty host label)
+  out = out.replace(/https?:\/\/api\.(\/|"|'|`|\s|$)/gi, (m, tail) => {
+    changes.push("fix_broken_api_host");
+    if (tail === "/" || tail.startsWith("/")) return base + (tail === "/" ? "/" : tail);
+    return base + (tail || "");
+  });
+  // generic: https://something./path (dot before slash)
+  out = out.replace(/https?:\/\/([a-z0-9-]+)\.(\/)/gi, (m, host, slash) => {
+    if (host === "www" || host.length < 2) return m;
+    changes.push("fix_dot_host");
+    // jangan sentuh domain valid tld — hanya pola patah "api./"
+    return m;
+  });
+  // what-is-my-ip / geo stubs → relative no-op path di EDU (hindari invalid URL)
+  out = out.replace(
+    /https?:\/\/[^"'`\s]*what-is-my-ip[^"'`\s]*/gi,
+    () => {
+      changes.push("strip_geo_ip");
+      return base + "/api/game/health";
+    }
+  );
+  return out;
+}
+
+/**
+ * Rewrite string content to point API traffic at EDU base + fix absolute paths.
  * @returns {{ text: string, changes: string[] }}
  */
 export function rewriteApiContent(text, eduBase, gameId) {
   const base = String(eduBase || DEFAULT_EDU_BASE).replace(/\/$/, "");
   const changes = [];
   let out = text;
+
+  // 0) path absolut root → relatif (preview blob + /game-N/)
+  out = rewriteRootAbsolutePaths(out, changes);
+
+  // 0b) host patah + geo IP
+  out = fixBrokenHosts(out, base, changes);
 
   // 1) assignment API_BASE = "https://..."
   out = out.replace(API_BASE_ASSIGN_RE, (full, prefix, quote) => {
@@ -82,18 +152,15 @@ export function rewriteApiContent(text, eduBase, gameId) {
     return `.open(${methodPart}, ${q}${base}${path}${q}`;
   });
 
-  // 4) known provider hosts → EDU (only when followed by /api or end)
-  out = out.replace(PROVIDER_HOST_RE, (host) => {
-    // jangan ganti asset CDN murni tanpa /api di konteks — tetap ganti host provider game API
+  // 4) known provider hosts → EDU
+  out = out.replace(PROVIDER_HOST_RE, () => {
     changes.push("provider_host");
     return base;
   });
 
-  // 5) relative "/api/..." stays (same-origin on EDU Pages) — OK
-  // 6) inject markers for game id in common config objects
+  // 5) game id
   if (gameId) {
     const gid = String(gameId);
-    // "game_id": "something" or gameId: '...'
     const gidRe =
       /(["']?(?:game_id|gameId|gameID|game_slug)["']?\s*[:=]\s*)(["'`])[^"'`]{0,64}\2/g;
     let gidHits = 0;
@@ -104,7 +171,6 @@ export function rewriteApiContent(text, eduBase, gameId) {
     if (gidHits) changes.push(`game_id_x${gidHits}`);
   }
 
-  // dedupe change labels
   return { text: out, changes: [...new Set(changes)] };
 }
 
@@ -118,6 +184,34 @@ function buildBootstrapSnippet(eduBase, gameId) {
 (function(){
   var EDU_BASE = ${JSON.stringify(base)};
   var EDU_GAME_ID = ${JSON.stringify(gid)};
+  var ROOT_RE = /^\\/(shared|assets|static|resource|resources|cdn|files|media|res|bundle|data|config|symbols|spine|atlas|audio|sound|img|images|texture)\\//i;
+  function fixUrl(u) {
+    if (!u || typeof u !== "string") return u;
+    if (ROOT_RE.test(u)) return "." + u;
+    if (/^https?:\\/\\/api\\.\\//i.test(u)) return EDU_BASE + u.replace(/^https?:\\/\\/api\\./i, "");
+    if (/what-is-my-ip/i.test(u)) return EDU_BASE + "/api/game/health";
+    return u;
+  }
+  try {
+    var _open = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url) {
+      var args = Array.prototype.slice.call(arguments);
+      if (typeof args[1] === "string") args[1] = fixUrl(args[1]);
+      return _open.apply(this, args);
+    };
+  } catch (e1) {}
+  try {
+    var _fetch = window.fetch;
+    if (typeof _fetch === "function") {
+      window.fetch = function(input, init) {
+        if (typeof input === "string") input = fixUrl(input);
+        else if (input && typeof input.url === "string") {
+          try { input = new Request(fixUrl(input.url), input); } catch (_) {}
+        }
+        return _fetch.call(this, input, init);
+      };
+    }
+  } catch (e2) {}
   try {
     window.EDU_API_BASE = EDU_BASE;
     window.EDU_GAME_ID = EDU_GAME_ID;
