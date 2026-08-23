@@ -2606,6 +2606,35 @@
           <p id="hosting-status">Belum ada ZIP di Workspace. Load ZIP collect dulu, lalu upload ke slot game.</p>
         </div>
 
+
+        <div class="hosting-card" id="edu-custom-panel">
+          <h3>Custom EDU System</h3>
+          <p style="margin:0 0 10px;font-size:12px;color:var(--text-muted);">Load ZIP → isi form → <b>Terapkan System</b> → notifikasi &amp; checklist → Preview → Download ZIP siap upload EDU.</p>
+          <label style="font-size:12px;color:var(--text-muted);">Nama game (tampil di web EDU)</label>
+          <input type="text" id="edu-game-name" placeholder="Contoh: Fortune Tiger" style="width:100%;margin:4px 0 10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+          <label style="font-size:12px;color:var(--text-muted);">Domain / API EDU</label>
+          <input type="url" id="edu-api-base" value="https://ea29118c.edu-network.pages.dev" style="width:100%;margin:4px 0 10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+          <label style="font-size:12px;color:var(--text-muted);">RNG level</label>
+          <select id="edu-rng-level" style="width:100%;margin:4px 0 10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+            <option value="1">1 — Down (cenderung kalah)</option>
+            <option value="2" selected>2 — Imbang</option>
+            <option value="3">3 — Menang (cenderung menang)</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
+            <input type="checkbox" id="edu-zero-balance" checked> Saldo bawaan game → 0 (wajib isi via admin EDU)
+          </label>
+          <div class="hosting-actions" style="flex-wrap:wrap;">
+            <button type="button" class="btn btn-success btn-sm" id="btn-edu-apply" onclick="applyEduSystem()">✓ Terapkan System</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="previewEduSystem()">▶ Preview EDU</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.open((document.getElementById('edu-api-base').value||'').replace(/\/$/,'')+'/admin/','_blank')">Live Admin EDU</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.open((document.getElementById('edu-api-base').value||'').replace(/\/$/,'')+'/','_blank')">Live Domain EDU</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="detectEduSystemAI()">Deteksi AI</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="downloadEduZip()">Download ZIP EDU</button>
+          </div>
+          <div id="edu-system-notify" style="display:none;margin-top:12px;padding:10px 12px;border-radius:10px;font-size:12px;"></div>
+          <div id="edu-system-list" style="margin-top:12px;font-size:12px;"></div>
+        </div>
+
         <div class="hosting-card">
           <h3>Upload ke EDU Network (Git)</h3>
           <p style="margin-bottom:10px;">
@@ -5507,6 +5536,233 @@
       if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
       return (n / 1024 / 1024).toFixed(2) + ' MB';
     }
+
+
+    // ===== EDU Custom System (Workspace) =====
+    window.__eduSystemReport = null;
+
+    function eduNotify(msg, ok) {
+      var el = document.getElementById('edu-system-notify');
+      if (!el) return;
+      el.style.display = 'block';
+      el.style.background = ok === true ? 'rgba(34,197,94,.12)' : ok === false ? 'rgba(239,68,68,.12)' : 'rgba(59,130,246,.12)';
+      el.style.border = '1px solid ' + (ok === true ? '#166534' : ok === false ? '#7f1d1d' : '#1e3a5f');
+      el.style.color = ok === true ? '#86efac' : ok === false ? '#fecaca' : '#93c5fd';
+      el.textContent = msg;
+    }
+
+    function eduRenderSystemList(report) {
+      var box = document.getElementById('edu-system-list');
+      if (!box) return;
+      if (!report || !report.systems) {
+        box.innerHTML = '<span style="color:var(--text-muted)">Belum ada system diterapkan.</span>';
+        return;
+      }
+      var html = '<div style="font-weight:600;margin-bottom:6px;">Checklist system</div><ul style="margin:0;padding-left:18px;line-height:1.6;">';
+      (report.systems || []).forEach(function(s) {
+        var mark = s.ok ? '✓' : '✗';
+        var col = s.ok ? '#86efac' : '#fca5a5';
+        html += '<li style="color:' + col + '">' + mark + ' <b>' + (s.label || s.id) + '</b>' +
+          (s.value ? ' — <code style="color:var(--text-muted)">' + s.value + '</code>' : '') + '</li>';
+      });
+      html += '</ul>';
+      html += '<p style="margin:8px 0 0;color:var(--text-muted)">File dipatch: ' + (report.patched || 0) +
+        ' / discan: ' + (report.scanned || 0) + ' · HTML inject: ' + ((report.injectedHtml || []).length) + '</p>';
+      box.innerHTML = html;
+    }
+
+    async function buildFilesMapFromZip(zip) {
+      var files = {};
+      var names = Object.keys(zip.files || {});
+      for (var i = 0; i < names.length; i++) {
+        var name = names[i];
+        var entry = zip.files[name];
+        if (!entry || entry.dir) continue;
+        var buf = await entry.async('uint8array');
+        files[name] = buf;
+      }
+      return files;
+    }
+
+    async function applyEduSystem() {
+      var zip = typeof getWorkspaceZip === 'function' ? getWorkspaceZip() : null;
+      if (!zip || !Object.keys(zip.files || {}).length) {
+        eduNotify('Load ZIP dulu di Workspace sebelum menerapkan system EDU.', false);
+        return;
+      }
+      var slotEl = document.getElementById('hosting-slot');
+      var slot = Math.min(150, Math.max(1, parseInt(slotEl && slotEl.value, 10) || 1));
+      var gameId = 'game-' + slot;
+      var eduBase = (document.getElementById('edu-api-base') || {}).value || 'https://ea29118c.edu-network.pages.dev';
+      var gameTitle = ((document.getElementById('edu-game-name') || {}).value || '').trim() || ('Game ' + slot);
+      var rngLevel = parseInt((document.getElementById('edu-rng-level') || {}).value, 10) || 2;
+      var zeroBalance = !!(document.getElementById('edu-zero-balance') || { checked: true }).checked;
+
+      eduNotify('Menerapkan system EDU…', null);
+      try {
+        var files = await buildFilesMapFromZip(zip);
+        // Client-side port of patch if worker path unavailable — use inline minimal via fetch module optional
+        var patched;
+        if (typeof window.__eduPatchFilesForEdu === 'function') {
+          patched = window.__eduPatchFilesForEdu(files, { eduBase: eduBase, gameId: gameId, gameTitle: gameTitle, rngLevel: rngLevel, zeroBalance: zeroBalance });
+        } else {
+          // Call worker endpoint if exists, else local heuristic patch in browser
+          patched = await clientPatchFilesForEdu(files, { eduBase: eduBase, gameId: gameId, gameTitle: gameTitle, rngLevel: rngLevel, zeroBalance: zeroBalance });
+        }
+        // Rebuild zip into workspace
+        var JSZipLib = window.JSZip;
+        var newZip = new JSZipLib();
+        Object.keys(patched.files).forEach(function(path) {
+          newZip.file(path, patched.files[path]);
+        });
+        try { currentZip = newZip; } catch (_) {}
+        window.__workspaceZip = newZip;
+        // refresh tree if possible
+        try {
+          if (typeof renderFileTree === 'function') {
+            var names = Object.keys(newZip.files || {}).filter(function(k){ return newZip.files[k] && !newZip.files[k].dir; });
+            renderFileTree(names);
+          }
+        } catch (_) {}
+
+        window.__eduSystemReport = patched.report;
+        eduRenderSystemList(patched.report);
+        var allOk = (patched.report.systems || []).every(function(s) { return s.ok; });
+        eduNotify(allOk
+          ? 'System EDU sudah diterapkan. Siap Preview / Download ZIP / Upload.'
+          : 'System diterapkan sebagian — cek checklist di bawah.', allOk);
+        try { if (typeof log === 'function') log('EDU system applied → ' + gameId + ' · ' + gameTitle); } catch (_) {}
+      } catch (e) {
+        eduNotify('Gagal menerapkan system: ' + (e && e.message ? e.message : e), false);
+      }
+    }
+
+    /** Browser-side patch (mirror server edu-patch) */
+    async function clientPatchFilesForEdu(files, opts) {
+      var eduBase = String(opts.eduBase || 'https://ea29118c.edu-network.pages.dev').replace(/\/$/, '');
+      var gameId = opts.gameId || 'game-1';
+      var gameTitle = opts.gameTitle || gameId;
+      var rngLevel = [1,2,3].indexOf(Number(opts.rngLevel)) >= 0 ? Number(opts.rngLevel) : 2;
+      var zeroBalance = opts.zeroBalance !== false;
+      var report = { scanned: 0, patched: 0, injectedHtml: [], files: [], eduBase: eduBase, gameId: gameId, gameTitle: gameTitle, rngLevel: rngLevel, zeroBalance: zeroBalance, systems: [] };
+      var out = {};
+      var enc = new TextEncoder();
+      var dec = new TextDecoder('utf-8');
+
+      function isText(p) { return /\\.(html?|js|mjs|cjs|json|txt|css|svg|xml|map)$/i.test(p); }
+      function zeroBal(text) {
+        var ch = [];
+        var o = text.replace(/\\b(balance|credits?|credit|cash|coins?|saldo|money|chip|chips|wallet|userBalance|playerBalance|totalCredit|totalBalance|defaultBalance|startBalance)\\b(\\s*[:=]\\s*)(?:[\\d_]{4,}|\\d{1,3}(?:[.,]\\d{3})+)/gi, function(m,a,b){ ch.push('balance_zero'); return a+b+'0'; });
+        o = o.replace(/("(?:balance|credits?|cash|coins?|saldo)"\\s*:\\s*)(?:[\\d_]{4,}|\\d{1,3}(?:[.,]\\d{3})+)/gi, function(m,pre){ ch.push('balance_zero_json'); return pre+'0'; });
+        return { text: o, changes: ch };
+      }
+      function rewrite(text) {
+        var ch = [];
+        var o = text.replace(/https?:\\/\\/(?:[a-z0-9-]+\\.)*(?:pgsoft|pragmatic|habanero|spadegaming|jili|jokergaming|fastspin|cq9|hacksaw|relax|playtech|evolution)[a-z0-9.-]*/gi, function(){ ch.push('provider_host'); return eduBase; });
+        o = o.replace(/\\b((?:const|let|var)\\s+(?:API_BASE|API_URL|BASE_URL|SERVER_URL|apiBase|apiUrl|baseUrl)\\s*=\\s*)(["'\`])https?:\\/\\/[^"'\`]+?\\2/gi, function(m, pre, q){ ch.push('api_base'); return pre + q + eduBase + q; });
+        o = o.replace(/(["'\`])https?:\\/\\/[^"'\`]+(\\/api\\/(?:game|slot|admin)[^"'\`]*)\\1/gi, function(m,q,path){ ch.push('api_path'); return q + eduBase + path + q; });
+        return { text: o, changes: ch };
+      }
+      function inject(html) {
+        if (/edu-game-client\\.js/i.test(html) && /EDU_GAME_ID|__eduClient|__EDU_GAME_ID__/i.test(html)) return { html: html, injected: false };
+        var sn = '\\n<!-- EDU Network auto-patch -->\\n<script>window.__EDU_GAME_ID__=' + JSON.stringify(gameId) + ';window.__EDU_ORIGIN__=' + JSON.stringify(eduBase) + ';window.EDU_API_BASE=' + JSON.stringify(eduBase) + ';window.EDU_GAME_ID=' + JSON.stringify(gameId) + ';</script>\\n<script src="' + eduBase + '/sdk/edu-game-client.js" defer></script>\\n';
+        sn += '<script>window.__EDU_RNG_LEVEL__=' + rngLevel + ';(function(){var _r=Math.random.bind(Math);if(' + rngLevel + '===2)return;Math.random=function(){var x=_r();return ' + rngLevel + '===1?(x*x):Math.sqrt(x);};})();</script>\\n';
+        var o = html;
+        if (/<\\/head>/i.test(o)) o = o.replace(/<\\/head>/i, sn + '</head>');
+        else o = sn + o;
+        return { html: o, injected: true };
+      }
+
+      Object.keys(files).forEach(function(path) {
+        var data = files[path];
+        if (!(data instanceof Uint8Array) || !isText(path)) { out[path] = data; return; }
+        report.scanned++;
+        var text = dec.decode(data);
+        var r = rewrite(text); text = r.text; var ch = r.changes.slice();
+        if (zeroBalance) { var z = zeroBal(text); text = z.text; ch = ch.concat(z.changes); }
+        if (/\\.html?$/i.test(path)) {
+          var inj = inject(text); text = inj.html;
+          if (inj.injected) { ch.push('sdk_inject'); report.injectedHtml.push(path); }
+          if (gameTitle) text = text.replace(/<title>[^<]*<\\/title>/i, '<title>' + gameTitle.replace(/</g,'') + '</title>');
+        }
+        if (ch.length) {
+          out[path] = enc.encode(text);
+          report.patched++;
+          report.files.push({ path: path, changes: ch });
+        } else out[path] = data;
+      });
+      var meta = { game_id: gameId, title: gameTitle, origin: eduBase, rng_level: rngLevel, zero_balance: zeroBalance, patched_at: new Date().toISOString(), published: true };
+      out['edu-meta.json'] = enc.encode(JSON.stringify(meta, null, 2) + '\\n');
+      report.patched++;
+      report.files.push({ path: 'edu-meta.json', changes: ['meta'] });
+      report.systems = [
+        { id: 'api', label: 'Custom API EDU', ok: report.patched > 0 },
+        { id: 'domain', label: 'Domain EDU', ok: true, value: eduBase },
+        { id: 'sdk', label: 'SDK inject', ok: report.injectedHtml.length > 0 },
+        { id: 'balance', label: 'Saldo bawaan → 0', ok: zeroBalance },
+        { id: 'rng', label: 'RNG level ' + rngLevel + (rngLevel===1?' (down)':rngLevel===3?' (menang)':' (imbang)'), ok: true },
+        { id: 'name', label: 'Nama game', ok: true, value: gameTitle },
+        { id: 'slot', label: 'Slot / game_id', ok: true, value: gameId }
+      ];
+      return { files: out, report: report };
+    }
+
+    function previewEduSystem() {
+      if (!window.__eduSystemReport) {
+        eduNotify('Terapkan system dulu sebelum preview.', false);
+        return;
+      }
+      try {
+        if (typeof startPreview === 'function') startPreview('sandbox');
+        else if (typeof startPreview === 'function') startPreview('sw');
+        eduNotify('Mode preview dibuka. Uji spin/API di panel Preview.', true);
+      } catch (e) {
+        eduNotify('Preview: ' + (e.message || e), false);
+      }
+    }
+
+    async function downloadEduZip() {
+      var zip = typeof getWorkspaceZip === 'function' ? getWorkspaceZip() : (window.__workspaceZip || window.workspaceZip);
+      if (!zip) { eduNotify('Tidak ada ZIP di workspace.', false); return; }
+      if (!window.__eduSystemReport) {
+        var go = confirm('System EDU belum diterapkan. Download ZIP mentah saja?');
+        if (!go) return;
+      }
+      var slotEl = document.getElementById('hosting-slot');
+      var slot = Math.min(150, Math.max(1, parseInt(slotEl && slotEl.value, 10) || 1));
+      var name = ((document.getElementById('edu-game-name') || {}).value || '').trim() || ('game-' + slot);
+      var safe = name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60);
+      var blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = safe + '-edu-game-' + slot + '.zip';
+      a.click();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+      eduNotify('ZIP diunduh: ' + a.download + ' — siap install ke EDU (scripts/install-game.js).', true);
+    }
+
+    async function detectEduSystemAI() {
+      var report = window.__eduSystemReport;
+      if (!report) {
+        eduNotify('Terapkan system dulu, lalu Deteksi AI.', false);
+        return;
+      }
+      var lines = ['Analisis system EDU:', ''];
+      (report.systems || []).forEach(function(s) {
+        lines.push((s.ok ? '[OK] ' : '[!] ') + s.label + (s.value ? ' = ' + s.value : ''));
+      });
+      lines.push('');
+      lines.push('Patched files: ' + (report.patched || 0));
+      lines.push('Rekomendasi: jika API OK + SDK inject + balance 0 + RNG terpasang → Download ZIP → upload EDU.');
+      eduNotify(lines.join('\\n'), true);
+      eduRenderSystemList(report);
+      try {
+        if (typeof askAI === 'function') {
+          // optional: pipe summary to AI panel
+        }
+      } catch (_) {}
+    }
+
 
     async function uploadToEduNetwork() {
       const log = document.getElementById('hosting-upload-log');

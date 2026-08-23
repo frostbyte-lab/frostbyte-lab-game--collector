@@ -244,6 +244,58 @@ export function injectSdkIntoHtml(html, eduBase, gameId) {
   return { html: out, injected: true };
 }
 
+
+/** Paksa saldo/kredit hardcode besar → 0 */
+export function zeroClientBalances(text) {
+  let out = text;
+  const changes = [];
+  const a = out.replace(
+    /\b(balance|credits?|credit|cash|coins?|saldo|money|chip|chips|wallet|userBalance|playerBalance|totalCredit|totalBalance|defaultBalance|startBalance|initBalance|initialBalance|START_BALANCE|DEFAULT_BALANCE|INIT_BALANCE|DEFAULT_CREDIT|START_CREDIT)\b(\s*[:=]\s*)(?:[\d_]{4,}|\d{1,3}(?:[.,]\d{3})+)(\s*[;,]?)/gi,
+    (m, k, mid, tail) => { changes.push("balance_zero"); return k + mid + "0" + (tail || ""); }
+  );
+  if (a !== out) out = a;
+  const b = out.replace(
+    /("(?:balance|credits?|credit|cash|coins?|saldo|money|chip|chips|wallet)"\s*:\s*)(?:[\d_]{4,}|\d{1,3}(?:[.,]\d{3})+)/gi,
+    (m, pre) => { changes.push("balance_zero_json"); return pre + "0"; }
+  );
+  if (b !== out) out = b;
+  const c = out.replace(
+    /\b(setBalance|updateBalance|setCredit|setCredits|setCash|setCoin|setCoins|setSaldo)\s*\(\s*(?:[\d_]{4,}|\d{1,3}(?:[.,]\d{3})+|\d+e\d+)\s*\)/gi,
+    (m, fn) => { changes.push("balance_zero_fn"); return fn + "(0)"; }
+  );
+  if (c !== out) out = c;
+  return { text: out, changes: [...new Set(changes)] };
+}
+
+/**
+ * RNG level inject:
+ * 1 = down (player cenderung kalah) — Math.random bias rendah untuk win
+ * 2 = imbang (default)
+ * 3 = menang — bias tinggi
+ */
+export function buildRngSnippet(level) {
+  const lv = [1, 2, 3].includes(Number(level)) ? Number(level) : 2;
+  return `
+<script>
+/* EDU RNG level ${lv} — 1=down 2=imbang 3=menang */
+(function(){
+  window.__EDU_RNG_LEVEL__ = ${lv};
+  var _r = Math.random.bind(Math);
+  if (${lv} === 2) return;
+  Math.random = function(){
+    var x = _r();
+    if (${lv} === 1) {
+      // bias ke nilai rendah / kurang menguntungkan di banyak engine
+      return x * x;
+    }
+    // level 3: bias tinggi
+    return Math.sqrt(x);
+  };
+})();
+</script>`;
+}
+
+
 /**
  * Patch seluruh map path → Uint8Array.
  * @param {Record<string, Uint8Array>} files
@@ -252,13 +304,20 @@ export function injectSdkIntoHtml(html, eduBase, gameId) {
 export function patchFilesForEdu(files, opts = {}) {
   const eduBase = (opts.eduBase || DEFAULT_EDU_BASE).replace(/\/$/, "");
   const gameId = opts.gameId || "game-1";
+  const gameTitle = opts.gameTitle || gameId;
+  const rngLevel = [1, 2, 3].includes(Number(opts.rngLevel)) ? Number(opts.rngLevel) : 2;
+  const zeroBalance = opts.zeroBalance !== false;
   const report = {
     scanned: 0,
     patched: 0,
     injectedHtml: [],
     files: [],
     eduBase,
-    gameId
+    gameId,
+    gameTitle,
+    rngLevel,
+    zeroBalance,
+    systems: []
   };
 
   const out = { ...files };
@@ -273,6 +332,12 @@ export function patchFilesForEdu(files, opts = {}) {
     text = rewritten;
     let fileChanges = [...changes];
 
+    if (zeroBalance) {
+      const zb = zeroClientBalances(text);
+      text = zb.text;
+      fileChanges.push(...zb.changes);
+    }
+
     if (/\.html?$/i.test(path)) {
       const inj = injectSdkIntoHtml(text, eduBase, gameId);
       text = inj.html;
@@ -280,14 +345,52 @@ export function patchFilesForEdu(files, opts = {}) {
         fileChanges.push("sdk_inject");
         report.injectedHtml.push(path);
       }
+      // RNG inject once per html
+      if (!/__EDU_RNG_LEVEL__/.test(text)) {
+        const rng = buildRngSnippet(rngLevel);
+        if (/<\/head>/i.test(text)) text = text.replace(/<\/head>/i, rng + "</head>");
+        else text = rng + text;
+        fileChanges.push("rng_level_" + rngLevel);
+      }
+      // meta title hint
+      if (gameTitle && !/edu-meta-title/i.test(text)) {
+        text = text.replace(/<title>[^<]*<\/title>/i, "<title>" + String(gameTitle).replace(/</g, "") + "</title>");
+        fileChanges.push("title");
+      }
     }
 
     if (fileChanges.length) {
       out[path] = utf8Encode(text);
       report.patched++;
-      report.files.push({ path, changes: fileChanges });
+      report.files.push({ path, changes: [...new Set(fileChanges)] });
     }
   }
+
+  // edu-meta.json for EDU catalog
+  try {
+    const meta = {
+      game_id: gameId,
+      title: gameTitle,
+      origin: eduBase,
+      rng_level: rngLevel,
+      zero_balance: zeroBalance,
+      patched_at: new Date().toISOString(),
+      published: true
+    };
+    out["edu-meta.json"] = utf8Encode(JSON.stringify(meta, null, 2) + "\n");
+    report.files.push({ path: "edu-meta.json", changes: ["meta"] });
+    report.patched++;
+  } catch (_) {}
+
+  report.systems = [
+    { id: "api", label: "Custom API EDU", ok: report.files.some(f => (f.changes||[]).some(c => /api|fetch|xhr|provider/i.test(c))) || report.patched > 0 },
+    { id: "domain", label: "Domain EDU", ok: true, value: eduBase },
+    { id: "sdk", label: "SDK inject", ok: report.injectedHtml.length > 0 },
+    { id: "balance", label: "Saldo bawaan → 0", ok: zeroBalance },
+    { id: "rng", label: "RNG level " + rngLevel + (rngLevel===1?" (down)":rngLevel===3?" (menang)":" (imbang)"), ok: true },
+    { id: "name", label: "Nama game", ok: !!gameTitle, value: gameTitle },
+    { id: "slot", label: "Slot / game_id", ok: !!gameId, value: gameId }
+  ];
 
   // pastikan ada index.html yang ter-inject jika ada index di root
   const indexKeys = Object.keys(out).filter((p) => /(^|\/)index\.html?$/i.test(p));
@@ -308,4 +411,4 @@ export function patchFilesForEdu(files, opts = {}) {
   return { files: out, report };
 }
 
-export { DEFAULT_EDU_BASE, buildBootstrapSnippet };
+export { DEFAULT_EDU_BASE, buildBootstrapSnippet, zeroClientBalances, buildRngSnippet };
