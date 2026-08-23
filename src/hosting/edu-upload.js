@@ -19,7 +19,7 @@ const DEFAULT_EDU = {
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_FILES = 400;
 /** Max GitHub blob subrequests per Worker invocation (sisakan headroom utk tree/commit/ref) */
-const MAX_BLOB_PER_INVOKE = 25;
+const MAX_BLOB_PER_INVOKE = 15;
 const SESSION_TTL = 900;
 const TEXT_RE = /\.(html?|js|mjs|cjs|json|css|txt|svg|xml|map|md|csv|tsv|vtt|glsl|vert|frag)$/i;
 
@@ -540,7 +540,16 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
   } = session;
   let { treeSha, doneCount, remainingRels } = session;
 
-  // Resolve bytes: prefer edu-bin pack (base64) — no unzip, anti-503
+  const batchRels = remainingRels.slice(0, MAX_BLOB_PER_INVOKE);
+  const stillLeft = remainingRels.slice(MAX_BLOB_PER_INVOKE);
+
+  // Decode HANYA file di batch ini
+  function b64ToU8(b64) {
+    const binary = atob(b64);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  }
   const byRel = Object.create(null);
   if (session.hasBinPack) {
     try {
@@ -549,13 +558,11 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
         return { ok: false, status: 400, error: "Bin pack session hilang. Upload ulang." };
       }
       const pack = JSON.parse(packRaw);
-      for (const [rel, b64] of Object.entries(pack)) {
-        try {
-          const binary = atob(b64);
-          const out = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-          byRel[rel] = out;
-        } catch (_) {}
+      for (const rel of batchRels) {
+        if (pack[rel] == null) {
+          return { ok: false, status: 400, error: `File hilang di bin pack: ${rel}` };
+        }
+        byRel[rel] = b64ToU8(pack[rel]);
       }
     } catch (e) {
       return { ok: false, status: 500, error: "Gagal baca bin pack: " + (e?.message || e) };
@@ -577,9 +584,6 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
     };
   }
 
-  const batchRels = remainingRels.slice(0, MAX_BLOB_PER_INVOKE);
-  const stillLeft = remainingRels.slice(MAX_BLOB_PER_INVOKE);
-
   await emit({
     type: "phase",
     phase: "blobs",
@@ -588,67 +592,71 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
     total
   });
 
-  const BATCH = 4;
-  for (let i = 0; i < batchRels.length; i += BATCH) {
-    const slice = batchRels.slice(i, i + BATCH);
-    const entries = [];
-    for (const rel of slice) {
-      const data = byRel[rel];
-      if (!data) {
-        await emit({ type: "error", error: `File hilang di session: ${rel}` });
-        return { ok: false, status: 400, error: `File hilang di session: ${rel}` };
-      }
-      entries.push({ path: `${prefix}/${rel}`, rel, data, size: data.byteLength });
-      await emit({
-        type: "file",
-        path: rel,
-        fullPath: `${prefix}/${rel}`,
-        index: doneCount + 1,
-        total,
-        size: data.byteLength,
-        status: "uploading",
-        pct: 20 + Math.round((doneCount / total) * 65)
-      });
+  // Sequential per file — hindari spike CPU/subrequest
+  for (let i = 0; i < batchRels.length; i++) {
+    const rel = batchRels[i];
+    const data = byRel[rel];
+    if (!data) {
+      await emit({ type: "error", error: `File hilang di session: ${rel}` });
+      return { ok: false, status: 400, error: `File hilang di session: ${rel}` };
     }
-    let results;
+    await emit({
+      type: "file",
+      path: rel,
+      fullPath: `${prefix}/${rel}`,
+      index: doneCount + 1,
+      total,
+      size: data.byteLength,
+      status: "uploading",
+      pct: 20 + Math.round((doneCount / total) * 65)
+    });
+    let r;
     try {
-      results = await Promise.all(
-        entries.map(async (e) => {
-          const content = bytesToBase64(e.data);
-          const blobRes = await ghFetch(env, `${apiBase}/git/blobs`, {
-            method: "POST",
-            body: JSON.stringify({ content, encoding: "base64" })
-          });
-          if (!blobRes.ok) {
-            throw new Error(`Blob gagal ${e.rel}: HTTP ${blobRes.status}`);
-          }
-          return { path: e.path, rel: e.rel, size: e.size, mode: "100644", type: "blob", sha: blobRes.data.sha };
-        })
-      );
+      const content = bytesToBase64(data);
+      const blobRes = await ghFetch(env, `${apiBase}/git/blobs`, {
+        method: "POST",
+        body: JSON.stringify({ content, encoding: "base64" })
+      });
+      if (!blobRes.ok) {
+        throw new Error(`Blob gagal ${rel}: HTTP ${blobRes.status}`);
+      }
+      r = {
+        path: `${prefix}/${rel}`,
+        rel,
+        size: data.byteLength,
+        mode: "100644",
+        type: "blob",
+        sha: blobRes.data.sha
+      };
     } catch (err) {
       await emit({ type: "error", error: err?.message || String(err) });
       return { ok: false, status: 502, error: err?.message || String(err) };
     }
-    const binTree = results.map((r) => ({ path: r.path, mode: r.mode, type: r.type, sha: r.sha }));
-    for (const r of results) {
-      doneCount++;
-      await emit({
-        type: "file",
-        path: r.rel,
-        fullPath: r.path,
-        index: doneCount,
-        total,
-        size: r.size,
-        status: "ok",
-        pct: 20 + Math.round((doneCount / total) * 65)
-      });
-    }
-    const tBin = await createTreeChained(env, apiBase, binTree, treeSha, null);
+    const tBin = await createTreeChained(
+      env,
+      apiBase,
+      [{ path: r.path, mode: r.mode, type: r.type, sha: r.sha }],
+      treeSha,
+      null
+    );
     if (!tBin.ok) {
       await emit({ type: "error", error: tBin.error });
       return tBin;
     }
     treeSha = tBin.sha;
+    doneCount++;
+    // free RAM
+    delete byRel[rel];
+    await emit({
+      type: "file",
+      path: r.rel,
+      fullPath: r.path,
+      index: doneCount,
+      total,
+      size: r.size,
+      status: "ok",
+      pct: 20 + Math.round((doneCount / total) * 65)
+    });
   }
 
   if (stillLeft.length > 0) {

@@ -5754,20 +5754,17 @@
           });
           parsed = await readNdjsonStream(resC);
           if (parsed.failed) {
-            // satu kali retry dengan ZIP jika session-only gagal
-            if (!needZipOnContinue) {
-              hpLog('Retry batch #' + batchRound + ' dengan ZIP…');
-              needZipOnContinue = true;
-              fdC = new FormData();
-              fdC.append('session_id', sessionId);
-              fdC.append('zip', blob, 'game-package.zip');
-              resC = await fetch('/api/hosting/upload-continue?stream=1', {
-                method: 'POST',
-                body: fdC,
-                headers: { Accept: 'application/x-ndjson' }
-              });
-              parsed = await readNdjsonStream(resC);
-            }
+            // Jangan retry dengan ZIP (selalu 503). Retry session-only 1x.
+            hpLog('Retry batch #' + batchRound + ' (session only)…');
+            await new Promise(function (r) { setTimeout(r, 1000); });
+            fdC = new FormData();
+            fdC.append('session_id', sessionId);
+            resC = await fetch('/api/hosting/upload-continue?stream=1', {
+              method: 'POST',
+              body: fdC,
+              headers: { Accept: 'application/x-ndjson' }
+            });
+            parsed = await readNdjsonStream(resC);
             if (parsed.failed) {
               hpLog('GAGAL batch #' + batchRound + ': ' + parsed.failed);
               hpStep(5, 'err');
