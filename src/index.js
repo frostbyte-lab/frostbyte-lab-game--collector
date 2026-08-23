@@ -786,8 +786,25 @@ export default {
         return Response.json({ ok: false, error: "session_id wajib" }, { status: 400 });
       }
 
-      // Jika client tidak kirim ZIP, ambil dari KV session
-      if (Object.keys(filesMap).length === 0 && env.GC_HISTORY) {
+      // Session continue: sisa binary biasanya di edu-bin (hasBinPack), bukan edu-zip.
+      // Client sering kirim session_id saja (need_zip:false) — jangan wajibkan filesMap.
+      let sessionHasBinPack = false;
+      let sessionMetaOk = false;
+      if (env.GC_HISTORY) {
+        try {
+          const rawSess = await env.GC_HISTORY.get(`edu-up:${sessionId}`);
+          if (rawSess) {
+            sessionMetaOk = true;
+            try {
+              const sess = JSON.parse(rawSess);
+              sessionHasBinPack = Boolean(sess && sess.hasBinPack);
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
+
+      // Optional: load ZIP fallback jika client tidak kirim file & tidak ada bin pack
+      if (Object.keys(filesMap).length === 0 && env.GC_HISTORY && !sessionHasBinPack) {
         try {
           const zipBuf = await env.GC_HISTORY.get(`edu-zip:${sessionId}`, { type: "arrayBuffer" });
           if (zipBuf) {
@@ -803,15 +820,26 @@ export default {
           );
         }
       }
-      if (Object.keys(filesMap).length === 0) {
+
+      if (Object.keys(filesMap).length === 0 && !sessionHasBinPack) {
+        if (!sessionMetaOk) {
+          return Response.json(
+            {
+              ok: false,
+              error: "Session upload tidak ditemukan / expired. Upload ulang dari awal."
+            },
+            { status: 404 }
+          );
+        }
         return Response.json(
           {
             ok: false,
-            error: "Tidak ada file untuk continue (ZIP tidak di-session & tidak dikirim). Upload ulang dari awal."
+            error: "Tidak ada file untuk continue (bin pack & ZIP kosong). Upload ulang dari awal."
           },
           { status: 400 }
         );
       }
+      // filesMap boleh kosong jika sessionHasBinPack — continueEduUpload baca edu-bin sendiri
 
       if (wantStream) {
         const { readable, writable } = new TransformStream();

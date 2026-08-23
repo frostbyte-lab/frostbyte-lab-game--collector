@@ -413,26 +413,45 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message, onPr
       };
     }
     const sessionId = uid();
-    // Simpan sisa binary sebagai base64 di KV (bukan ZIP penuh) — continue ringan, anti-503
-    const binPack = {};
-    let packBytes = 0;
+    // Simpan sisa binary sebagai base64 di KV (pecah multi-key jika besar)
+    // Key utama edu-bin:{id} = pack JSON; jika terlalu besar → edu-bin:{id}:part:{n}
+    const MAX_PACK = 20 * 1024 * 1024; // di bawah limit KV ~25MB
+    const parts = [];
+    let cur = {};
+    let curBytes = 2;
     for (const e of remainingBin) {
       const b64 = bytesToBase64(e.data);
-      binPack[e.rel] = b64;
-      packBytes += b64.length;
+      const add = b64.length + e.rel.length + 8;
+      if (curBytes + add > MAX_PACK && Object.keys(cur).length > 0) {
+        parts.push(cur);
+        cur = {};
+        curBytes = 2;
+      }
+      // single file larger than MAX_PACK → tetap coba (GitHub blob limit terpisah)
+      cur[e.rel] = b64;
+      curBytes += add;
     }
-    if (packBytes > 23 * 1024 * 1024) {
-      return {
-        ok: false,
-        status: 413,
-        error: `Sisa binary terlalu besar untuk session (${Math.round(packBytes / 1024 / 1024)} MB). Kurangi aset gambar/audio.`
-      };
+    if (Object.keys(cur).length) parts.push(cur);
+
+    if (parts.length === 1) {
+      await env.GC_HISTORY.put(`edu-bin:${sessionId}`, JSON.stringify(parts[0]), {
+        expirationTtl: SESSION_TTL
+      });
+    } else {
+      // multi-part index
+      await env.GC_HISTORY.put(
+        `edu-bin:${sessionId}`,
+        JSON.stringify({ __parts: parts.length }),
+        { expirationTtl: SESSION_TTL }
+      );
+      for (let pi = 0; pi < parts.length; pi++) {
+        await env.GC_HISTORY.put(`edu-bin:${sessionId}:p${pi}`, JSON.stringify(parts[pi]), {
+          expirationTtl: SESSION_TTL
+        });
+      }
     }
-    await env.GC_HISTORY.put(`edu-bin:${sessionId}`, JSON.stringify(binPack), {
-      expirationTtl: SESSION_TTL
-    });
     const session = {
-      v: 2,
+      v: 3,
       slot,
       message: message || "",
       prefix,
@@ -444,6 +463,7 @@ export async function uploadGameToEduNetwork(env, gameSlot, files, message, onPr
       totalBytes,
       remainingRels: remainingBin.map((e) => e.rel),
       hasBinPack: true,
+      binParts: parts.length,
       patchReport: {
         scanned: patchReport.scanned,
         patched: patchReport.patched,
@@ -557,7 +577,20 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
       if (!packRaw) {
         return { ok: false, status: 400, error: "Bin pack session hilang. Upload ulang." };
       }
-      const pack = JSON.parse(packRaw);
+      let pack = JSON.parse(packRaw);
+      // Multi-part: { __parts: N } → merge edu-bin:{id}:p0..pN-1
+      if (pack && typeof pack.__parts === "number" && pack.__parts > 0) {
+        const merged = {};
+        for (let pi = 0; pi < pack.__parts; pi++) {
+          const partRaw = await env.GC_HISTORY.get(`edu-bin:${sessionId}:p${pi}`);
+          if (!partRaw) {
+            return { ok: false, status: 400, error: `Bin pack part ${pi} hilang. Upload ulang.` };
+          }
+          const part = JSON.parse(partRaw);
+          Object.assign(merged, part);
+        }
+        pack = merged;
+      }
       for (const rel of batchRels) {
         if (pack[rel] == null) {
           return { ok: false, status: 400, error: `File hilang di bin pack: ${rel}` };
@@ -663,19 +696,30 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
     session.treeSha = treeSha;
     session.doneCount = doneCount;
     session.remainingRels = stillLeft;
-    // trim bin pack agar KV lebih kecil
+    // trim bin pack agar KV lebih kecil (support multi-part)
     if (session.hasBinPack) {
       try {
         const packRaw = await env.GC_HISTORY.get(`edu-bin:${sessionId}`);
         if (packRaw) {
-          const pack = JSON.parse(packRaw);
+          let pack = JSON.parse(packRaw);
+          if (pack && typeof pack.__parts === "number") {
+            const merged = {};
+            for (let pi = 0; pi < pack.__parts; pi++) {
+              const pr = await env.GC_HISTORY.get(`edu-bin:${sessionId}:p${pi}`);
+              if (pr) Object.assign(merged, JSON.parse(pr));
+              try { await env.GC_HISTORY.delete(`edu-bin:${sessionId}:p${pi}`); } catch (_) {}
+            }
+            pack = merged;
+          }
           const next = {};
           for (const rel of stillLeft) {
             if (pack[rel] != null) next[rel] = pack[rel];
           }
+          // tulis ulang single pack (sisa biasanya lebih kecil)
           await env.GC_HISTORY.put(`edu-bin:${sessionId}`, JSON.stringify(next), {
             expirationTtl: SESSION_TTL
           });
+          session.binParts = 1;
         }
       } catch (_) {}
     }
@@ -707,6 +751,10 @@ export async function continueEduUpload(env, sessionId, filesMap, onProgress) {
     await env.GC_HISTORY.delete(`edu-up:${sessionId}`);
     await env.GC_HISTORY.delete(`edu-zip:${sessionId}`);
     await env.GC_HISTORY.delete(`edu-bin:${sessionId}`);
+    const parts = Number(session.binParts) || 0;
+    for (let pi = 0; pi < parts; pi++) {
+      try { await env.GC_HISTORY.delete(`edu-bin:${sessionId}:p${pi}`); } catch (_) {}
+    }
   } catch (_) {}
 
   return finalizeCommit(

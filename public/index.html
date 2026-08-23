@@ -2604,6 +2604,8 @@
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
           <button type="button" class="btn btn-secondary btn-sm" id="btn-hosting-top" onclick="openHostingPage()" title="Hosting paket game">Hosting</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Custom AI — multi API failover">Custom AI</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-auto-custom-api" onclick="autoCustomApiSdk()" title="Patch API/path/SDK otomatis (+ AI) di ZIP Workspace">Auto Custom API/SDK</button>
+          <button type="button" class="btn btn-success btn-sm" id="btn-download-zip" onclick="downloadWorkspaceZip()" title="Unduh ZIP hasil edit (siap hosting manual)">Download ZIP</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -5499,23 +5501,227 @@
     }
 
     async function repackage() {
+      return downloadWorkspaceZip('game-repacked.zip');
+    }
+
+    /** Unduh seluruh ZIP Workspace (hasil edit / custom) — hosting manual di luar Collector */
+    async function downloadWorkspaceZip(filename) {
       if (!currentZip) {
-        alert('Load ZIP dulu.');
+        alert('Load ZIP dulu di Workspace.');
+        return null;
+      }
+      try {
+        setLoading(true, 'Menyiapkan ZIP', 'Menggabungkan edit…');
+        for (const [p, content] of openFiles.entries()) {
+          currentZip.file(p, content);
+        }
+        const blob = await currentZip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
+        const name = filename || ('game-custom-' + new Date().toISOString().slice(0, 10) + '.zip');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { try { URL.revokeObjectURL(a.href); } catch (_) {} }, 4000);
+        appendLog('Download ZIP: ' + name + ' (' + Math.round(blob.size / 1024) + ' KB)', 'ok');
+        setLoading(false);
+        return blob;
+      } catch (e) {
+        setLoading(false);
+        appendLog('Download ZIP gagal: ' + (e && e.message || e), 'err');
+        alert('Gagal unduh ZIP: ' + (e && e.message || e));
+        return null;
+      }
+    }
+
+    /**
+     * Auto Custom API/SDK di Workspace (tanpa hosting).
+     * 1) Rules rewrite path/API + inject bootstrap
+     * 2) Opsional ringkasan AI
+     * 3) Tawarkan Download ZIP (hosting manual di luar)
+     */
+    async function autoCustomApiSdk() {
+      if (!currentZip) {
+        alert('Load ZIP collect dulu di Workspace.');
         return;
       }
-      // Apply openFiles edits into zip
-      for (const [p, content] of openFiles.entries()) {
-        currentZip.file(p, content);
+      var apiBase = '';
+      try {
+        apiBase = window.prompt(
+          'Base URL API / hosting kamu (online).\nContoh: https://games.domain-kamu.com\nKosongkan = hanya perbaiki path relatif + netralisir host rusak.',
+          (window.__GC_LAST_API_BASE || '')
+        );
+      } catch (_) {}
+      if (apiBase === null) return; // cancel
+      apiBase = String(apiBase || '').trim().replace(/\/$/, '');
+      window.__GC_LAST_API_BASE = apiBase;
+
+      var gameId = 'game-1';
+      try {
+        var g = window.prompt('Game ID / folder id (opsional)', gameId);
+        if (g === null) return;
+        if (String(g).trim()) gameId = String(g).trim();
+      } catch (_) {}
+
+      setLoading(true, 'Auto Custom API/SDK', 'Memproses file teks di ZIP…');
+      var report = { scanned: 0, patched: 0, files: [], apiBase: apiBase || '(relative-only)', gameId: gameId };
+
+      try {
+        // sync open buffers
+        for (const [p, content] of openFiles.entries()) {
+          currentZip.file(p, content);
+        }
+
+        var paths = Object.keys(zipFileMap || {}).filter(function (p) {
+          return p && !p.endsWith('/') && /\.(html?|js|mjs|cjs|json|css|txt|svg|xml|map)$/i.test(p);
+        });
+
+        var PROVIDER_HOST_RE = /https?:\/\/(?:[a-z0-9-]+\.)*(?:pgsoft|pragmatic|habanero|spadegaming|jili|jokergaming|fastspin|cq9|hacksaw|relax|playtech|evolution|netent|redtiger|btg|nolimit|pushgaming|playngo|yggdrasil|thunderkick|blueprint|microgaming|isoftbet|fugaso|booming|spinomenal|kalamba|slotmill|avatarux|fantasma|gamomat|novomatic|greentube|amatic|egt|apollo|wazdan|endorphina|platipus|tomhorn|betsoft|rival|nextgen|igtech|softswiss|slotegrator|aggregator|gameprovider|cdn-games|slot-cdn|eajzzxhro)[a-z0-9.-]*/gi;
+        var API_BASE_ASSIGN_RE = /\b((?:const|let|var)\s+(?:API_BASE|API_URL|BASE_URL|SERVER_URL|HOST_URL|apiBase|apiUrl|baseUrl|serverUrl)\s*=\s*)(["'`])https?:\/\/[^"'`]+?\2/gi;
+        var FETCH_ABSOLUTE_API_RE = /fetch\s*\(\s*(["'`])https?:\/\/[^"'`]+?(\/api\/[^"'`]*)\1/gi;
+        var XHR_OPEN_RE = /\.open\s*\(\s*(["'`][^"'`]*["'`])\s*,\s*(["'`])https?:\/\/[^"'`]+?(\/api\/[^"'`]*)\2/gi;
+        var ROOT_ABS_RE = /(["'`])\/(shared|assets|static|resource|resources|cdn|files|media|res|bundle|data|config|symbols|spine|atlas|audio|sound|img|images|texture)\//gi;
+
+        function rewriteOne(text, base) {
+          var changes = [];
+          var out = String(text || '');
+          // root-absolute → relative
+          out = out.replace(ROOT_ABS_RE, function (m, q, folder) {
+            changes.push('root_path');
+            return q + './' + folder + '/';
+          });
+          // broken api./
+          out = out.replace(/https?:\/\/api\.(\/|"|'|`|\s|$)/gi, function (m, tail) {
+            changes.push('fix_broken_api');
+            if (!base) return m;
+            if (tail === '/' || (tail && tail.charAt(0) === '/')) return base + (tail === '/' ? '/' : tail);
+            return base + (tail || '');
+          });
+          if (base) {
+            out = out.replace(API_BASE_ASSIGN_RE, function (full, prefix, quote) {
+              changes.push('api_base_assign');
+              return prefix + quote + base + quote;
+            });
+            out = out.replace(FETCH_ABSOLUTE_API_RE, function (full, q, pathPart) {
+              changes.push('fetch_absolute');
+              return 'fetch(' + q + base + pathPart + q;
+            });
+            out = out.replace(XHR_OPEN_RE, function (full, methodPart, q, pathPart) {
+              changes.push('xhr_open');
+              return '.open(' + methodPart + ', ' + q + base + pathPart + q;
+            });
+            out = out.replace(PROVIDER_HOST_RE, function () {
+              changes.push('provider_host');
+              return base;
+            });
+          }
+          // frame-buster mild
+          var before = out;
+          out = out.replace(/if\s*\(\s*top\s*!==\s*self\s*\)/gi, 'if(false)');
+          out = out.replace(/if\s*\(\s*window\s*\.?\s*top\s*!==\s*window\s*\.?\s*self\s*\)/gi, 'if(false)');
+          if (out !== before) changes.push('frame_buster');
+          if (gameId) {
+            var gidHits = 0;
+            out = out.replace(/(["']?(?:game_id|gameId|gameID|game_slug)["']?\s*[:=]\s*)(["'`])[^"'`]{0,64}\2/g, function (full, prefix, quote) {
+              gidHits++;
+              return prefix + quote + gameId + quote;
+            });
+            if (gidHits) changes.push('game_id');
+          }
+          return { text: out, changes: changes.filter(function (v, i, a) { return a.indexOf(v) === i; }) };
+        }
+
+        function injectBootstrap(html, base, gid) {
+          if (/__GC_CUSTOM_BOOTSTRAP__/i.test(html)) return { html: html, injected: false };
+          var boot = '\n<!-- __GC_CUSTOM_BOOTSTRAP__ -->\n<script>\n(function(){\n  var API_BASE = ' + JSON.stringify(base || '') + ';\n  var GAME_ID = ' + JSON.stringify(gid || 'game-1') + ';\n  window.__GC_API_BASE__ = API_BASE;\n  window.__GC_GAME_ID__ = GAME_ID;\n  function fix(u){\n    if (!u || typeof u !== "string") return u;\n    if (/^\\/(shared|assets|static|resource|resources)\\//i.test(u)) return "." + u;\n    if (API_BASE && /^https?:\\/\\/api\\.\\//i.test(u)) return API_BASE + u.replace(/^https?:\\/\\/api\\./i, "");\n    return u;\n  }\n  try {\n    var _o = XMLHttpRequest.prototype.open;\n    XMLHttpRequest.prototype.open = function(m,u){\n      var a = Array.prototype.slice.call(arguments);\n      if (typeof a[1]==="string") a[1]=fix(a[1]);\n      return _o.apply(this,a);\n    };\n  } catch(e){}\n  try {\n    var _f = window.fetch;\n    if (_f) window.fetch = function(input, init){\n      if (typeof input==="string") input=fix(input);\n      return _f.call(this, input, init);\n    };\n  } catch(e2){}\n})();\n</script>\n';
+          if (/<\/head>/i.test(html)) return { html: html.replace(/<\/head>/i, boot + '</head>'), injected: true };
+          if (/<\/body>/i.test(html)) return { html: html.replace(/<\/body>/i, boot + '</body>'), injected: true };
+          return { html: boot + html, injected: true };
+        }
+
+        for (var i = 0; i < paths.length; i++) {
+          var p = paths[i];
+          var entry = zipFileMap[p];
+          if (!entry) continue;
+          var raw = openFiles.has(p) ? openFiles.get(p) : await entry.async('string');
+          report.scanned++;
+          var r = rewriteOne(raw, apiBase);
+          var text2 = r.text;
+          var ch = r.changes.slice();
+          if (/\.html?$/i.test(p)) {
+            var inj = injectBootstrap(text2, apiBase, gameId);
+            text2 = inj.html;
+            if (inj.injected) ch.push('bootstrap');
+          }
+          if (ch.length && text2 !== raw) {
+            currentZip.file(p, text2);
+            zipFileMap[p] = currentZip.file(p);
+            openFiles.set(p, text2);
+            if (currentFile === p && editor) {
+              try { editor.setValue(text2); } catch (_) {}
+            }
+            report.patched++;
+            report.files.push({ path: p, changes: ch });
+          }
+        }
+
+        // meta for manual hoster
+        var meta = {
+          tool: 'Game Collector Pro — Auto Custom API/SDK',
+          api_base: apiBase || null,
+          game_id: gameId,
+          patched_at: new Date().toISOString(),
+          patched_files: report.files.length,
+          note: 'Hosting manual di luar Collector. ZIP ini hasil edit Workspace.'
+        };
+        currentZip.file('gc-custom-meta.json', JSON.stringify(meta, null, 2));
+        zipFileMap['gc-custom-meta.json'] = currentZip.file('gc-custom-meta.json');
+
+        appendLog('Auto Custom: scan ' + report.scanned + ', patch ' + report.patched + ' file · base=' + (apiBase || 'relative-only'), 'ok');
+        try { renderFileTree(Object.keys(zipFileMap)); } catch (_) {}
+
+        // AI ringkas (opsional, non-blocking gagal)
+        try {
+          if (typeof callCustomAIWithFailover === 'function' && report.patched > 0) {
+            setLoading(true, 'AI review', 'Ringkas hasil custom…');
+            var summary = report.files.slice(0, 25).map(function (f) {
+              return f.path + ' [' + f.changes.join(',') + ']';
+            }).join('\n');
+            var ai = await callCustomAIWithFailover([
+              { role: 'system', content: 'Anda asisten Game Collector. Jawab singkat Bahasa Indonesia. User akan host manual (bukan dari Collector).' },
+              { role: 'user', content: 'API base: ' + (apiBase || '(kosong)') + '\nGame ID: ' + gameId + '\nFile ter-patch:\n' + summary + '\n\nBerikan 3 checklist singkat sebelum mereka upload ZIP ke hosting manual.' }
+            ], { max_tokens: 600 });
+            if (ai && ai.content) {
+              appendLog('AI checklist:\n' + String(ai.content).slice(0, 1500), 'ok');
+            }
+          }
+        } catch (aiErr) {
+          appendLog('AI review dilewati: ' + (aiErr && aiErr.message || aiErr), 'warn');
+        }
+
+        setLoading(false);
+        var msg = 'Custom selesai.\n\nFile dipatch: ' + report.patched + ' / scan ' + report.scanned +
+          '\nBase: ' + (apiBase || '(path relatif saja)') +
+          '\n\nUnduh ZIP sekarang untuk hosting manual?';
+        if (window.confirm(msg)) {
+          await downloadWorkspaceZip('game-custom-' + gameId + '.zip');
+        } else {
+          alert('ZIP sudah di-patch di Workspace. Klik "Download ZIP" kapan saja.');
+        }
+      } catch (e) {
+        setLoading(false);
+        appendLog('Auto Custom gagal: ' + (e && e.message || e), 'err');
+        alert('Auto Custom gagal: ' + (e && e.message || e));
       }
-      const blob = await currentZip.generateAsync({ type: 'blob' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'game-repacked.zip';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      appendLog('Pack Game: ZIP diunduh (game-repacked.zip)', 'ok');
     }
+
+    window.downloadWorkspaceZip = downloadWorkspaceZip;
+    window.autoCustomApiSdk = autoCustomApiSdk;
 
 
 
