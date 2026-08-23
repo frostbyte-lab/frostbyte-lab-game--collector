@@ -430,6 +430,109 @@
       color: #22d3ee;
       font-weight: 800;
     }
+    #hosting-progress-page {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #hosting-progress-page.active {
+      display: flex;
+    }
+    #hosting-form-page.hidden {
+      display: none !important;
+    }
+    .hp-bar-wrap {
+      height: 10px;
+      background: #1e293b;
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 10px 0 6px;
+    }
+    .hp-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #06b6d4, #22d3ee, #5ee1c0);
+      border-radius: 999px;
+      transition: width 0.35s ease;
+    }
+    .hp-steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .hp-steps li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(148,163,184,0.12);
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .hp-steps li:last-child { border-bottom: none; }
+    .hp-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 1px;
+      background: #334155;
+      color: #94a3b8;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+    .hp-steps li.run .hp-dot { background: #0e7490; color: #fff; animation: hp-pulse 1s infinite; }
+    .hp-steps li.ok .hp-dot { background: #059669; color: #fff; }
+    .hp-steps li.err .hp-dot { background: #dc2626; color: #fff; }
+    .hp-steps li.run { color: #e2e8f0; }
+    .hp-steps li.ok { color: #a7f3d0; }
+    .hp-steps li.err { color: #fecaca; }
+    @keyframes hp-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.55; }
+    }
+    .hp-file-table {
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 11px;
+      font-family: ui-monospace, monospace;
+    }
+    .hp-file-table table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .hp-file-table th, .hp-file-table td {
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid rgba(148,163,184,0.1);
+    }
+    .hp-file-table th {
+      position: sticky;
+      top: 0;
+      background: #1e293b;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    .hp-file-table td.path { color: #cbd5e1; word-break: break-all; }
+    .hp-file-table td.size { color: #64748b; white-space: nowrap; }
+    .hp-file-table tr.patched td.path { color: #5ee1c0; }
+    .hp-log {
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      color: var(--text-secondary);
+      max-height: 160px;
+      overflow: auto;
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 10px;
+      border: 1px solid var(--border);
+    }
 
     .workspace-actions {
       display: flex;
@@ -2454,10 +2557,11 @@
       <!-- Halaman Hosting (kembali → editor) -->
       <div id="hosting-mode">
         <div class="hosting-top">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="closeHostingPage()" title="Kembali ke editor">← Kembali ke Editor</button>
-          <strong style="color:#e2e8f0;font-size:14px;">Hosting → EDU Network</strong>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-hosting-back" onclick="closeHostingPage()" title="Kembali ke editor">← Kembali ke Editor</button>
+          <strong style="color:#e2e8f0;font-size:14px;" id="hosting-title">Hosting → EDU Network</strong>
         </div>
 
+        <div id="hosting-form-page">
         <div class="hosting-card">
           <h3>Status paket</h3>
           <p id="hosting-status">Belum ada ZIP di Workspace. Load ZIP collect dulu, lalu upload ke slot game.</p>
@@ -2501,6 +2605,49 @@
         </div>
 
         <div class="hosting-brand-foot">Frostby<span class="te">TE</span> hostingers</div>
+        </div><!-- /hosting-form-page -->
+
+        <!-- Halaman progress upload detail -->
+        <div id="hosting-progress-page">
+          <div class="hosting-card">
+            <h3 id="hp-heading">Upload ke EDU</h3>
+            <p id="hp-subtitle" style="margin-top:4px;">Menyiapkan…</p>
+            <div class="hp-bar-wrap"><div class="hp-bar" id="hp-bar"></div></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);">
+              <span id="hp-pct">0%</span>
+              <span id="hp-eta">—</span>
+            </div>
+          </div>
+          <div class="hosting-card">
+            <h3>Tahapan</h3>
+            <ol class="hp-steps" id="hp-steps">
+              <li data-step="1"><span class="hp-dot">1</span><span>Scan &amp; daftar file ZIP</span></li>
+              <li data-step="2"><span class="hp-dot">2</span><span>Compress paket</span></li>
+              <li data-step="3"><span class="hp-dot">3</span><span>Kirim ke Worker</span></li>
+              <li data-step="4"><span class="hp-dot">4</span><span>Auto-patch API + path + SDK</span></li>
+              <li data-step="5"><span class="hp-dot">5</span><span>Commit Git → Edu-network</span></li>
+              <li data-step="6"><span class="hp-dot">6</span><span>Selesai / live URL</span></li>
+            </ol>
+          </div>
+          <div class="hosting-card">
+            <h3>File dalam paket <span id="hp-file-count" style="font-weight:500;color:var(--text-muted);font-size:12px;"></span></h3>
+            <div class="hp-file-table">
+              <table>
+                <thead><tr><th>#</th><th>Path</th><th>Ukuran</th></tr></thead>
+                <tbody id="hp-file-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="hosting-card">
+            <h3>Log detail</h3>
+            <div class="hp-log" id="hp-log"></div>
+            <div class="hosting-actions" style="margin-top:12px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="hp-btn-back" onclick="hostingProgressBack()" style="display:none;">← Form upload</button>
+              <a class="btn btn-success btn-sm" id="hp-btn-live" href="#" target="_blank" rel="noopener" style="display:none;">Buka live URL</a>
+              <a class="btn btn-secondary btn-sm" id="hp-btn-commit" href="#" target="_blank" rel="noopener" style="display:none;">Lihat commit</a>
+            </div>
+          </div>
+        </div>
       </div>
 
 
@@ -5155,6 +5302,8 @@
         host.classList.add('active');
         host.style.display = 'flex';
       }
+      // selalu tampil form dulu
+      hostingShowForm();
       const st = document.getElementById('hosting-status');
       if (st) {
         if (typeof currentZip !== 'undefined' && currentZip) {
@@ -5185,6 +5334,96 @@
         host.style.display = 'none';
       }
       if (main) main.style.display = '';
+      hostingShowForm();
+    }
+
+    function hostingShowForm() {
+      var form = document.getElementById('hosting-form-page');
+      var prog = document.getElementById('hosting-progress-page');
+      if (form) form.classList.remove('hidden');
+      if (prog) prog.classList.remove('active');
+      var title = document.getElementById('hosting-title');
+      if (title) title.textContent = 'Hosting → EDU Network';
+      var back = document.getElementById('btn-hosting-back');
+      if (back) back.onclick = function () { closeHostingPage(); };
+    }
+
+    function hostingShowProgress(slot) {
+      var form = document.getElementById('hosting-form-page');
+      var prog = document.getElementById('hosting-progress-page');
+      if (form) form.classList.add('hidden');
+      if (prog) prog.classList.add('active');
+      var title = document.getElementById('hosting-title');
+      if (title) title.textContent = 'Upload → game-' + slot;
+      var back = document.getElementById('btn-hosting-back');
+      if (back) back.onclick = function () { hostingProgressBack(); };
+      var heading = document.getElementById('hp-heading');
+      if (heading) heading.textContent = 'Upload ke EDU · game-' + slot;
+      document.getElementById('hp-btn-back').style.display = 'none';
+      document.getElementById('hp-btn-live').style.display = 'none';
+      document.getElementById('hp-btn-commit').style.display = 'none';
+      document.getElementById('hp-log').textContent = '';
+      document.getElementById('hp-file-tbody').innerHTML = '';
+      document.getElementById('hp-file-count').textContent = '';
+      document.getElementById('hp-bar').style.width = '0%';
+      document.getElementById('hp-pct').textContent = '0%';
+      document.getElementById('hp-eta').textContent = '—';
+      document.getElementById('hp-subtitle').textContent = 'Menyiapkan…';
+      var steps = document.querySelectorAll('#hp-steps li');
+      for (var i = 0; i < steps.length; i++) {
+        steps[i].classList.remove('run', 'ok', 'err');
+        steps[i].querySelector('.hp-dot').textContent = String(i + 1);
+      }
+    }
+
+    function hostingProgressBack() {
+      hostingShowForm();
+      var btn = document.getElementById('btn-hosting-upload');
+      if (btn) btn.disabled = false;
+    }
+
+    function hpLog(line) {
+      var el = document.getElementById('hp-log');
+      if (!el) return;
+      var ts = new Date().toLocaleTimeString();
+      el.textContent += '[' + ts + '] ' + line + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function hpStep(n, state) {
+      var li = document.querySelector('#hp-steps li[data-step="' + n + '"]');
+      if (!li) return;
+      li.classList.remove('run', 'ok', 'err');
+      if (state) li.classList.add(state);
+      var dot = li.querySelector('.hp-dot');
+      if (dot) {
+        if (state === 'ok') dot.textContent = '✓';
+        else if (state === 'err') dot.textContent = '!';
+        else if (state === 'run') dot.textContent = '…';
+        else dot.textContent = String(n);
+      }
+    }
+
+    function hpProgress(pct, subtitle, eta) {
+      pct = Math.max(0, Math.min(100, Math.round(pct)));
+      var bar = document.getElementById('hp-bar');
+      if (bar) bar.style.width = pct + '%';
+      var p = document.getElementById('hp-pct');
+      if (p) p.textContent = pct + '%';
+      if (subtitle) {
+        var s = document.getElementById('hp-subtitle');
+        if (s) s.textContent = subtitle;
+      }
+      if (eta != null) {
+        var e = document.getElementById('hp-eta');
+        if (e) e.textContent = eta;
+      }
+    }
+
+    function hpFormatSize(n) {
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / 1024 / 1024).toFixed(2) + ' MB';
     }
 
     async function uploadToEduNetwork() {
@@ -5207,15 +5446,79 @@
       }
 
       if (btn) btn.disabled = true;
-      setLog('Menyiapkan ZIP untuk upload ke game-' + slot + '…');
+      hostingShowProgress(slot);
+      hpLog('Mulai upload → slot game-' + slot);
+      setLog('Upload game-' + slot + '…');
 
       try {
-        // Generate zip blob dari currentZip (JSZip)
-        const blob = await currentZip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        // —— Step 1: scan file ——
+        hpStep(1, 'run');
+        hpProgress(5, 'Scan file di ZIP…', 'langkah 1/6');
+        var fileRows = [];
+        var totalUncompressed = 0;
+        var names = Object.keys(currentZip.files || {}).filter(function (k) {
+          return currentZip.files[k] && !currentZip.files[k].dir;
+        }).sort();
+        for (var i = 0; i < names.length; i++) {
+          var f = currentZip.files[names[i]];
+          var sz = 0;
+          try {
+            if (f._data && typeof f._data.uncompressedSize === 'number') sz = f._data.uncompressedSize;
+            else if (typeof f.uncompressedSize === 'number') sz = f.uncompressedSize;
+          } catch (_) {}
+          totalUncompressed += sz;
+          fileRows.push({ path: names[i], size: sz });
+        }
+        var tbody = document.getElementById('hp-file-tbody');
+        var htmlRows = '';
+        var maxShow = 200;
+        for (var j = 0; j < Math.min(fileRows.length, maxShow); j++) {
+          htmlRows += '<tr><td>' + (j + 1) + '</td><td class="path">' +
+            fileRows[j].path.replace(/</g, '&lt;') + '</td><td class="size">' +
+            hpFormatSize(fileRows[j].size) + '</td></tr>';
+        }
+        if (fileRows.length > maxShow) {
+          htmlRows += '<tr><td colspan="3">… +' + (fileRows.length - maxShow) + ' file lainnya</td></tr>';
+        }
+        if (tbody) tbody.innerHTML = htmlRows;
+        document.getElementById('hp-file-count').textContent =
+          '(' + fileRows.length + ' file · ~' + hpFormatSize(totalUncompressed) + ')';
+        hpLog('Ditemukan ' + fileRows.length + ' file · total ~' + hpFormatSize(totalUncompressed));
+        hpStep(1, 'ok');
+        hpProgress(15, 'Daftar file siap', 'langkah 2/6');
+
+        // —— Step 2: compress ——
+        hpStep(2, 'run');
+        hpLog('Compress ZIP (DEFLATE)…');
+        hpProgress(20, 'Compress paket…', 'bisa 5–30 dtk');
+        const blob = await currentZip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        }, function (meta) {
+          if (meta && meta.percent != null) {
+            var p = 20 + (meta.percent * 0.25);
+            hpProgress(p, 'Compress ' + Math.round(meta.percent) + '%…', meta.currentFile || '');
+          }
+        });
+        hpLog('ZIP siap: ' + hpFormatSize(blob.size));
         if (blob.size > 80 * 1024 * 1024) {
-          setLog('ZIP terlalu besar (' + Math.round(blob.size / 1024 / 1024) + ' MB). Maks ~80 MB.', false);
+          hpStep(2, 'err');
+          hpLog('GAGAL: ZIP terlalu besar (' + hpFormatSize(blob.size) + '). Maks ~80 MB.');
+          setLog('ZIP terlalu besar', false);
+          document.getElementById('hp-btn-back').style.display = '';
           return;
         }
+        hpStep(2, 'ok');
+        hpProgress(50, 'ZIP ' + hpFormatSize(blob.size), 'langkah 3/6');
+
+        // —— Step 3: kirim ——
+        hpStep(3, 'run');
+        hpStep(4, 'run');
+        hpStep(5, 'run');
+        hpLog('Kirim ke Worker /api/hosting/upload …');
+        hpLog('(server: extract → patch API/path/SDK → Git blobs → commit)');
+        hpProgress(55, 'Upload + patch + commit di server…', '30–120 dtk');
 
         const fd = new FormData();
         fd.append('game_slot', String(slot));
@@ -5223,36 +5526,80 @@
         const msg = (msgEl && msgEl.value) ? msgEl.value.trim() : '';
         if (msg) fd.append('message', msg);
 
-        setLog('Upload + commit ke GitHub Edu-network (game-' + slot + ')… ini bisa 30–120 detik.');
-
+        const t0 = Date.now();
         const res = await fetch('/api/hosting/upload', { method: 'POST', body: fd });
         const data = await res.json().catch(function () { return {}; });
+        const took = ((Date.now() - t0) / 1000).toFixed(1);
+        hpLog('Respon server ' + res.status + ' dalam ' + took + 's');
 
         if (!res.ok || !data.ok) {
-          setLog('Gagal: ' + (data.error || res.status) + (data.detail ? '\n' + JSON.stringify(data.detail).slice(0, 400) : ''), false);
+          hpStep(3, 'err');
+          hpStep(4, 'err');
+          hpStep(5, 'err');
+          var errMsg = (data.error || res.status) + (data.detail ? '\n' + JSON.stringify(data.detail).slice(0, 400) : '');
+          hpLog('GAGAL: ' + errMsg);
+          setLog('Gagal: ' + errMsg, false);
+          hpProgress(100, 'Gagal', 'error');
+          document.getElementById('hp-btn-back').style.display = '';
           return;
         }
 
-        var patchLine = '';
-        if (data.patch) {
-          patchLine = 'API patch: ' + (data.patch.patched || 0) + '/' + (data.patch.scanned || 0) +
-            ' file · SDK inject: ' + ((data.patch.injected_html && data.patch.injected_html.length) || 0) +
-            ' · base ' + (data.patch.edu_base || '') + '\n';
-        }
-        setLog(
-          'Berhasil! ' + data.files + ' file → game-' + data.game_slot + ' (game_id=' + (data.game_id || '') + ')\n' +
-          patchLine +
-          'Commit: ' + (data.commit || '').slice(0, 12) + '\n' +
-          'Live (setelah Pages deploy ~1–3 mnt):\n' + data.live_url + '\n' +
-          (data.commit_url || ''),
-          true
-        );
+        hpStep(3, 'ok');
+        hpStep(4, 'ok');
+        hpStep(5, 'ok');
+        hpStep(6, 'run');
+        hpProgress(90, 'Commit berhasil', 'langkah 6/6');
 
-        if (data.live_url && window.confirm('Upload OK. Buka live URL sekarang?\n' + data.live_url)) {
-          window.open(data.live_url, '_blank', 'noopener');
+        hpLog('—— Hasil ——');
+        hpLog('Slot: game-' + data.game_slot + ' · game_id=' + (data.game_id || ''));
+        hpLog('File ter-commit: ' + data.files + ' · ' + hpFormatSize(data.bytes || 0));
+        if (data.patch) {
+          hpLog('Patch scan: ' + data.patch.scanned + ' · diubah: ' + data.patch.patched);
+          hpLog('SDK inject: ' + ((data.patch.injected_html && data.patch.injected_html.join(', ')) || '—'));
+          hpLog('EDU base: ' + (data.patch.edu_base || ''));
+          if (data.patch.details && data.patch.details.length) {
+            hpLog('File ter-patch:');
+            for (var k = 0; k < Math.min(data.patch.details.length, 30); k++) {
+              var d = data.patch.details[k];
+              hpLog('  • ' + d.path + ' [' + (d.changes || []).join(', ') + ']');
+              // highlight di tabel
+              var rows = document.querySelectorAll('#hp-file-tbody tr');
+              for (var r = 0; r < rows.length; r++) {
+                var cell = rows[r].querySelector('td.path');
+                if (cell && cell.textContent === d.path) rows[r].classList.add('patched');
+              }
+            }
+            if (data.patch.details.length > 30) hpLog('  … +' + (data.patch.details.length - 30) + ' lagi');
+          }
         }
+        hpLog('Commit: ' + (data.commit || '').slice(0, 12));
+        hpLog('Live: ' + (data.live_url || ''));
+        if (data.note) hpLog(data.note);
+
+        hpStep(6, 'ok');
+        hpProgress(100, 'Selesai — tunggu Pages 1–3 menit', 'done');
+        setLog('Berhasil upload game-' + slot, true);
+
+        var liveBtn = document.getElementById('hp-btn-live');
+        if (liveBtn && data.live_url) {
+          liveBtn.href = data.live_url;
+          liveBtn.style.display = '';
+        }
+        var cBtn = document.getElementById('hp-btn-commit');
+        if (cBtn && data.commit_url) {
+          cBtn.href = data.commit_url;
+          cBtn.style.display = '';
+        }
+        document.getElementById('hp-btn-back').style.display = '';
       } catch (e) {
+        hpLog('Error: ' + (e && e.message ? e.message : e));
         setLog('Error: ' + (e && e.message ? e.message : e), false);
+        hpProgress(100, 'Error', 'failed');
+        document.getElementById('hp-btn-back').style.display = '';
+        for (var s = 1; s <= 6; s++) {
+          var li = document.querySelector('#hp-steps li[data-step="' + s + '"].run');
+          if (li) { li.classList.remove('run'); li.classList.add('err'); }
+        }
       } finally {
         if (btn) btn.disabled = false;
       }
