@@ -642,6 +642,8 @@ export default {
           if (buf.byteLength > 80 * 1024 * 1024) {
             return Response.json({ ok: false, error: "ZIP terlalu besar (maks ~80 MB raw)" }, { status: 400 });
           }
+          // dipakai session multi-batch (KV)
+          request.__eduRawZip = buf;
           let unzipped;
           try {
             unzipped = unzipSync(buf);
@@ -677,9 +679,7 @@ export default {
         url.searchParams.get("stream") === "1" ||
         (request.headers.get("accept") || "").includes("application/x-ndjson");
 
-      // raw zip bytes for multi-batch session (optional)
-      let rawZipBytes = null;
-      // re-read not possible; extract from filesMap size estimate only — client continue sends zip again
+      const rawZipBytes = request.__eduRawZip || null;
 
       if (wantStream) {
         const { readable, writable } = new TransformStream();
@@ -769,6 +769,33 @@ export default {
         return Response.json({ ok: false, error: "session_id wajib" }, { status: 400 });
       }
 
+      // Jika client tidak kirim ZIP, ambil dari KV session
+      if (Object.keys(filesMap).length === 0 && env.GC_HISTORY) {
+        try {
+          const zipBuf = await env.GC_HISTORY.get(`edu-zip:${sessionId}`, { type: "arrayBuffer" });
+          if (zipBuf) {
+            const unzipped = unzipSync(new Uint8Array(zipBuf));
+            for (const [name, data] of Object.entries(unzipped)) {
+              if (!name.endsWith("/")) filesMap[name] = data;
+            }
+          }
+        } catch (e) {
+          return Response.json(
+            { ok: false, error: "Gagal load ZIP session: " + (e?.message || e) },
+            { status: 500 }
+          );
+        }
+      }
+      if (Object.keys(filesMap).length === 0) {
+        return Response.json(
+          {
+            ok: false,
+            error: "Tidak ada file untuk continue (ZIP tidak di-session & tidak dikirim). Upload ulang dari awal."
+          },
+          { status: 400 }
+        );
+      }
+
       if (wantStream) {
         const { readable, writable } = new TransformStream();
         const writer = writable.getWriter();
@@ -782,7 +809,12 @@ export default {
               await send(ev);
             });
             if (!result.ok && !result.continue) {
-              await send({ type: "error", error: result.error, detail: result.detail, status: result.status });
+              await send({
+                type: "error",
+                error: result.error || "continue gagal",
+                detail: result.detail,
+                status: result.status
+              });
             }
           } catch (e) {
             try {
