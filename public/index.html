@@ -5639,10 +5639,12 @@
           var result = null;
           var failed = null;
           if (!(res.body && res.headers.get('content-type') && res.headers.get('content-type').indexOf('ndjson') >= 0)) {
-            var j = await res.json().catch(function () { return {}; });
+            var rawTxt = await res.text().catch(function () { return ''; });
+            var j = {};
+            try { j = JSON.parse(rawTxt); } catch (_) {}
             if (j.continue && j.session_id) cont = j;
-            else if (j.ok) result = j;
-            else failed = j.error || 'Upload gagal';
+            else if (j.ok && !j.continue) result = j;
+            else failed = j.error || ('HTTP ' + res.status + ' ' + String(rawTxt).slice(0, 180)) || 'Upload gagal';
             return { cont: cont, result: result, failed: failed };
           }
           const reader = res.body.getReader();
