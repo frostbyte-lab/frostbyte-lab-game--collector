@@ -5643,7 +5643,7 @@
 
         function injectBootstrap(html, base, gid) {
           if (/__GC_CUSTOM_BOOTSTRAP__/i.test(html)) return { html: html, injected: false };
-          var boot = '\n<!-- __GC_CUSTOM_BOOTSTRAP__ -->\n<script>\n(function(){\n  var API_BASE = ' + JSON.stringify(base || '') + ';\n  var GAME_ID = ' + JSON.stringify(gid || 'game-1') + ';\n  window.__GC_API_BASE__ = API_BASE;\n  window.__GC_GAME_ID__ = GAME_ID;\n  function fix(u){\n    if (!u || typeof u !== "string") return u;\n    if (/^\\/(shared|assets|static|resource|resources)\\//i.test(u)) return "." + u;\n    if (API_BASE && /^https?:\\/\\/api\\.\\//i.test(u)) return API_BASE + u.replace(/^https?:\\/\\/api\\./i, "");\n    return u;\n  }\n  try {\n    var _o = XMLHttpRequest.prototype.open;\n    XMLHttpRequest.prototype.open = function(m,u){\n      var a = Array.prototype.slice.call(arguments);\n      if (typeof a[1]==="string") a[1]=fix(a[1]);\n      return _o.apply(this,a);\n    };\n  } catch(e){}\n  try {\n    var _f = window.fetch;\n    if (_f) window.fetch = function(input, init){\n      if (typeof input==="string") input=fix(input);\n      return _f.call(this, input, init);\n    };\n  } catch(e2){}\n})();\n</script>\n';
+          var boot = '\n<!-- __GC_CUSTOM_BOOTSTRAP__ -->\n<script>\n(function(){\n  var API_BASE = ' + JSON.stringify(base || '') + ';\n  var GAME_ID = ' + JSON.stringify(gid || 'game-1') + ';\n  window.__GC_API_BASE__ = API_BASE;\n  window.__GC_GAME_ID__ = GAME_ID;\n  function fix(u){\n    if (!u || typeof u !== "string") return u;\n    if (/^\\/(shared|assets|static|resource|resources)\\//i.test(u)) return "." + u;\n    if (API_BASE && /^https?:\\/\\/api\\.\\//i.test(u)) return API_BASE + u.replace(/^https?:\\/\\/api\\./i, "");\n    return u;\n  }\n  try {\n    var _o = XMLHttpRequest.prototype.open;\n    XMLHttpRequest.prototype.open = function(m,u){\n      var a = Array.prototype.slice.call(arguments);\n      if (typeof a[1]==="string") a[1]=fix(a[1]);\n      return _o.apply(this,a);\n    };\n  } catch(e){}\n  try {\n    var _f = window.fetch;\n    if (_f) window.fetch = function(input, init){\n      if (typeof input==="string") input=fix(input);\n      return _f.call(this, input, init);\n    };\n  } catch(e2){}\n})();\n</scr' + 'ipt>\n';
           if (/<\/head>/i.test(html)) return { html: html.replace(/<\/head>/i, boot + '</head>'), injected: true };
           if (/<\/body>/i.test(html)) return { html: html.replace(/<\/body>/i, boot + '</body>'), injected: true };
           return { html: boot + html, injected: true };
@@ -6080,8 +6080,8 @@
         sn += ",history:" + JSON.stringify(eduBase + "/api/game/history");
         sn += ",collect:" + JSON.stringify(eduBase + "/api/game/collect");
         sn += ",bonus:" + JSON.stringify(eduBase + "/api/game/bonus") + "};\n";
-        sn += "</script>\n";
-        sn += '<script src="' + eduBase + '/sdk/edu-game-client.js" defer></script>\n';
+        sn += "</scr" + "ipt>\n";
+        sn += '<script src="' + eduBase + '/sdk/edu-game-client.js" defer></scr' + 'ipt>\n';
         sn += "<script>\n(function(){\n";
         sn += "  var BASE=" + JSON.stringify(eduBase) + ";\n";
         sn += "  var PATHS=window.__EDU_API_PATHS__||{};\n";
@@ -6123,7 +6123,7 @@
         sn += "  if(" + rngLevel + "!==2){\n";
         sn += "    Math.random=function(){ var x=_r(); return " + rngLevel + "===1?(x*x):Math.sqrt(x); };\n";
         sn += "  }\n";
-        sn += "})();\n</script>\n";
+        sn += "})();\n</scr" + "ipt>\n";
         var o = html;
         if (/<\/head>/i.test(o)) o = o.replace(/<\/head>/i, sn + "</head>");
         else o = sn + o;
@@ -6140,7 +6140,7 @@
         if (/\\.html?$/i.test(path)) {
           var inj = inject(text); text = inj.html;
           if (inj.injected) { ch.push('sdk_inject'); report.injectedHtml.push(path); }
-          if (gameTitle) text = text.replace(/<title>[^<]*<\\/title>/i, '<title>' + gameTitle.replace(/</g,'') + '</title>');
+          if (gameTitle) text = text.replace(/<title>[^<]*<\/title>/i, '<title>' + gameTitle.replace(/</g,'') + '</title>');
         }
         if (ch.length) {
           out[path] = enc.encode(text);
