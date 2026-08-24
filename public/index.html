@@ -5028,23 +5028,66 @@
       }
     }
 
+    /* Token hanya di memori tab (sessionStorage) — hilang saat tab ditutup */
+    function actGetSessionGithubToken(forceAsk) {
+      try {
+        if (!forceAsk) {
+          var t = sessionStorage.getItem('gc_sess_gh_token') || '';
+          if (t) return t;
+        }
+      } catch (_) {}
+      var input = window.prompt(
+        'Token GitHub (PAT) — sekali pakai / sesi tab ini saja.\nTidak disimpan permanen. Kosongkan = pakai secret Worker jika ada.\nScope: repo + workflow',
+        ''
+      );
+      if (input === null) return null; // cancel
+      input = String(input || '').trim();
+      try {
+        if (input) sessionStorage.setItem('gc_sess_gh_token', input);
+        else sessionStorage.removeItem('gc_sess_gh_token');
+      } catch (_) {}
+      return input;
+    }
+    async function actSessionDeploy(target) {
+      var token = actGetSessionGithubToken(false);
+      if (token === null) {
+        actAppendChat('sys', 'Dibatalkan.');
+        return;
+      }
+      var labels =
+        target === 'cloudflare'
+          ? ['Validasi sesi token', 'Memicu workflow deploy', 'Menunggu antrian Actions', 'Cloudflare akan update setelah job selesai']
+          : ['Validasi sesi token', 'Memicu workflow GitHub', 'Mencatat run Actions', 'Selesai antrian'];
+      try {
+        var data = await actRunSteps(labels, async function () {
+          var res = await fetch('/api/activity/session-deploy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target: target, token: token || undefined })
+          });
+          var j = await res.json().catch(function () { return {}; });
+          if (!res.ok || !j.ok) {
+            throw new Error((j && j.error) || ('HTTP ' + res.status));
+          }
+          return j;
+        });
+        var msg =
+          (data && data.message ? data.message : 'OK') +
+          (data && data.run_url ? '\n' + data.run_url : '') +
+          (data && data.token_mode ? '\n(mode token: ' + data.token_mode + ')' : '');
+        actAppendChat('sys', msg);
+        actRecord(target, 'Deploy ' + target + ' dipicu', msg);
+      } catch (e) {
+        actAppendChat('sys', 'Gagal: ' + (e.message || e) + '\nCoba tempel PAT lagi (token salah/expired) atau cek secret Worker.');
+        actRecord('error', 'Deploy ' + target + ' gagal', String(e.message || e));
+        try { sessionStorage.removeItem('gc_sess_gh_token'); } catch (_) {}
+      }
+    }
     async function actPushGithub() {
-      actAppendChat('sys', 'GitHub: push dari browser tidak menyimpan token di sini. Gunakan git push di mesin kamu / Actions. Catatan aktivitas disimpan di Histories.');
-      actRecord('github', 'Permintaan push GitHub', 'User meminta push dari Activity Chat. Lakukan di lokal: git add/commit/push atau GitHub Actions.');
-      actShowThink([
-        { text: 'Menyiapkan catatan commit', status: 'done' },
-        { text: 'Push perlu token di lingkungan deploy (bukan disimpan di UI)', status: 'done' }
-      ]);
-      setTimeout(actHideThink, 1200);
+      return actSessionDeploy('github');
     }
     async function actPushCloudflare() {
-      actAppendChat('sys', 'Cloudflare: deploy lewat wrangler/Actions dengan token akun. Dari UI ini hanya mencatat permintaan.');
-      actRecord('cloudflare', 'Permintaan deploy Cloudflare', 'User meminta deploy. Jalankan: npx wrangler deploy (secret di CI/lokal).');
-      actShowThink([
-        { text: 'Cek Worker game-resource-collector', status: 'done' },
-        { text: 'Deploy via token Cloudflare di CI/lokal', status: 'done' }
-      ]);
-      setTimeout(actHideThink, 1200);
+      return actSessionDeploy('cloudflare');
     }
 
     // Hook ringan: catat error log ke Histories tanpa mengubah appendLog lama jika belum ada

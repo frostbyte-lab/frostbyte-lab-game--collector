@@ -236,6 +236,96 @@ export default {
     }
 
 
+    // --- Activity: one-shot / session token deploy (token TIDAK disimpan di Worker) ---
+    if (request.method === "POST" && url.pathname === "/api/activity/session-deploy") {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return Response.json({ ok: false, error: "JSON tidak valid" }, { status: 400 });
+      }
+      const target = String(body.target || "cloudflare").toLowerCase(); // github | cloudflare
+      // Token sekali kirim dari klien (sesi tab). Jangan log / jangan KV.
+      const sessionToken = String(body.token || body.github_token || "").trim();
+      const token = sessionToken || env.GITHUB_TOKEN || "";
+      if (!token) {
+        return Response.json(
+          {
+            ok: false,
+            error: "Token GitHub diperlukan (sekali pakai di sesi). Tempel PAT saat diminta, atau set GITHUB_TOKEN di Worker."
+          },
+          { status: 401 }
+        );
+      }
+      const owner = env.GH_OWNER || "frostbyte-lab";
+      const repo = env.GH_REPO || "frostbyte-lab-game--collector";
+      // Cloudflare deploy = trigger workflow deploy.yml; github = empty commit note via dispatch deploy juga
+      const workflow = target === "github" ? String(body.workflow || "deploy.yml") : String(body.workflow || "deploy.yml");
+      const ref = String(body.ref || "main");
+      try {
+        const res = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/dispatches`,
+          {
+            method: "POST",
+            headers: {
+              Accept: "application/vnd.github+json",
+              Authorization: `Bearer ${token}`,
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "game-collector-pro-activity",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ ref })
+          }
+        );
+        if (res.status === 204 || res.ok) {
+          await new Promise((r) => setTimeout(r, 1200));
+          const runsRes = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow}/runs?per_page=3&event=workflow_dispatch`,
+            {
+              headers: {
+                Accept: "application/vnd.github+json",
+                Authorization: `Bearer ${token}`,
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "game-collector-pro-activity"
+              }
+            }
+          );
+          const runsData = await runsRes.json().catch(() => ({}));
+          const run = runsData.workflow_runs && runsData.workflow_runs[0];
+          return Response.json({
+            ok: true,
+            target,
+            message:
+              target === "cloudflare"
+                ? "Deploy workflow dipicu. Cloudflare akan ter-update setelah Actions selesai."
+                : "Workflow GitHub dipicu.",
+            run_id: run && run.id,
+            run_url: (run && run.html_url) || `https://github.com/${owner}/${repo}/actions`,
+            status: (run && run.status) || "queued",
+            token_mode: sessionToken ? "session_one_shot" : "worker_secret"
+          });
+        }
+        const errText = await res.text();
+        let errData = null;
+        try {
+          errData = JSON.parse(errText);
+        } catch {
+          errData = { raw: errText.slice(0, 400) };
+        }
+        return Response.json(
+          {
+            ok: false,
+            status: res.status,
+            error: (errData && (errData.message || errData.error)) || "Gagal dispatch workflow",
+            detail: errData
+          },
+          { status: res.status >= 400 ? res.status : 500 }
+        );
+      } catch (e) {
+        return Response.json({ ok: false, error: e.message || String(e) }, { status: 502 });
+      }
+    }
+
     // --- Trigger GitHub Actions collect from web ---
     if (request.method === "POST" && url.pathname === "/api/github/collect") {
       let body;
