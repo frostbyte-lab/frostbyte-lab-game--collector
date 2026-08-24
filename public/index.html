@@ -4568,19 +4568,76 @@
       if (input) input.value = '';
       if (sendBtn) sendBtn.disabled = true;
       try {
-        const hasFile = !!(typeof currentFile !== 'undefined' && currentFile && typeof editor !== 'undefined' && editor);
-        const code = hasFile ? (editor.getValue() || '') : '';
-        const filename = hasFile ? currentFile : '(belum ada file di editor)';
+        /* Ambil konteks file aktif; jika kosong tapi ZIP ada → buka kandidat terbaik */
+        async function resolveWorkspaceContext() {
+          let file = (typeof currentFile !== 'undefined' && currentFile) ? currentFile : null;
+          let code = '';
+          if (file && typeof editor !== 'undefined' && editor) {
+            try { code = editor.getValue() || ''; } catch (_) {}
+          }
+          if (file && !code && openFiles && openFiles.has(file)) code = openFiles.get(file) || '';
+          if (file && !code && zipFileMap && zipFileMap[file]) {
+            try { code = await zipFileMap[file].async('string'); } catch (_) {}
+          }
+          if ((!file || !code) && zipFileMap && Object.keys(zipFileMap).length) {
+            var keys = Object.keys(zipFileMap);
+            var prefer = keys.filter(function (k) {
+              return /(^|\/)index\.html?$/i.test(k) || /(^|\/)main\.(js|mjs)$/i.test(k) || /(^|\/)app\.(js|mjs)$/i.test(k);
+            });
+            if (!prefer.length) {
+              prefer = keys.filter(function (k) { return /\.(html?|js|mjs|json)$/i.test(k); });
+            }
+            for (var i = 0; i < prefer.length && i < 8; i++) {
+              var cand = prefer[i];
+              try {
+                var txt = openFiles && openFiles.has(cand) ? openFiles.get(cand) : await zipFileMap[cand].async('string');
+                if (txt && txt.length > 20) {
+                  file = cand;
+                  code = txt;
+                  if (typeof openFile === 'function') {
+                    try { openFile(cand, txt, txt.length); } catch (_) {}
+                  } else {
+                    currentFile = cand;
+                    if (openFiles) openFiles.set(cand, txt);
+                    if (editor) { try { editor.setValue(txt); } catch (_) {} }
+                  }
+                  break;
+                }
+              } catch (_) {}
+            }
+          }
+          var list = [];
+          try {
+            list = Object.keys(zipFileMap || {}).filter(function (k) {
+              return k && !k.endsWith('/') && /\.(html?|js|mjs|json|css)$/i.test(k);
+            }).slice(0, 40);
+          } catch (_) {}
+          return { file: file, code: code || '', list: list, hasZip: !!(currentZip || (zipFileMap && Object.keys(zipFileMap).length)) };
+        }
+
+        const ctx = await resolveWorkspaceContext();
+        const hasFile = !!(ctx.file && ctx.code);
+        const filename = hasFile ? ctx.file : '(tidak ada file teks di Workspace)';
+        const code = ctx.code;
+
         const system = [
-          'Anda asisten kode di Game Collector Pro (Custom AI).',
+          'Anda asisten kode di Game Collector Pro (Custom AI) di Workspace.',
           'Jawab ringkas dalam Bahasa Indonesia.',
-          'Jika user meminta edit/perbaiki/ubah kode dan ada file aktif, kembalikan FILE LENGKAP yang sudah diperbaiki di dalam satu blok markdown code fence.',
-          'Jangan potong file. Pertahankan perilaku yang tidak terkait permintaan.',
+          'Konteks file/ZIP sudah dilampirkan sistem — JANGAN bilang file tidak ditemukan jika ada blok KODE SAAT INI atau DAFTAR FILE.',
+          'Jika user meminta edit/perbaiki/ubah/error dan ada kode file, kembalikan FILE LENGKAP yang sudah diperbaiki dalam SATU blok markdown code fence (```).',
+          'Jangan potong file. Pertahankan bagian yang tidak terkait permintaan.',
           'Jika hanya tanya (bukan edit), jawab tanpa code fence penuh kecuali cuplikan pendek.'
         ].join(' ');
-        const userMsg = hasFile
-          ? ('FILE: ' + filename + '\n\nPERMINTAAN:\n' + q + '\n\nKODE SAAT INI:\n```\n' + code.slice(0, 28000) + '\n```')
-          : ('Belum ada file di editor.\nPERMINTAAN:\n' + q);
+
+        var userMsg = 'PERMINTAAN:\n' + q + '\n';
+        if (hasFile) {
+          userMsg += '\nFILE AKTIF: ' + filename + '\n\nKODE SAAT INI:\n```\n' + code.slice(0, 28000) + '\n```\n';
+        } else if (ctx.hasZip) {
+          userMsg += '\nZIP sudah diload. Belum ada file teks yang bisa dibaca otomatis.\nDAFTAR FILE (sample):\n' + (ctx.list.join('\n') || '(kosong)') + '\n';
+        } else {
+          userMsg += '\nBelum ada ZIP/file di Workspace. Minta user Load File / Collect dulu.\n';
+        }
+
         const { content, slotName } = await callCustomAIWithFailover([
           { role: 'system', content: system },
           { role: 'user', content: userMsg }
@@ -4588,15 +4645,25 @@
         caiAppendChat('ai', content + (slotName ? '\n\n(via API No.' + slotName + ')' : ''));
         const wantApply = applyEdit ? applyEdit.checked : true;
         const newCode = caiExtractCodeBlock(content);
-        if (wantApply && newCode && hasFile && editor) {
-          if (window.confirm('Terapkan hasil edit AI ke file aktif di editor?\n\n' + filename)) {
-            editor.setValue(newCode);
-            if (typeof openFiles !== 'undefined' && openFiles && currentFile) openFiles.set(currentFile, newCode);
-            if (typeof appendLog === 'function') appendLog('Custom AI Chat: edit diterapkan ke ' + filename, 'ok');
-            caiAppendChat('ai', '✓ Perubahan diterapkan ke editor: ' + filename + ' (Save untuk ke ZIP).');
+        if (wantApply && newCode && hasFile) {
+          /* Langsung terapkan ke editor + ZIP (checkbox sudah ON) — tanpa confirm ekstra */
+          try {
+            if (editor) editor.setValue(newCode);
+            if (typeof openFiles !== 'undefined' && openFiles) openFiles.set(ctx.file, newCode);
+            currentFile = ctx.file;
+            if (currentZip) {
+              try { currentZip.file(ctx.file, newCode); } catch (_) {}
+            }
+            if (zipFileMap && currentZip) {
+              try { zipFileMap[ctx.file] = currentZip.file(ctx.file); } catch (_) {}
+            }
+            if (typeof appendLog === 'function') appendLog('Custom AI: edit diterapkan → ' + ctx.file, 'ok');
+            caiAppendChat('ai', '✓ Perubahan diterapkan ke: ' + ctx.file + ' (sudah masuk buffer ZIP; Download ZIP / Save bila perlu).');
+          } catch (applyErr) {
+            caiAppendChat('ai', 'Gagal menerapkan ke editor: ' + (applyErr.message || applyErr));
           }
         } else if (wantApply && newCode && !hasFile) {
-          caiAppendChat('ai', '(Ada kode di jawaban, tapi belum ada file aktif di editor — buka file dulu.)');
+          caiAppendChat('ai', '(AI memberi kode, tapi tidak ada file target. Buka file di Explorer lalu kirim ulang.)');
         }
       } catch (e) {
         caiAppendChat('ai', 'Gagal: ' + (e.message || e));
