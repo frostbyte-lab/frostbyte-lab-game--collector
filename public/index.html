@@ -18,6 +18,7 @@
     
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs/loader.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="/offline-analyze.js"></script>
   <script type="module" src="https://unpkg.com/@google/model-viewer@4.0.0/dist/model-viewer.min.js"></script>
   
   <style>
@@ -514,6 +515,45 @@
       color: #22d3ee;
       font-weight: 800;
     }
+
+    /* ANALISA GAME modals */
+    .gc-oa-overlay {
+      position: fixed; inset: 0; z-index: 2000;
+      background: rgba(2,6,23,.72); display: none;
+      align-items: center; justify-content: center; padding: 16px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .gc-oa-overlay.show { display: flex; }
+    .gc-oa-modal {
+      width: min(520px, 100%); max-height: min(88vh, 720px);
+      overflow: auto; background: #0f172a; border: 1px solid rgba(148,163,184,.35);
+      border-radius: 14px; padding: 18px 16px 16px; color: #e2e8f0;
+      box-shadow: 0 20px 50px rgba(0,0,0,.45);
+    }
+    .gc-oa-modal h3 { margin: 0 0 10px; font-size: 16px; color: #f8fafc; }
+    .gc-oa-modal .stats { font-size: 13px; line-height: 1.55; color: #cbd5e1; margin: 10px 0 14px; }
+    .gc-oa-modal .stats b { color: #f1f5f9; }
+    .gc-oa-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .gc-oa-actions .btn { cursor: pointer; }
+    .gc-oa-list { max-height: 280px; overflow: auto; font-size: 12px; margin: 8px 0; }
+    .gc-oa-item {
+      border: 1px solid rgba(51,65,85,.9); border-radius: 8px;
+      padding: 8px 10px; margin-bottom: 6px; background: rgba(15,23,42,.6);
+    }
+    .gc-oa-item .path { font-family: ui-monospace, Menlo, monospace; color: #7dd3fc; word-break: break-all; }
+    .gc-oa-item .meta { color: #94a3b8; margin-top: 4px; }
+    .gc-oa-badge {
+      display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 6px;
+      border-radius: 999px; margin-right: 4px;
+    }
+    .gc-oa-badge.safe { background: rgba(34,197,94,.2); color: #86efac; }
+    .gc-oa-badge.ext { background: rgba(245,158,11,.2); color: #fcd34d; }
+    .gc-oa-badge.api { background: rgba(239,68,68,.2); color: #fca5a5; }
+    .gc-oa-badge.track { background: rgba(168,85,247,.2); color: #d8b4fe; }
+    .gc-oa-badge.dom { background: rgba(56,189,248,.2); color: #7dd3fc; }
+    .gc-oa-warn { color: #fbbf24; font-size: 12px; margin: 8px 0; }
+    .gc-oa-ok { color: #86efac; font-size: 13px; font-weight: 600; }
+    .gc-oa-bad { color: #fca5a5; font-size: 13px; font-weight: 600; }
     #hosting-progress-page {
       display: none;
       flex-direction: column;
@@ -2769,6 +2809,7 @@
         </div>
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-analisa-game" onclick="runAnalisaGame()" title="Analisa dependency → offline sandbox">Analisa Game</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-hosting-top" onclick="openHostingPage()" title="Hosting paket game">Hosting</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Custom AI — multi API failover">Custom AI</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
@@ -6494,7 +6535,206 @@
           if (/__GC_CUSTOM_BOOTSTRAP__/i.test(html)) return { html: html, injected: false };
           var boot = '\n<!-- __GC_CUSTOM_BOOTSTRAP__ -->\n<script>\n(function(){\n  var API_BASE = ' + JSON.stringify(base || '') + ';\n  var GAME_ID = ' + JSON.stringify(gid || 'game-1') + ';\n  window.__GC_API_BASE__ = API_BASE;\n  window.__GC_GAME_ID__ = GAME_ID;\n  function fix(u){\n    if (!u || typeof u !== "string") return u;\n    if (/^\\/(shared|assets|static|resource|resources)\\//i.test(u)) return "." + u;\n    if (API_BASE && /^https?:\\/\\/api\\.\\//i.test(u)) return API_BASE + u.replace(/^https?:\\/\\/api\\./i, "");\n    return u;\n  }\n  try {\n    var _o = XMLHttpRequest.prototype.open;\n    XMLHttpRequest.prototype.open = function(m,u){\n      var a = Array.prototype.slice.call(arguments);\n      if (typeof a[1]==="string") a[1]=fix(a[1]);\n      return _o.apply(this,a);\n    };\n  } catch(e){}\n  try {\n    var _f = window.fetch;\n    if (_f) window.fetch = function(input, init){\n      if (typeof input==="string") input=fix(input);\n      return _f.call(this, input, init);\n    };\n  } catch(e2){}\n})();\n</scr' + 'ipt>\n';
           if (/<\/head>/i.test(html)) return { html: html.replace(/<\/head>/i, boot + '</head>'), injected: true };
-          if (/<\/body>/i.test(html)) return { html: html.replace(/<\/body>/i, boot + '</body>'), injected: true };
+          if (/<\/body>/i.test(html)) return { html: html.replace(/<\/body>/i, boot + '
+  <!-- ANALISA GAME popups -->
+  <div id="gc-oa-summary" class="gc-oa-overlay" role="dialog" aria-modal="true">
+    <div class="gc-oa-modal">
+      <h3>ANALISA OFFLINE GAME</h3>
+      <p style="margin:0;font-size:13px;color:#94a3b8;">Game dianalisa. Mode tujuan: <b style="color:#e2e8f0">OFFLINE SANDBOX</b></p>
+      <div class="stats" id="gc-oa-summary-stats"></div>
+      <div class="gc-oa-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gcOaShowDetail()">Lihat Detail</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gcOaClose()">Batal</button>
+        <button type="button" class="btn btn-success btn-sm" onclick="gcOaConfirmConvert()">Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+  <div id="gc-oa-detail" class="gc-oa-overlay" role="dialog" aria-modal="true">
+    <div class="gc-oa-modal" style="width:min(640px,100%)">
+      <h3>Detail file dependency</h3>
+      <p style="margin:0 0 8px;font-size:12px;color:#94a3b8;">Ubah aksi per file: Pertahankan / Hapus / Ganti-Mock. Default aman.</p>
+      <div class="gc-oa-list" id="gc-oa-detail-list"></div>
+      <div class="gc-oa-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gcOaCloseDetail()">Kembali</button>
+        <button type="button" class="btn btn-success btn-sm" onclick="gcOaConfirmConvert()">Backup &amp; Konversi</button>
+      </div>
+    </div>
+  </div>
+  <div id="gc-oa-final" class="gc-oa-overlay" role="dialog" aria-modal="true">
+    <div class="gc-oa-modal">
+      <h3>PERINGATAN</h3>
+      <p style="font-size:13px;color:#cbd5e1;line-height:1.5;">Sistem menemukan file/kode terkait layanan eksternal. Beberapa akan dinonaktifkan atau diganti mock lokal. <b>Backup</b> disimpan di <code>BACKUP/offline-conversion/</code>.</p>
+      <div id="gc-oa-final-list" class="gc-oa-list"></div>
+      <div class="gc-oa-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gcOaCloseFinal()">Batal</button>
+        <button type="button" class="btn btn-success btn-sm" onclick="gcOaDoConvert()">Buat Backup &amp; Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+  <div id="gc-oa-result" class="gc-oa-overlay" role="dialog" aria-modal="true">
+    <div class="gc-oa-modal">
+      <h3>Hasil konversi offline</h3>
+      <div id="gc-oa-result-body"></div>
+      <div class="gc-oa-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gcOaCloseAll()">Tutup</button>
+        <button type="button" class="btn btn-success btn-sm" onclick="gcOaCloseAll(); startPreview('sandbox');">Sandbox Test</button>
+      </div>
+    </div>
+  </div>
+
+
+<script>
+(function(){
+  var __oaReport = null;
+
+  function oaStatus(msg) {
+    var el = document.getElementById('status');
+    if (el) el.textContent = 'Status: ' + msg;
+    if (typeof appendLog === 'function') appendLog(msg, 'ok');
+  }
+
+  window.runAnalisaGame = async function runAnalisaGame() {
+    if (typeof currentZip === 'undefined' || !currentZip) {
+      alert('Load ZIP dulu di Workspace (Load File), baru Analisa Game.');
+      return;
+    }
+    if (!window.GCOfflineAnalyze) {
+      alert('Modul analisa belum termuat. Hard-refresh halaman.');
+      return;
+    }
+    oaStatus('🔍 Menganalisa game...');
+    try {
+      __oaReport = await GCOfflineAnalyze.analyzeZip(currentZip, {
+        onProgress: function (pct, label) {
+          oaStatus('🔍 Menganalisa... ' + pct + '% — ' + (label || ''));
+        }
+      });
+      var s = __oaReport.summary;
+      var htmlStats =
+        'File aman (SAFE): <b>' + s.safe + '</b><br>' +
+        'Perlu diperiksa (EXTERNAL): <b>' + s.external + '</b><br>' +
+        'API eksternal: <b>' + s.api + '</b><br>' +
+        'Domain / redirect: <b>' + s.domain + '</b><br>' +
+        'Tracking: <b>' + s.tracking + '</b><br>' +
+        'Kandidat hapus: <b>' + s.removeCandidates + '</b><br>' +
+        'Kandidat ganti/mock: <b>' + s.replaceCandidates + '</b><br>' +
+        'Review: <b>' + s.reviewCandidates + '</b><br>' +
+        (s.serverDeps ? '<span class="gc-oa-warn">⚠ ' + s.serverDeps + ' indikasi server-dependency (engine mungkin di backend)</span>' : '');
+      document.getElementById('gc-oa-summary-stats').innerHTML = htmlStats;
+      document.getElementById('gc-oa-summary').classList.add('show');
+      oaStatus('Analisa selesai — ' + (s.api + s.external + s.tracking + s.domain) + ' dependency ditemukan');
+    } catch (e) {
+      oaStatus('Analisa gagal: ' + (e.message || e));
+      alert('Analisa gagal: ' + (e.message || e));
+    }
+  };
+
+  function badge(cat) {
+    var map = { SAFE: 'safe', EXTERNAL: 'ext', BACKEND_API: 'api', TRACKING: 'track', DOMAIN_REDIRECT: 'dom' };
+    var label = cat === 'BACKEND_API' ? 'API' : cat === 'DOMAIN_REDIRECT' ? 'DOMAIN' : cat;
+    return '<span class="gc-oa-badge ' + (map[cat] || 'ext') + '">' + label + '</span>';
+  }
+
+  window.gcOaShowDetail = function () {
+    if (!__oaReport) return;
+    var list = document.getElementById('gc-oa-detail-list');
+    var interesting = __oaReport.files.filter(function (f) {
+      return f.category !== 'SAFE' || f.action !== 'KEEP';
+    });
+    if (!interesting.length) {
+      list.innerHTML = '<div class="gc-oa-ok">Tidak ada dependency mencurigakan. Hampir semua SAFE.</div>';
+    } else {
+      list.innerHTML = interesting.map(function (f, idx) {
+        var i = __oaReport.files.indexOf(f);
+        return '<div class="gc-oa-item">' +
+          '<div class="path">' + badge(f.category) + f.path + '</div>' +
+          '<div class="meta">Aksi: ' + (f.userAction || f.action) +
+          ' · ' + (f.reasons || []).join('; ') +
+          (f.refs && f.refs[0] ? '<br>Ref: ' + f.refs[0] : '') + '</div>' +
+          '<div class="gc-oa-actions" style="margin-top:6px">' +
+          '<button type="button" class="btn btn-secondary btn-sm" onclick="gcOaSetAction(' + i + ',\'KEEP\')">Pertahankan</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm" onclick="gcOaSetAction(' + i + ',\'REMOVE\')">Hapus</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm" onclick="gcOaSetAction(' + i + ',\'REPLACE\')">Ganti/Mock</button>' +
+          '</div></div>';
+      }).join('');
+    }
+    document.getElementById('gc-oa-summary').classList.remove('show');
+    document.getElementById('gc-oa-detail').classList.add('show');
+  };
+
+  window.gcOaSetAction = function (index, action) {
+    if (!__oaReport || !__oaReport.files[index]) return;
+    __oaReport.files[index].userAction = action;
+    gcOaShowDetail();
+  };
+
+  window.gcOaClose = function () {
+    document.getElementById('gc-oa-summary').classList.remove('show');
+  };
+  window.gcOaCloseDetail = function () {
+    document.getElementById('gc-oa-detail').classList.remove('show');
+    document.getElementById('gc-oa-summary').classList.add('show');
+  };
+  window.gcOaCloseFinal = function () {
+    document.getElementById('gc-oa-final').classList.remove('show');
+  };
+  window.gcOaCloseAll = function () {
+    ['gc-oa-summary','gc-oa-detail','gc-oa-final','gc-oa-result'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.remove('show');
+    });
+  };
+
+  window.gcOaConfirmConvert = function () {
+    if (!__oaReport) return;
+    var toProcess = __oaReport.files.filter(function (f) {
+      var a = f.userAction || f.action;
+      return a === 'REMOVE' || a === 'REPLACE' || (a === 'REVIEW' && f.category !== 'SAFE');
+    });
+    var box = document.getElementById('gc-oa-final-list');
+    box.innerHTML = toProcess.length
+      ? toProcess.slice(0, 40).map(function (f) {
+          return '<div class="gc-oa-item"><span class="path">✓ ' + f.path + '</span> <span class="meta">(' + (f.userAction || f.action) + ')</span></div>';
+        }).join('')
+      : '<div class="gc-oa-ok">Tidak ada file yang akan diubah. Anda bisa tutup saja.</div>';
+    document.getElementById('gc-oa-detail').classList.remove('show');
+    document.getElementById('gc-oa-summary').classList.remove('show');
+    document.getElementById('gc-oa-final').classList.add('show');
+  };
+
+  window.gcOaDoConvert = async function () {
+    if (!__oaReport || !currentZip) return;
+    oaStatus('Backup & konversi offline...');
+    try {
+      var result = await GCOfflineAnalyze.applyConversion(currentZip, __oaReport, {});
+      // Refresh file tree if possible
+      try {
+        if (typeof renderFileTree === 'function' && currentZip.files) {
+          var paths = Object.keys(currentZip.files).filter(function (p) { return !currentZip.files[p].dir; });
+          renderFileTree(paths);
+        }
+      } catch (_) {}
+      var v = result.validation || {};
+      var body = document.getElementById('gc-oa-result-body');
+      body.innerHTML =
+        '<p class="' + (v.ready ? 'gc-oa-ok' : 'gc-oa-bad') + '">' + (v.status || (v.ready ? 'OFFLINE READY' : 'OFFLINE NOT READY')) + '</p>' +
+        '<div class="stats">Diubah: <b>' + (result.changed || []).length + '</b> · ' +
+        'Stub/hapus tracking: <b>' + (result.removed || []).length + '</b> · ' +
+        'Mock/replace: <b>' + (result.replaced || []).length + '</b></div>' +
+        (v.remainingCount ? '<p class="gc-oa-warn">⚠ ' + v.remainingCount + ' dependency eksternal masih terdeteksi. Game mungkin server-dependent.</p>' : '') +
+        '<p style="font-size:12px;color:#94a3b8">Backup di ZIP: BACKUP/offline-conversion/. Uji di Sandbox. Jika logic hanya di server, offline penuh tidak dijamin.</p>';
+      document.getElementById('gc-oa-final').classList.remove('show');
+      document.getElementById('gc-oa-result').classList.add('show');
+      oaStatus(v.status || 'Konversi selesai');
+    } catch (e) {
+      alert('Konversi gagal: ' + (e.message || e));
+      oaStatus('Konversi gagal');
+    }
+  };
+})();
+</script>
+
+</body>'), injected: true };
           return { html: boot + html, injected: true };
         }
 
