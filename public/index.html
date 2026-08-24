@@ -361,7 +361,14 @@
     .workspace-header .workspace-actions {
       gap: 6px;
       flex-wrap: nowrap;
+      flex: 1 1 auto;
+      min-width: 0;
+      justify-content: flex-end;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
     }
+    .workspace-header .workspace-actions::-webkit-scrollbar { display: none; }
     .workspace-header .btn-sm {
       padding: 5px 10px !important;
       font-size: 11px !important;
@@ -2604,8 +2611,6 @@
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
           <button type="button" class="btn btn-secondary btn-sm" id="btn-hosting-top" onclick="openHostingPage()" title="Hosting paket game">Hosting</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Custom AI — multi API failover">Custom AI</button>
-          <button type="button" class="btn btn-primary btn-sm" id="btn-auto-custom-api" onclick="autoCustomApiSdk()" title="Patch API/path/SDK otomatis (+ AI) di ZIP Workspace">Auto Custom API/SDK</button>
-          <button type="button" class="btn btn-success btn-sm" id="btn-download-zip" onclick="downloadWorkspaceZip()" title="Unduh ZIP hasil edit (siap hosting manual)">Download ZIP</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -2836,7 +2841,7 @@
               <button type="button" class="btn btn-primary btn-sm" onclick="saveFile()" title="Save">Save</button>
               <button type="button" class="btn btn-secondary btn-sm" onclick="openAnalysisPanel()" title="Analysis">Analysis</button>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="Load File">Load File</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-download-file" onclick="downloadCurrentFile()" title="Download file aktif">Download</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-download-file" onclick="downloadWorkspaceZip()" title="Download ZIP hasil edit (seluruh paket)">Download ZIP</button>
             </div>
             <div class="file-panel-footer-row">
               <button type="button" class="btn btn-primary btn-sm" onclick="autoCustomApiSdk()" title="Auto Custom API/SDK — patch path, API base, bootstrap (+ AI)">
@@ -7040,7 +7045,27 @@
       })();
     </script>
 
-<style id="workspace-preview-live-overrides">#preview-mode .preview-workspace{display:grid!important;grid-template-columns:minmax(0,65fr) minmax(0,35fr)!important}#preview-mode.mode-web .preview-workspace,#preview-mode .preview-workspace.preview-web{grid-template-columns:minmax(0,1fr)!important}#preview-mode.mode-web .preview-log-column,#preview-mode .preview-workspace.preview-web .preview-log-column{display:none!important}#preview-mode.mode-sandbox #error-log{display:block}#preview-diagnostics{display:flex;flex-direction:column;height:calc(100% - 42px);min-height:0}.preview-diagnostics-tools{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border)}#preview-log-filter{flex:1;min-width:0;padding:7px 9px;color:var(--text);background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px}#preview-diagnostics-list{overflow:auto;min-height:0;padding:6px 8px}.preview-diagnostic{display:grid;grid-template-columns:42px minmax(0,1fr);gap:8px;width:100%;padding:9px 8px;border:1px solid transparent;border-bottom-color:var(--border);background:transparent;color:var(--text-secondary);text-align:left;cursor:pointer}.preview-diagnostic:hover,.preview-diagnostic.active{background:rgba(6,182,212,.1);border-color:rgba(6,182,212,.3)}.preview-diagnostic-kind{font:600 10px monospace;padding:3px 4px;height:max-content;text-align:center;border:1px solid currentColor;border-radius:4px}.preview-diagnostic-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:12px}.preview-diagnostic-meta{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);font:10px monospace}.preview-error-detail{margin:0 10px 10px;padding:10px;min-height:94px;overflow:auto;white-space:pre-wrap;color:var(--text-secondary);background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;font:11px/1.55 monospace}@media(max-width:760px){#preview-mode .preview-workspace{display:flex;flex-direction:column}#preview-mode .preview-stage-column{min-height:320px;border-right:0;border-bottom:1px solid var(--border)}#preview-mode .preview-workspace.preview-web .preview-log-column{display:none}}</style>
+<style id="workspace-preview-live-overrides">#preview-mode .preview-workspace{display:grid!important;grid-template-columns:minmax(0,65fr) minmax(0,35fr)!important}#preview-mode.mode-web .preview-workspace,#preview-mode .preview-workspace.preview-web{grid-template-columns:minmax(0,1fr)!important}#preview-mode.mode-web .preview-log-column,#preview-mode .preview-workspace.preview-web .preview-log-column{display:none!important}#preview-mode.mode-sandbox #error-log{display:block}#preview-diagnostics{display:flex;flex-direction:column;height:calc(100% - 42px);min-height:0}.preview-diagnostics-tools{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border)}#preview-log-filter{flex:1;min-width:0;padding:7px 9px;color:var(--text);background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px}#preview-diagnostics-list{overflow:auto;min-height:0;padding:6px 8px}.preview-diagnostic{display:grid;grid-template-columns:42px minmax(0,1fr);gap:8px;width:100%;padding:9px 8px;border:1px solid transparent;border-bottom-color:var(--border);background:transparent;color:var(--text-secondary);text-align:left;cursor:pointer}.preview-diagnostic:hover,.preview-diagnostic.active{background:rgba(6,182,212,.1);border-color:rgba(6,182,212,.3)}.preview-diagnostic-kind{font:600 10px monospace;padding:3px 4px;height:max-content;text-align:center;border:1px solid currentColor;border-radius:4px}.preview-diagnostic-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:12px}.preview-diagnostic-meta{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);font:10px monospace}.preview-error-detail{margin:0 10px 10px;padding:10px;min-height:94px;overflow:auto;white-space:pre-wrap;color:var(--text-secondary);background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;font:11px/1.55 monospace}@media(max-width:760px){#preview-mode .preview-workspace{display:flex;flex-direction:column}#preview-mode .preview-stage-column{min-height:320px;border-right:0;border-bottom:1px solid var(--border)}#preview-mode .preview-workspace.preview-web .preview-log-column{display:none}}
+    @media (max-width: 768px) {
+      .workspace-header {
+        flex-wrap: nowrap !important;
+        gap: 6px;
+      }
+      .workspace-header .fb-labb-name { max-width: 72px; overflow: hidden; text-overflow: ellipsis; }
+      .workspace-header .btn-sm {
+        padding: 5px 8px !important;
+        font-size: 11px !important;
+      }
+      .file-panel-footer-row .btn {
+        flex: 1 1 0;
+        min-width: 0;
+        justify-content: center;
+        font-size: 11px !important;
+        padding: 8px 6px !important;
+      }
+    }
+
+</style>
 <script>(function(){var a=[],s=null,o=window.appendLog;function add(v){var t=String(v||""),u=t.toLowerCase(),k=u.indexOf("python")>=0||u.indexOf("numpy")>=0?"PY3":u.indexOf(".css")>=0?"CSS":u.indexOf(".html")>=0||u.indexOf("tag")>=0?"HTML":u.indexOf("fetch")>=0||u.indexOf("404")>=0?"NET":"JS";var f="runtime output",m=t.match(/[A-Za-z0-9_./-]+\.(html?|css|m?js|py3?)/i);if(m)f=m[0];return{kind:k,file:f,title:t,detail:t}}function draw(){var box=document.getElementById("preview-diagnostics-list"),q=document.getElementById("preview-log-filter");if(!box)return;var n=q?q.value.toLowerCase():"",v=a.filter(function(x){return!n||(x.kind+" "+x.file+" "+x.title).toLowerCase().indexOf(n)>=0});box.innerHTML=v.length?v.map(function(x){return"<button type=\"button\" class=\"preview-diagnostic"+ (x===s?" active":"") +" data-i=\""+a.indexOf(x)+"\"><b class=\"preview-diagnostic-kind\">"+x.kind+"</b><span><strong class=\"preview-diagnostic-title\">"+x.title+"</strong><small class=\"preview-diagnostic-meta\">"+x.file+"</small></span></button>"}).join(""):"<div style=\"padding:18px;color:var(--text-muted)\">No diagnostics yet.</div>";Array.prototype.forEach.call(box.querySelectorAll("[data-i]"),function(b){b.onclick=function(){s=a[Number(b.getAttribute("data-i"))];var d=document.getElementById("preview-error-detail");if(d)d.textContent=s.detail+"\n\nFile: "+s.file;draw()}})}window.appendLog=function(v){if(typeof o==="function")o.apply(this,arguments);s=add(v);a.push(s);draw()};var sw=window.switchPreviewMode;window.switchPreviewMode=function(m){var r=sw?sw.apply(this,arguments):null,w=document.querySelector("#preview-mode .preview-workspace");if(w)w.classList.toggle("preview-web",m==="web");return r};var f=document.getElementById("preview-log-filter");if(f)f.oninput=draw;var c=document.getElementById("preview-log-clear");if(c)c.onclick=function(){a=[];s=null;draw()};draw()})();</script>
 </body>
 </html>
