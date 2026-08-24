@@ -831,28 +831,57 @@
       flex: 1 1 0;
       min-height: 0;
       overflow: auto;
-      padding: 24px;
+      padding: 16px;
       background: #111827;
       color: var(--text);
+      /* Saat aktif: isi area editor, jangan tertimpa Monaco / panel AI */
+      position: relative;
+      z-index: 2;
     }
-    #binary-preview.active { display: flex; align-items: center; justify-content: center; }
+    #binary-preview.active {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      flex: 1 1 auto;
+      min-height: 200px;
+    }
+    /* Saat preview binary aktif, sembunyikan Monaco sepenuhnya agar tidak menutupi */
+    .editor-panel.binary-mode #monaco-editor {
+      display: none !important;
+      flex: 0 0 0 !important;
+      min-height: 0 !important;
+      height: 0 !important;
+      overflow: hidden !important;
+    }
+    .editor-panel.binary-mode #binary-preview.active {
+      flex: 1 1 auto;
+      min-height: 240px;
+    }
     #binary-preview .asset-card {
       width: min(760px, 100%);
       display: grid;
-      gap: 14px;
+      gap: 12px;
       justify-items: center;
-      padding: 24px;
+      padding: 20px;
       border: 1px solid var(--border);
       border-radius: 12px;
       background: #1e293b;
       text-align: center;
+      margin: auto 0;
     }
     #binary-preview img, #binary-preview video, #binary-preview model-viewer {
       display: block;
       max-width: 100%;
-      max-height: 58vh;
+      max-height: min(52vh, 520px);
+      width: auto;
+      height: auto;
+      object-fit: contain;
       border-radius: 8px;
       background: #0b1020;
+      /* Cegah gesture browser yang memicu unduhan di beberapa mobile */
+      -webkit-user-drag: none;
+      user-select: none;
+      pointer-events: auto;
     }
     #binary-preview audio { width: min(560px, 100%); }
     #binary-preview pre { width: 100%; max-height: 58vh; overflow: auto; text-align: left; white-space: pre-wrap; word-break: break-word; }
@@ -1940,7 +1969,7 @@
 
     /* ===== AI PANEL ===== */
     .ai-panel {
-      padding: 14px 16px;
+      padding: 14px 16px 18px;
       border-top: 1px solid var(--border);
       background: linear-gradient(135deg, rgba(30, 64, 175, 0.12), rgba(6, 182, 212, 0.1));
       border-radius: 10px 10px 0 0;
@@ -1948,12 +1977,20 @@
       display: flex;
       flex-direction: column;
       min-height: 0;
-      /* Lebih luas di mobile & desktop */
-      max-height: min(72vh, 720px);
-      flex: 0 1 auto;
-      overflow: hidden;
+      /* Jangan menghabisi area editor: tinggi terbatas + scroll internal */
+      max-height: min(42vh, 420px);
+      flex: 0 0 auto;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      z-index: 3;
     }
     .ai-panel.hidden { display: none !important; }
+    /* Saat binary preview: AI panel lebih ringkas agar gambar terlihat */
+    .editor-panel.binary-mode .ai-panel:not(.hidden) {
+      max-height: min(28vh, 260px);
+    }
 
     .ai-label {
       font-size: 12px;
@@ -1967,21 +2004,35 @@
 
     .ai-input {
       display: flex;
+      flex-direction: column;
       gap: 8px;
       margin-bottom: 10px;
       flex-shrink: 0;
+      width: 100%;
+    }
+    .ai-input .ai-input-row {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      align-items: stretch;
     }
 
     .ai-input input,
     .ai-input textarea {
       flex: 1;
-      padding: 10px 12px;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
-      font-size: 13px;
-      min-height: 44px;
+      font-size: 14px;
+      line-height: 1.45;
+      min-height: 88px;
+      max-height: 200px;
+      resize: vertical;
+      font-family: inherit;
     }
 
     .ai-buttons {
@@ -2005,9 +2056,8 @@
       font-size: 13px;
       color: var(--text-secondary);
       flex: 1 1 auto;
-      min-height: 200px;
-      /* Kolom hasil Deteksi AI / AI jauh lebih luas */
-      max-height: min(52vh, 520px);
+      min-height: 120px;
+      max-height: min(36vh, 360px);
       overflow-y: auto;
       overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
@@ -2021,12 +2071,19 @@
     }
     @media (max-width: 768px) {
       .ai-panel {
-        max-height: min(78vh, 900px);
-        padding: 12px 12px 16px;
+        max-height: min(48vh, 480px);
+        padding: 12px 12px 20px;
+      }
+      .editor-panel.binary-mode .ai-panel:not(.hidden) {
+        max-height: min(32vh, 280px);
+      }
+      .ai-input textarea {
+        min-height: 100px;
+        font-size: 15px;
       }
       .ai-response {
-        min-height: 240px;
-        max-height: min(58vh, 640px);
+        min-height: 140px;
+        max-height: min(40vh, 400px);
         font-size: 13.5px;
         padding: 14px;
       }
@@ -2973,8 +3030,10 @@
               </select>
             </div>
             <div class="ai-input">
-              <textarea id="ai-prompt" rows="2" placeholder="Tulis pertanyaan tentang file ini..." aria-label="Pertanyaan untuk AI"></textarea>
-              <button class="btn btn-primary btn-sm" onclick="askAI()">Kirim</button>
+              <textarea id="ai-prompt" rows="4" placeholder="Tulis pertanyaan tentang file ini..." aria-label="Pertanyaan untuk AI"></textarea>
+              <div class="ai-input-row">
+                <button class="btn btn-primary btn-sm" style="flex:1;min-height:42px;" onclick="askAI()">Kirim</button>
+              </div>
             </div>
             <div class="ai-buttons">
               <button class="btn btn-secondary btn-sm" onclick="analyzeWithAI()">Analyze with AI</button>
@@ -3593,9 +3652,11 @@
       currentFile = filename;
       const preview = document.getElementById('binary-preview');
       const host = document.getElementById('monaco-editor');
+      const editorPanel = document.querySelector('.editor-panel');
       if (!preview || !entry) return;
       if (activeAssetObjectUrl) URL.revokeObjectURL(activeAssetObjectUrl);
       if (host) host.style.display = 'none';
+      if (editorPanel) editorPanel.classList.add('binary-mode');
       preview.classList.add('active');
       preview.innerHTML = '';
       const card = document.createElement('div');
@@ -3603,20 +3664,27 @@
       const title = document.createElement('strong');
       title.textContent = filename;
       card.appendChild(title);
-      const ext = filename.split('.').pop().toLowerCase();
-      const rawBlob = await entry.async('blob');
+      const ext = (filename.split('.').pop() || '').toLowerCase();
       const mimeByExt = {
         mp3:'audio/mpeg', ogg:'audio/ogg', wav:'audio/wav', m4a:'audio/mp4', aac:'audio/aac', flac:'audio/flac',
         mp4:'video/mp4', webm:'video/webm', mov:'video/quicktime',
         glb:'model/gltf-binary', gltf:'model/gltf+json',
         png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp', avif:'image/avif', svg:'image/svg+xml'
       };
-      const blob = rawBlob.type ? rawBlob : new Blob([rawBlob], { type: mimeByExt[ext] || 'application/octet-stream' });
+      // Selalu set MIME yang benar — blob kosong type sering memicu unduhan di Chrome Android
+      const rawBuf = await entry.async('arraybuffer');
+      const mime = mimeByExt[ext] || 'application/octet-stream';
+      const blob = new Blob([rawBuf], { type: mime });
       const url = URL.createObjectURL(blob);
       activeAssetObjectUrl = url;
       let viewer = null;
       if (['png','jpg','jpeg','gif','webp','avif','svg'].includes(ext)) {
-        viewer = document.createElement('img'); viewer.src = url; viewer.alt = filename;
+        viewer = document.createElement('img');
+        viewer.src = url;
+        viewer.alt = filename;
+        viewer.draggable = false;
+        // Cegah long-press "Download image" yang membingungkan di beberapa browser
+        viewer.addEventListener('contextmenu', (e) => e.preventDefault());
       } else if (['mp3','ogg','wav','m4a','aac','flac'].includes(ext)) {
         viewer = document.createElement('audio'); viewer.controls = true; viewer.src = url;
       } else if (['mp4','webm','mov'].includes(ext)) {
@@ -3630,27 +3698,38 @@
       }
       if (viewer) card.appendChild(viewer);
       const note = document.createElement('span');
-      note.textContent = viewer ? 'Asset dapat dipreview langsung.' : 'Format biner siap diunduh atau dipakai pada preview game.';
+      note.style.fontSize = '12px';
+      note.style.color = 'var(--text-muted)';
+      note.textContent = viewer
+        ? 'Preview dari ZIP (lokal di memori browser — bukan unduhan ulang dari server).'
+        : 'Format biner dari ZIP. Bisa diunduh manual jika perlu.';
       card.appendChild(note);
       const download = document.createElement('button');
-      download.className = 'btn btn-primary btn-sm';
+      download.type = 'button';
+      download.className = 'btn btn-secondary btn-sm';
       download.textContent = 'Download asset';
-      download.onclick = () => downloadBlob(blob, filename.split('/').pop() || 'asset', 'Asset');
+      download.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        downloadBlob(blob, filename.split('/').pop() || 'asset', 'Asset');
+      };
       card.appendChild(download);
       preview.appendChild(card);
       document.getElementById('editor-lang').textContent = 'binary · ' + ext;
       document.getElementById('editor-size').textContent = formatBytes(blob.size);
       document.getElementById('breadcrumb-file').textContent = filename;
       document.getElementById('breadcrumb').classList.add('active');
-      document.getElementById('file-info').textContent = filename + '\ntype: binary';
+      document.getElementById('file-info').textContent = filename + '\ntype: binary (in-memory ZIP)';
       document.getElementById('status-info').textContent = filename;
     }
 
     function hideBinaryPreview() {
       const preview = document.getElementById('binary-preview');
       const host = document.getElementById('monaco-editor');
+      const editorPanel = document.querySelector('.editor-panel');
       if (preview) { preview.classList.remove('active'); preview.innerHTML = ''; }
       if (host) host.style.display = '';
+      if (editorPanel) editorPanel.classList.remove('binary-mode');
       if (activeAssetObjectUrl) {
         URL.revokeObjectURL(activeAssetObjectUrl);
         activeAssetObjectUrl = null;
