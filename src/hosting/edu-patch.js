@@ -411,4 +411,4 @@ export function patchFilesForEdu(files, opts = {}) {
   return { files: out, report };
 }
 
-export { DEFAULT_EDU_BASE, buildBootstrapSnippet, zeroClientBalances, buildRngSnippet };
+export { DEFAULT_EDU_BASE, buildBootstrapSnippet };
