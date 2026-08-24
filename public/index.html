@@ -5493,12 +5493,14 @@
       // Feedback langsung agar di HP tidak terasa "diam"
       if (typeof setLoading === 'function') setLoading(true, 'Deteksi AI', 'Memindai file…');
       if (logEl) logEl.innerHTML = '';
-      appendLog('🤖 Deteksi AI dimulai (domain · API game · balance)...', 'ok');
+      appendLog('🤖 Deteksi AI dimulai — analisa TOTAL file teks di ZIP…', 'ok');
 
       const paths = Object.keys(zipFileMap || {}).filter(p => {
         const ext = (p.split('.').pop() || '').toLowerCase();
-        return ['html', 'htm', 'js', 'mjs', 'css', 'json', 'ts', 'tsx', 'jsx', 'txt', 'xml'].includes(ext);
-      }).slice(0, 40);
+        return ['html', 'htm', 'js', 'mjs', 'css', 'json', 'ts', 'tsx', 'jsx', 'txt', 'xml', 'map'].includes(ext);
+      });
+      if (paths.length > 400) paths.length = 400;
+      appendLog('Deteksi AI: antrean ' + paths.length + ' file teks (gambar dilewati).', 'ok');
 
       // Always include active editor file
       if (currentFile && !paths.includes(currentFile)) paths.unshift(currentFile);
@@ -5660,7 +5662,22 @@
         tip = '\n\nAPI = 0 artinya path /api/game/* belum ada di file.\nBuka Hosting → isi form → tombol Terapkan System, lalu Deteksi AI lagi.';
       }
       if (typeof setLoading === 'function') setLoading(false);
-      alert('Deteksi AI selesai.\nDomain: ' + domainMap.size + '\nAPI: ' + apiMap.size + '\nBalance: ' + balanceMap.size + tip + '\n\nFile dipindai: ' + scanned.length + '\n\nLihat log / panel AI.');
+      var summaryMsg = 'Deteksi AI selesai (analisa TOTAL ZIP).\nDomain: ' + domainMap.size + '\nAPI: ' + apiMap.size + '\nBalance: ' + balanceMap.size + tip + '\n\nFile teks dipindai: ' + scanned.length + ' / path ' + paths.length + '\n\nLihat log panel.';
+      try {
+        if (typeof actRecord === 'function') {
+          actRecord('deteksi', 'Deteksi AI ZIP: ' + scanned.length + ' file', summaryMsg + '\n\n' + (typeof reportText !== 'undefined' ? reportText : ''));
+        }
+      } catch (_) {}
+      var wantRepair = window.confirm(summaryMsg + '\n\nJalankan perbaikan otomatis (Custom API/path) pada SEMUA file teks di ZIP?\n\nGambar tidak diubah. Setelah itu Download ZIP.');
+      if (wantRepair && typeof autoCustomApiSdk === 'function') {
+        try { await autoCustomApiSdk(); } catch (re) {
+          appendLog('Auto repair ZIP: ' + (re && re.message ? re.message : re), 'err');
+        }
+      } else if (wantRepair) {
+        alert('Fungsi Auto Custom belum tersedia. Pakai tombol Custom di bawah.');
+      } else {
+        alert(summaryMsg);
+      }
       } catch (err) {
         if (typeof setLoading === 'function') setLoading(false);
         console.error('Deteksi AI error:', err);
