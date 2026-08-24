@@ -4743,6 +4743,7 @@
     }
 
     async function runDeteksiAI() {
+      try {
       const logEl = document.getElementById('error-log');
 
       if (!currentFile && !currentZip) {
@@ -4750,6 +4751,8 @@
         return;
       }
 
+      // Feedback langsung agar di HP tidak terasa "diam"
+      if (typeof setLoading === 'function') setLoading(true, 'Deteksi AI', 'Memindai file…');
       if (logEl) logEl.innerHTML = '';
       appendLog('🤖 Deteksi AI dimulai (domain · API game · balance)...', 'ok');
 
@@ -4765,14 +4768,18 @@
       const apiMap = new Map();    // path -> [files]
       const balanceMap = new Map(); // key -> [files]
       const fileSummaries = [];
+      const scanned = []; // path + content (fix: sebelumnya undefined → crash)
 
-      for (const p of paths) {
+      for (let i = 0; i < paths.length; i++) {
+        const p = paths[i];
         try {
           let code = '';
           if (currentFile === p && editor) code = editor.getValue() || '';
           else if (openFiles && openFiles.has(p)) code = openFiles.get(p) || '';
           else if (zipFileMap[p]) code = await zipFileMap[p].async('string');
           if (!code || code.length > 800000) continue;
+
+          scanned.push([p, code]);
 
           const domains = detectDomainsInText(code);
           const apis = detectApiPathsInText(code);
@@ -4795,7 +4802,7 @@
             fileSummaries.push({ file: p, domains, apis, bals });
           }
         } catch (e) {
-          appendLog('Gagal baca: ' + p + ' — ' + e.message, 'warn');
+          appendLog('Gagal baca: ' + p + ' — ' + (e && e.message ? e.message : e), 'warn');
         }
       }
 
@@ -4861,46 +4868,49 @@
         appendLog('Balance: tidak ada key balance/demo_balance/initial_balance/dll.', 'warn');
       }
 
-      // Panel AI response (ringkas, tanpa mengganti alur Custom AI)
+      // Susun ringkasan
+      const lines = [];
+      const skipHosts = /^(fonts\.)?googleapis\.com$|^www\.w3\.org$|^reactjs\.org$|^fb\.me$|^git\.io$|^github\.com$|^cdn\.jsdelivr\.net$|^unpkg\.com$/i;
+      lines.push('┌─ Deteksi domain ─────────────');
+      if (!domainMap.size) {
+        lines.push('│  (tidak ada)');
+      } else {
+        [...domainMap.keys()].forEach(function (d) {
+          const note = skipHosts.test(d) ? '  (bukan API game)' : '';
+          lines.push('│  • ' + d + note);
+        });
+      }
+      lines.push('├─ Deteksi API EDU ────────────');
+      var apiOk = 0;
+      DETECT_API_PATHS.forEach(function (p) {
+        const ok = apiMap.has(p);
+        if (ok) apiOk++;
+        lines.push('│  ' + (ok ? '✓' : '·') + '  ' + p);
+      });
+      lines.push('│  total path: ' + apiOk + ' / ' + DETECT_API_PATHS.length);
+      lines.push('├─ Deteksi balance ────────────');
+      var balOk = 0;
+      DETECT_BALANCE_KEYS.forEach(function (item) {
+        const ok = balanceMap.has(item.key);
+        if (ok) balOk++;
+        lines.push('│  ' + (ok ? '✓' : '·') + '  ' + item.key);
+      });
+      lines.push('│  total field: ' + balOk);
+      lines.push('└─────────────────────────────');
+      if (apiOk === 0) {
+        lines.push('');
+        lines.push('Tips: API masih 0 → Hosting → Terapkan System');
+        lines.push('Lalu Deteksi AI lagi.');
+      }
+      const reportText = lines.join('\n');
+
+      // Panel AI response
       const aiPanel = document.getElementById('ai-panel');
       if (aiPanel) aiPanel.classList.remove('hidden');
       const aiResp = document.getElementById('ai-response');
       if (aiResp) {
-        const lines = [];
-        const skipHosts = /^(fonts\.)?googleapis\.com$|^www\.w3\.org$|^reactjs\.org$|^fb\.me$|^git\.io$|^github\.com$|^cdn\.jsdelivr\.net$|^unpkg\.com$/i;
-        lines.push('┌─ Deteksi domain ─────────────');
-        if (!domainMap.size) {
-          lines.push('│  (tidak ada)');
-        } else {
-          [...domainMap.keys()].forEach(function (d) {
-            const note = skipHosts.test(d) ? '  (bukan API game)' : '';
-            lines.push('│  • ' + d + note);
-          });
-        }
-        lines.push('├─ Deteksi API EDU ────────────');
-        var apiOk = 0;
-        DETECT_API_PATHS.forEach(function (p) {
-          const ok = apiMap.has(p);
-          if (ok) apiOk++;
-          lines.push('│  ' + (ok ? '✓' : '·') + '  ' + p);
-        });
-        lines.push('│  total path: ' + apiOk + ' / ' + DETECT_API_PATHS.length);
-        lines.push('├─ Deteksi balance ────────────');
-        var balOk = 0;
-        DETECT_BALANCE_KEYS.forEach(function (item) {
-          const ok = balanceMap.has(item.key);
-          if (ok) balOk++;
-          lines.push('│  ' + (ok ? '✓' : '·') + '  ' + item.key);
-        });
-        lines.push('│  total field: ' + balOk);
-        lines.push('└─────────────────────────────');
-        if (apiOk === 0) {
-          lines.push('');
-          lines.push('Tips: API masih 0 → Hosting → Terapkan System');
-          lines.push('Lalu Deteksi AI lagi.');
-        }
         aiResp.style.display = 'block';
-        aiResp.textContent = lines.join('\n');
+        aiResp.textContent = reportText;
         try { aiResp.scrollTop = 0; setTimeout(function(){ aiResp.scrollIntoView({block:'nearest'}); }, 50); } catch(_){}
       }
 
@@ -4910,7 +4920,14 @@
       if (apiMap.size === 0) {
         tip = '\n\nAPI = 0 artinya path /api/game/* belum ada di file.\nBuka Hosting → isi form → tombol Terapkan System, lalu Deteksi AI lagi.';
       }
-      alert('Deteksi AI selesai.\nDomain: ' + domainMap.size + '\nAPI: ' + apiMap.size + '\nBalance: ' + balanceMap.size + tip + '\n\nLihat log / panel AI.');
+      if (typeof setLoading === 'function') setLoading(false);
+      alert('Deteksi AI selesai.\nDomain: ' + domainMap.size + '\nAPI: ' + apiMap.size + '\nBalance: ' + balanceMap.size + tip + '\n\nFile dipindai: ' + scanned.length + '\n\nLihat log / panel AI.');
+      } catch (err) {
+        if (typeof setLoading === 'function') setLoading(false);
+        console.error('Deteksi AI error:', err);
+        alert('Deteksi AI gagal: ' + (err && err.message ? err.message : err));
+        if (typeof appendLog === 'function') appendLog('Deteksi AI error: ' + (err && err.message ? err.message : err), 'err');
+      }
     }
 
     function analyzeCurrentCode() {
