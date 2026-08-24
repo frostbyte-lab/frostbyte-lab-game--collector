@@ -8104,6 +8104,8 @@
         }
       });
       var s = __oaReport.summary;
+      var sb = __oaReport.serverBreakdown || {};
+      var sbLine = Object.keys(sb).filter(function(k){return sb[k]>0;}).map(function(k){return k+': '+sb[k];}).join(' · ');
       document.getElementById('gc-oa-summary-stats').innerHTML =
         'File aman (SAFE): <b>' + s.safe + '</b><br>' +
         'Perlu diperiksa (EXTERNAL): <b>' + s.external + '</b><br>' +
@@ -8112,8 +8114,10 @@
         'Tracking: <b>' + s.tracking + '</b><br>' +
         'Kandidat hapus: <b>' + s.removeCandidates + '</b><br>' +
         'Kandidat ganti/mock: <b>' + s.replaceCandidates + '</b><br>' +
-        'Review: <b>' + s.reviewCandidates + '</b>' +
-        (s.serverDeps ? '<br><span class="gc-oa-warn">Indikasi server-dependency: ' + s.serverDeps + '</span>' : '');
+        'Review: <b>' + s.reviewCandidates + '</b><br>' +
+        'Indikasi server-dependency: <b>' + (s.serverDependency || 0) + '</b>' +
+        (sbLine ? '<br><span style="font-size:12px;color:#94a3b8">Breakdown: ' + sbLine + '</span>' : '') +
+        '<br><span style="font-size:11px;color:#64748b">ANALYZE ≠ DELETE — file belum diubah.</span>';
       document.getElementById('gc-oa-summary').classList.add('show');
       oaStatus('Analisa selesai');
     } catch (e) {
@@ -8187,11 +8191,17 @@
         }
       } catch (_) {}
       var v = result.validation || {};
+      var plan = result.changePlan || {};
+      var stClass = v.status === 'OFFLINE READY' ? 'gc-oa-ok' : (v.status === 'OFFLINE PARTIAL' ? 'gc-oa-warn' : 'gc-oa-bad');
       document.getElementById('gc-oa-result-body').innerHTML =
-        '<p class="' + (v.ready ? 'gc-oa-ok' : 'gc-oa-bad') + '">' + (v.status || '') + '</p>' +
-        '<div class="stats">Diubah: <b>' + (result.changed || []).length + '</b> · Mock: <b>' + (result.replaced || []).length + '</b></div>' +
-        (v.remainingCount ? '<p class="gc-oa-warn">' + v.remainingCount + ' dependency masih ada</p>' : '') +
-        '<p style="font-size:12px;color:#94a3b8">Backup: BACKUP/offline-conversion/</p>';
+        '<p class="' + stClass + '">' + (v.status || '') + '</p>' +
+        '<div class="stats">Diubah: <b>' + (result.changed || []).length + '</b> · Mock/replace: <b>' + (result.replaced || []).length + '</b> · Tracking stub: <b>' + (result.removed || []).length + '</b></div>' +
+        '<div class="stats" style="font-size:12px">Change plan — keep ' + (plan.keep||[]).length +
+        ' · review ' + (plan.review||[]).length +
+        ' · replace ' + (plan.replace||[]).length +
+        ' · remove ' + (plan.remove||[]).length + '</div>' +
+        (v.remainingCount ? '<p class="gc-oa-warn">' + v.remainingCount + ' dependency masih perlu REVIEW</p>' : '') +
+        '<p style="font-size:12px;color:#94a3b8">Backup + change-plan: BACKUP/offline-conversion/ · Mock API: sandbox/mock-api.js</p>';
       document.getElementById('gc-oa-final').classList.remove('show');
       document.getElementById('gc-oa-result').classList.add('show');
       oaStatus(v.status || 'Konversi selesai');
