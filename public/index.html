@@ -2466,6 +2466,24 @@
       .gc-loading-bar { width: 32%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #22d3ee, #2563eb); background-size: 220% 100%; animation: gc-progress 1.25s ease-in-out infinite; }
       @keyframes gc-spin { to { transform: rotate(360deg); } }
       @keyframes gc-progress { 0% { transform: translateX(-120%); background-position: 0 0; } 100% { transform: translateX(330%); background-position: 100% 0; } }
+
+    /* Highlight AI: issue (oranye) & baris yang diubah (merah) */
+    .monaco-editor .ai-issue-line {
+      background: rgba(245, 158, 11, 0.14) !important;
+    }
+    .monaco-editor .ai-issue-line-gutter {
+      background: #f59e0b !important;
+      width: 4px !important;
+      margin-left: 3px;
+    }
+    .monaco-editor .ai-changed-line {
+      background: rgba(239, 68, 68, 0.18) !important;
+    }
+    .monaco-editor .ai-changed-line-gutter {
+      background: #ef4444 !important;
+      width: 4px !important;
+      margin-left: 3px;
+    }
       .gc-live-capture { margin-top: 12px; border: 1px solid rgba(34,211,238,.25); border-radius: 12px; background: rgba(15,23,42,.65); overflow: hidden; }
       .gc-live-capture.hidden { display: none; }
       .gc-live-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid rgba(148,163,184,.15); }
@@ -4128,6 +4146,8 @@
     }
 
     let aiSuggestedCode = null;
+    let aiDecorations = [];
+    let aiLastIssues = [];
 
     function activeAIContext() {
       if (!currentFile || !editor) throw new Error('Buka file teks terlebih dahulu.');
@@ -4157,11 +4177,111 @@
       return lines.join('\n') || 'AI tidak menemukan penjelasan tambahan.';
     }
 
+    /** Apakah user sudah isi API key Custom AI? */
+    function hasCustomAIKeys() {
+      try {
+        const slots = (typeof loadCustomAISlots === 'function' ? loadCustomAISlots() : [])
+          .filter(s => s && s.enabled && String(s.apiKey || '').trim());
+        return slots.length > 0;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    /** Hapus highlight AI di Monaco */
+    function clearAIDecorations() {
+      try {
+        if (editor && typeof editor.deltaDecorations === 'function') {
+          aiDecorations = editor.deltaDecorations(aiDecorations || [], []);
+        } else {
+          aiDecorations = [];
+        }
+      } catch (_) {
+        aiDecorations = [];
+      }
+    }
+
+    /**
+     * Bandingkan teks lama vs baru → daftar baris yang berubah (1-based).
+     * Algoritma sederhana: walk sejajar + tandai beda / sisipan.
+     */
+    function computeChangedLines(oldText, newText) {
+      const a = String(oldText || '').split('\n');
+      const b = String(newText || '').split('\n');
+      const changed = new Set();
+      const max = Math.max(a.length, b.length);
+      for (let i = 0; i < max; i++) {
+        if ((a[i] || '') !== (b[i] || '')) changed.add(i + 1);
+      }
+      return [...changed].sort((x, y) => x - y);
+    }
+
+    /**
+     * Highlight merah:
+     * - baris issue dari AI (garis kiri + background)
+     * - baris yang berubah setelah Apply Fix
+     */
+    function applyAIDecorations(options) {
+      const { issueLines = [], changedLines = [] } = options || {};
+      if (!editor || typeof editor.deltaDecorations !== 'function') return;
+      const model = editor.getModel && editor.getModel();
+      if (!model) return;
+      const lineCount = model.getLineCount();
+      const decos = [];
+
+      const pushLine = (line, cls, hover) => {
+        const ln = Math.max(1, Math.min(lineCount, Number(line) || 1));
+        decos.push({
+          range: new monaco.Range(ln, 1, ln, 1),
+          options: {
+            isWholeLine: true,
+            className: cls,
+            linesDecorationsClassName: cls + '-gutter',
+            overviewRuler: {
+              color: 'rgba(239,68,68,0.85)',
+              position: (monaco.editor && monaco.editor.OverviewRulerLane)
+                ? monaco.editor.OverviewRulerLane.Left
+                : 1
+            },
+            hoverMessage: hover ? { value: hover } : undefined
+          }
+        });
+      };
+
+      issueLines.forEach(({ line, message, severity }) => {
+        if (!line) return;
+        pushLine(line, 'ai-issue-line', (severity || 'issue') + ': ' + (message || ''));
+      });
+      changedLines.forEach((line) => {
+        pushLine(line, 'ai-changed-line', 'Baris diubah oleh AI');
+      });
+
+      try {
+        aiDecorations = editor.deltaDecorations(aiDecorations || [], decos);
+      } catch (e) {
+        console.warn('AI decorations failed', e);
+      }
+
+      // Scroll ke baris pertama yang di-highlight
+      const first = (issueLines.find(i => i.line) || {}).line || changedLines[0];
+      if (first && editor.revealLineInCenter) {
+        try { editor.revealLineInCenter(Number(first)); } catch (_) {}
+      }
+    }
+
+    function decorateFromAIResult(result) {
+      aiLastIssues = Array.isArray(result && result.issues) ? result.issues : [];
+      const issueLines = aiLastIssues
+        .filter(i => i && i.line)
+        .map(i => ({ line: i.line, message: i.message, severity: i.severity }));
+      applyAIDecorations({ issueLines, changedLines: [] });
+    }
+
     async function requestAI(action, question) {
-      // Prefer Custom AI multi-key failover when user has applied API keys
-      if (window.__useCustomAI && typeof requestCustomAI === 'function') {
-        const slots = (typeof loadCustomAISlots === 'function' ? loadCustomAISlots() : []).filter(s => s.enabled && s.apiKey);
-        if (slots.length) return requestCustomAI(action, question);
+      // Selalu prioritaskan Custom AI jika ada API key (Analyze / Suggest Fix / Chat)
+      if (hasCustomAIKeys() && typeof requestCustomAI === 'function') {
+        window.__useCustomAI = true;
+        return requestCustomAI(action, question);
       }
       const context = activeAIContext();
       const response = document.getElementById('ai-response');
@@ -4175,7 +4295,7 @@
         body: JSON.stringify({ ...context, action, question: question || '', model: document.getElementById('ai-model')?.value || 'llama' })
       });
       const result = await res.json().catch(() => ({}));
-      if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi.');
+      if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi. Isi API key di Custom AI jika Workers AI tidak tersedia.');
       aiSuggestedCode = result.repairedCode || null;
       const applyButton = document.getElementById('ai-apply-fix');
       if (applyButton) applyButton.hidden = !aiSuggestedCode;
@@ -4183,45 +4303,82 @@
         response.style.display = 'block';
         response.textContent = formatAIResult(result);
       }
+      decorateFromAIResult(result);
       return result;
     }
 
     async function analyzeWithAI() {
       try {
+        setLoading(true, 'AI sedang bekerja…', 'Menganalisis file: ' + (currentFile || '—'));
         appendLog('AI: menganalisis error dan saran perbaikan...', 'ok');
-        await requestAI('analyze');
+        const result = await requestAI('analyze');
+        decorateFromAIResult(result);
         appendLog('AI: analisis selesai.', 'ok');
       } catch (error) {
         appendLog('AI: ' + error.message, 'err');
+        const response = document.getElementById('ai-response');
+        if (response) { response.style.display = 'block'; response.textContent = 'AI: ' + error.message; }
+      } finally {
+        setLoading(false);
       }
     }
 
     async function repairWithAI() {
       try {
+        setLoading(true, 'AI sedang bekerja…', 'Menyusun usulan perbaikan: ' + (currentFile || '—'));
         appendLog('AI: menyiapkan usulan perbaikan kode...', 'ok');
         const result = await requestAI('repair');
+        decorateFromAIResult(result);
         if (!result.repairedCode) appendLog('AI belum memberikan kode perbaikan yang aman.', 'warn');
         else appendLog('AI: usulan perbaikan siap ditinjau. Klik Apply Fix jika sesuai.', 'ok');
       } catch (error) {
         appendLog('AI: ' + error.message, 'err');
+        const response = document.getElementById('ai-response');
+        if (response) { response.style.display = 'block'; response.textContent = 'AI: ' + error.message; }
+      } finally {
+        setLoading(false);
       }
     }
 
     function applyAISuggestedFix() {
       if (!aiSuggestedCode || !editor || !currentFile) return;
       if (!window.confirm('Terapkan usulan perbaikan AI ke file aktif? Anda masih bisa meninjaunya sebelum Save.')) return;
-      editor.setValue(aiSuggestedCode);
-      openFiles.set(currentFile, aiSuggestedCode);
+      const oldCode = editor.getValue() || '';
+      const newCode = String(aiSuggestedCode);
+      editor.setValue(newCode);
+      openFiles.set(currentFile, newCode);
+      if (currentZip) {
+        try { currentZip.file(currentFile, newCode); } catch (_) {}
+      }
+      const changedLines = computeChangedLines(oldCode, newCode);
+      const issueLines = (aiLastIssues || [])
+        .filter(i => i && i.line)
+        .map(i => ({ line: i.line, message: i.message, severity: i.severity }));
+      applyAIDecorations({ issueLines, changedLines });
       const applyButton = document.getElementById('ai-apply-fix');
       if (applyButton) applyButton.hidden = true;
-      appendLog('AI: usulan perbaikan diterapkan ke editor. Klik Save untuk menyimpan ke ZIP.', 'ok');
+      appendLog('AI: usulan perbaikan diterapkan (' + changedLines.length + ' baris berubah). Klik Save untuk menyimpan ke ZIP.', 'ok');
     }
 
     async function askAI() {
-        const input = document.getElementById('ai-prompt'); const prompt = (input && input.value || '').trim(); if (!prompt) { if (input) input.focus(); return; }
-        const sendButton = document.querySelector('.ai-input button'); if (sendButton) sendButton.disabled = true;
-        try { await requestAI('chat', prompt); } catch (error) { const response = document.getElementById('ai-response'); if (response) { response.style.display = 'block'; response.textContent = 'AI: ' + error.message; } appendLog('AI: ' + error.message, 'err'); } finally { if (sendButton) sendButton.disabled = false; }
+      const input = document.getElementById('ai-prompt');
+      const prompt = (input && input.value || '').trim();
+      if (!prompt) { if (input) input.focus(); return; }
+      const sendButton = document.querySelector('.ai-input-row button, .ai-input button');
+      if (sendButton) sendButton.disabled = true;
+      try {
+        setLoading(true, 'AI sedang bekerja…', 'Menjawab pertanyaan tentang ' + (currentFile || 'file'));
+        const result = await requestAI('chat', prompt);
+        decorateFromAIResult(result);
+      } catch (error) {
+        const response = document.getElementById('ai-response');
+        if (response) { response.style.display = 'block'; response.textContent = 'AI: ' + error.message; }
+        appendLog('AI: ' + error.message, 'err');
+      } finally {
+        if (sendButton) sendButton.disabled = false;
+        setLoading(false);
       }
+    }
       document.getElementById('ai-prompt')?.addEventListener('keydown', (event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); askAI(); } });
 
 
@@ -4647,6 +4804,7 @@
         response.style.display = 'block';
         response.textContent = formatAIResult(result);
       }
+      if (typeof decorateFromAIResult === 'function') decorateFromAIResult(result);
       return result;
     }
 
