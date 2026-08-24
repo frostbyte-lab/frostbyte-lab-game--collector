@@ -9,6 +9,7 @@ import { uploadGameToEduNetwork, continueEduUpload, eduConfig } from "./hosting/
 import { safe } from "./lib/safe.js";
 import { TYPES, isExcluded, classifyResource } from "./classify/resource.js";
 import { classifySlotSubfolder, folderOf } from "./classify/slot-folder.js";
+import { buildAllowedSet, shouldIncludeResource } from "./classify/select-filter.js";
 import { classifyApiSemantics } from "./classify/api-semantics.js";
 import { buildKeterangan } from "./package/keterangan.js";
 import { smartPackage } from "./package/smart-rewrite.js";
@@ -917,6 +918,12 @@ export default {
       return Response.json({ error: "URL http/https tidak valid" }, { status: 400 });
     }
 
+    // Selective collect filter (include/exclude by category or subfolder)
+    const { allowed: selectAllowed, rawInclude, rawExclude } = buildAllowedSet(
+      body.include || body.includeCategories || body.categories,
+      body.exclude || body.excludeCategories
+    );
+
     const id = crypto.randomUUID();
     const progressId = String(body.progressId || body.progress_id || id).slice(0, 80);
     await clearStop(env, progressId);
@@ -1043,6 +1050,17 @@ export default {
             ? classifySlotSubfolder(u, type, ct)
             : { sub: null, reason: "" };
           const folder = folderOf(type, classified.category, slot.sub);
+
+          // Selective filter — skip resource di luar include/exclude
+          if (!shouldIncludeResource({
+            category: classified.category,
+            sub: slot.sub,
+            folder,
+            allowed: selectAllowed
+          })) {
+            return;
+          }
+
           const localPath = `${folder}/${String(manifest.length + 1).padStart(4, "0")}-${name}`;
           const r2Key = `${id}/${localPath}`;
 
@@ -1251,7 +1269,7 @@ export default {
       await report(62, "fill", "Auto-lengkapi file yang kurang...", { files: manifest.length });
       let fillReport = { scanned: 0, missingFound: 0, fetched: 0, failed: 0, stillMissing: [] };
       try {
-        fillReport = await fillMissingAssets(zipFiles, manifest, seen, target.href, id, env);
+        fillReport = await fillMissingAssets(zipFiles, manifest, seen, target.href, id, env, selectAllowed);
       } catch (e) {
         fillReport.error = String(e.message || e);
       }
@@ -1680,7 +1698,9 @@ Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis
         "X-GC-Engine": String(analysis?.engine?.engine || "unknown"),
         "X-GC-Engine-Confidence": String(analysis?.engine?.confidence || "none"),
         "X-GC-Skipped-Large": String(sizeState.skippedLarge || 0),
-        "X-GC-Size-Capped": sizeState.stoppedForSize ? "1" : "0"
+        "X-GC-Size-Capped": sizeState.stoppedForSize ? "1" : "0",
+        "X-GC-Select-Include": rawInclude.length ? rawInclude.join(",") : "*",
+        "X-GC-Select-Exclude": rawExclude.length ? rawExclude.join(",") : ""
       };
 
       // ZIP terlalu besar untuk response Worker → pakai R2 (Poin 1)

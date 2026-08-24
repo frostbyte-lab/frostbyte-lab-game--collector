@@ -1,10 +1,11 @@
 import { safe } from "../lib/safe.js";
 import { isExcluded, classifyResource } from "../classify/resource.js";
 import { classifySlotSubfolder, folderOf } from "../classify/slot-folder.js";
+import { shouldIncludeResource } from "../classify/select-filter.js";
 import { extractReferencedUrls, guessTypeFromUrl } from "./urls.js";
 import { MAX_SINGLE_FILE, MAX_RAW_TOTAL, sumZipFilesBytes } from "./limits.js";
 
-export async function fillMissingAssets(zipFiles, manifest, seen, targetHref, id, env) {
+export async function fillMissingAssets(zipFiles, manifest, seen, targetHref, id, env, selectAllowed = null) {
   const report = { scanned: 0, missingFound: 0, fetched: 0, failed: 0, stillMissing: [] };
   const texts = [];
   for (const [key, data] of Object.entries(zipFiles)) {
@@ -63,6 +64,17 @@ export async function fillMissingAssets(zipFiles, manifest, seen, targetHref, id
         ? classifySlotSubfolder(u, type, ct)
         : { sub: null, reason: "" };
       const folder = folderOf(type, classified.category, slot.sub);
+
+      // Hormati selective filter (skip kategori yang tidak diizinkan)
+      if (!shouldIncludeResource({
+        category: classified.category,
+        sub: slot.sub,
+        folder,
+        allowed: selectAllowed
+      })) {
+        continue;
+      }
+
       const localPath = `${folder}/${String(manifest.length + 1).padStart(4, "0")}-fill-${name}`;
       zipFiles[localPath] = buffer;
       seen.add(u);
