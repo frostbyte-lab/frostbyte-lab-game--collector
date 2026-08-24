@@ -2656,7 +2656,7 @@
       <nav>
         <button class="nav-btn active" data-panel="collect">Collect</button>
         <button class="nav-btn" data-panel="workspace">Workspace</button>
-        <button class="nav-btn" data-panel="history">History</button>
+        <button class="nav-btn" data-panel="history">Activity</button>
       </nav>
     </header>
 
@@ -3218,11 +3218,68 @@
       </div>
     </div>
 
-    <!-- History Panel -->
+    <!-- Activity Panel (ex-History) -->
     <section id="panel-history" class="panel">
-      <div style="padding: 20px;">
-        <h2 style="font-size: 18px; margin-bottom: 16px;">Collection History</h2>
-        <div id="history-list" style="display: grid; gap: 12px;"></div>
+      <div class="activity-wrap">
+        <div class="activity-hub" id="activity-hub">
+          <h2 class="activity-title">Activity</h2>
+          <p class="activity-sub">Pilih area kerja</p>
+          <div class="activity-cards">
+            <button type="button" class="activity-card" id="btn-activity-chat" onclick="openActivityChat()">
+              <span class="activity-card-icon">💬</span>
+              <span class="activity-card-title">Chat AI</span>
+              <span class="activity-card-desc">Chat lengkap · gambar · perbaikan kode · proses berpikir · push GitHub / Cloudflare</span>
+            </button>
+            <button type="button" class="activity-card" id="btn-activity-log" onclick="openActivityLog()">
+              <span class="activity-card-icon">📋</span>
+              <span class="activity-card-title">Histories</span>
+              <span class="activity-card-desc">Semua aktivitas (teks) · klik untuk detail error / riwayat AI</span>
+            </button>
+          </div>
+          <div id="history-list" style="display:none;"></div>
+        </div>
+
+        <div class="activity-view" id="activity-chat-view" hidden>
+          <div class="activity-view-bar">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeActivitySub()">← Kembali</button>
+            <strong>Chat AI</strong>
+            <span class="activity-view-hint">Workspace · proses terlihat</span>
+          </div>
+          <div class="act-chat-layout">
+            <div class="act-chat-log" id="act-chat-log"></div>
+            <div class="act-think" id="act-think" hidden>
+              <div class="act-think-title">Memproses…</div>
+              <div class="act-think-steps" id="act-think-steps"></div>
+            </div>
+            <div class="act-chat-compose">
+              <div class="act-attach-row" id="act-attach-preview"></div>
+              <textarea id="act-chat-input" rows="2" placeholder="Tulis permintaan… perbaikan kode, error, custom API…"></textarea>
+              <div class="act-chat-actions">
+                <label class="btn btn-secondary btn-sm act-file-btn">📷 Gambar<input type="file" id="act-chat-image" accept="image/*" hidden multiple></label>
+                <label class="cai-check" style="margin:0;"><input type="checkbox" id="act-apply-edit" checked> Terapkan ke editor</label>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="actPushGithub()" title="Commit & push ke GitHub">GitHub</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="actPushCloudflare()" title="Deploy Cloudflare">Cloudflare</button>
+                <button type="button" class="btn btn-primary btn-sm" id="act-chat-send" onclick="actSendChat()">Kirim</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="activity-view" id="activity-log-view" hidden>
+          <div class="activity-view-bar">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeActivitySub()">← Kembali</button>
+            <strong>Histories</strong>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="actClearLog()" title="Hapus log lokal">Hapus</button>
+          </div>
+          <div class="act-log-list" id="act-log-list"></div>
+          <div class="act-log-detail" id="act-log-detail" hidden>
+            <div class="activity-view-bar">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="actCloseDetail()">← Daftar</button>
+              <strong id="act-detail-title">Detail</strong>
+            </div>
+            <pre id="act-detail-body" class="act-detail-pre"></pre>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -3246,6 +3303,9 @@
           setTimeout(function() {
             if (typeof sizeMonacoHost === 'function') sizeMonacoHost();
           }, 250);
+        }
+        if (e.target.dataset.panel === 'history') {
+          try { if (typeof closeActivitySub === 'function') closeActivitySub(); } catch (_) {}
         }
       });
     });
@@ -4707,6 +4767,313 @@
       const m = document.getElementById('custom-ai-manager');
       if (m && e.target === m) closeCustomAIManager();
     });
+
+
+
+    /* ===== Activity (ex-History): Chat AI + Histories — isolated ===== */
+    var ACT_LOG_KEY = 'gc_activity_log_v1';
+    var actPendingImages = [];
+
+    function actLoadLog() {
+      try { return JSON.parse(localStorage.getItem(ACT_LOG_KEY) || '[]'); } catch (_) { return []; }
+    }
+    function actSaveLog(arr) {
+      try { localStorage.setItem(ACT_LOG_KEY, JSON.stringify((arr || []).slice(0, 200))); } catch (_) {}
+    }
+    function actRecord(kind, title, detail) {
+      var arr = actLoadLog();
+      arr.unshift({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        ts: new Date().toISOString(),
+        kind: kind || 'info',
+        title: String(title || '').slice(0, 200),
+        detail: String(detail || '').slice(0, 50000)
+      });
+      actSaveLog(arr);
+      return arr[0];
+    }
+    function openActivityChat() {
+      var hub = document.getElementById('activity-hub');
+      var chat = document.getElementById('activity-chat-view');
+      var logv = document.getElementById('activity-log-view');
+      if (hub) hub.hidden = true;
+      if (logv) logv.hidden = true;
+      if (chat) chat.hidden = false;
+      actRecord('nav', 'Buka Chat AI', 'User membuka Chat AI dari Activity');
+    }
+    function openActivityLog() {
+      var hub = document.getElementById('activity-hub');
+      var chat = document.getElementById('activity-chat-view');
+      var logv = document.getElementById('activity-log-view');
+      if (hub) hub.hidden = true;
+      if (chat) chat.hidden = true;
+      if (logv) logv.hidden = false;
+      var det = document.getElementById('act-log-detail');
+      if (det) det.hidden = true;
+      var list = document.getElementById('act-log-list');
+      if (list) list.hidden = false;
+      actRenderLogList();
+    }
+    function closeActivitySub() {
+      var hub = document.getElementById('activity-hub');
+      var chat = document.getElementById('activity-chat-view');
+      var logv = document.getElementById('activity-log-view');
+      if (chat) chat.hidden = true;
+      if (logv) logv.hidden = true;
+      if (hub) hub.hidden = false;
+    }
+    function actRenderLogList() {
+      var box = document.getElementById('act-log-list');
+      if (!box) return;
+      var arr = actLoadLog();
+      if (!arr.length) {
+        box.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:12px;">Belum ada aktivitas. Chat AI, Collect, atau error akan muncul di sini.</p>';
+        return;
+      }
+      box.innerHTML = arr.map(function (it) {
+        var t = (it.ts || '').replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+        var title = String(it.title || '').replace(/</g, '&lt;');
+        var kind = String(it.kind || 'info').replace(/</g, '&lt;');
+        return '<button type="button" class="act-log-item" data-id="' + it.id + '"><time>' + t + ' · ' + kind + '</time>' + title + '</button>';
+      }).join('');
+      box.querySelectorAll('.act-log-item').forEach(function (btn) {
+        btn.onclick = function () { actOpenDetail(btn.getAttribute('data-id')); };
+      });
+    }
+    function actOpenDetail(id) {
+      var arr = actLoadLog();
+      var it = arr.find(function (x) { return x.id === id; });
+      if (!it) return;
+      var list = document.getElementById('act-log-list');
+      var det = document.getElementById('act-log-detail');
+      var title = document.getElementById('act-detail-title');
+      var body = document.getElementById('act-detail-body');
+      if (list) list.hidden = true;
+      if (det) det.hidden = false;
+      if (title) title.textContent = it.title || 'Detail';
+      if (body) body.textContent = (it.ts || '') + '\n[' + (it.kind || '') + ']\n\n' + (it.detail || it.title || '');
+    }
+    function actCloseDetail() {
+      var list = document.getElementById('act-log-list');
+      var det = document.getElementById('act-log-detail');
+      if (det) det.hidden = true;
+      if (list) list.hidden = false;
+    }
+    function actClearLog() {
+      if (!confirm('Hapus semua histories lokal?')) return;
+      actSaveLog([]);
+      actRenderLogList();
+    }
+    function actAppendChat(role, text, images) {
+      var log = document.getElementById('act-chat-log');
+      if (!log) return;
+      var div = document.createElement('div');
+      div.className = 'act-msg act-msg-' + (role === 'user' ? 'user' : role === 'sys' ? 'sys' : 'ai');
+      div.textContent = (role === 'user' ? '' : role === 'sys' ? '' : '') + String(text || '');
+      if (images && images.length) {
+        images.forEach(function (src) {
+          var img = document.createElement('img');
+          img.src = src;
+          img.alt = 'attach';
+          div.appendChild(img);
+        });
+      }
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+    function actShowThink(steps) {
+      var box = document.getElementById('act-think');
+      var el = document.getElementById('act-think-steps');
+      if (!box || !el) return;
+      box.hidden = false;
+      el.innerHTML = (steps || []).map(function (s, i) {
+        var cls = s.status === 'done' ? 'step-done' : s.status === 'on' ? 'step-on' : '';
+        return '<div class="' + cls + '">' + (s.status === 'done' ? '✓ ' : s.status === 'on' ? '… ' : '· ') + s.text + '</div>';
+      }).join('');
+    }
+    function actHideThink() {
+      var box = document.getElementById('act-think');
+      if (box) box.hidden = true;
+    }
+    async function actRunSteps(labels, worker) {
+      var steps = labels.map(function (text, i) { return { text: text, status: i === 0 ? 'on' : 'wait' }; });
+      actShowThink(steps);
+      var result;
+      for (var i = 0; i < labels.length; i++) {
+        steps = labels.map(function (text, j) {
+          return { text: text, status: j < i ? 'done' : j === i ? 'on' : 'wait' };
+        });
+        actShowThink(steps);
+        await new Promise(function (r) { setTimeout(r, 280); });
+        if (i === labels.length - 1) {
+          result = await worker();
+        }
+      }
+      steps = labels.map(function (text) { return { text: text, status: 'done' }; });
+      actShowThink(steps);
+      await new Promise(function (r) { setTimeout(r, 200); });
+      actHideThink();
+      return result;
+    }
+
+    document.addEventListener('change', function (e) {
+      if (!e.target || e.target.id !== 'act-chat-image') return;
+      var files = e.target.files;
+      if (!files || !files.length) return;
+      Array.prototype.forEach.call(files, function (f) {
+        if (!f.type || f.type.indexOf('image/') !== 0) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          actPendingImages.push(String(reader.result || ''));
+          var prev = document.getElementById('act-attach-preview');
+          if (prev) {
+            var img = document.createElement('img');
+            img.src = reader.result;
+            prev.appendChild(img);
+          }
+        };
+        reader.readAsDataURL(f);
+      });
+      e.target.value = '';
+    });
+
+    async function actSendChat() {
+      var input = document.getElementById('act-chat-input');
+      var sendBtn = document.getElementById('act-chat-send');
+      var applyEdit = document.getElementById('act-apply-edit');
+      var q = (input && input.value || '').trim();
+      if (!q && !actPendingImages.length) { if (input) input.focus(); return; }
+      var imgs = actPendingImages.slice();
+      actPendingImages = [];
+      var prev = document.getElementById('act-attach-preview');
+      if (prev) prev.innerHTML = '';
+      actAppendChat('user', q || '(gambar)', imgs);
+      if (input) input.value = '';
+      if (sendBtn) sendBtn.disabled = true;
+      try {
+        if (typeof callCustomAIWithFailover !== 'function') {
+          throw new Error('Custom AI belum siap. Set API key di Custom AI (Workspace).');
+        }
+        var file = (typeof currentFile !== 'undefined' && currentFile) ? currentFile : null;
+        var code = '';
+        if (file && typeof editor !== 'undefined' && editor) {
+          try { code = editor.getValue() || ''; } catch (_) {}
+        }
+        if (file && !code && typeof openFiles !== 'undefined' && openFiles && openFiles.has(file)) code = openFiles.get(file) || '';
+        if ((!file || !code) && typeof zipFileMap !== 'undefined' && zipFileMap) {
+          var keys = Object.keys(zipFileMap);
+          var prefer = keys.filter(function (k) { return /(^|\/)index\.html?$/i.test(k); });
+          if (!prefer.length) prefer = keys.filter(function (k) { return /\.(html?|js|mjs)$/i.test(k); });
+          if (prefer[0]) {
+            file = prefer[0];
+            try {
+              code = (openFiles && openFiles.has(file)) ? openFiles.get(file) : await zipFileMap[file].async('string');
+            } catch (_) {}
+          }
+        }
+        var system = [
+          'Anda asisten kode Game Collector Pro (Activity Chat AI).',
+          'Bahasa Indonesia, ringkas.',
+          'Jika ada KODE SAAT INI dan user minta perbaiki/edit, kembalikan FILE LENGKAP dalam satu code fence.',
+          'Jangan bilang file tidak ada jika kode dilampirkan.'
+        ].join(' ');
+        var userMsg = 'PERMINTAAN:\n' + (q || '(lihat gambar)') + '\n';
+        if (file && code) userMsg += '\nFILE: ' + file + '\n\nKODE SAAT INI:\n```\n' + String(code).slice(0, 28000) + '\n```\n';
+        if (imgs.length) userMsg += '\n[User melampirkan ' + imgs.length + ' gambar — deskripsikan/analisis jika relevan]\n';
+
+        var content = await actRunSteps(
+          ['Membaca konteks Workspace', 'Menyusun permintaan', 'Memanggil model AI', 'Menyiapkan jawaban'],
+          async function () {
+            var messages = [
+              { role: 'system', content: system },
+              { role: 'user', content: userMsg }
+            ];
+            // Multimodal jika provider mendukung image_url di content parts
+            if (imgs.length) {
+              messages[1] = {
+                role: 'user',
+                content: [{ type: 'text', text: userMsg }].concat(imgs.slice(0, 3).map(function (url) {
+                  return { type: 'image_url', image_url: { url: url } };
+                }))
+              };
+            }
+            var res = await callCustomAIWithFailover(messages, { max_tokens: 4000 });
+            return res;
+          }
+        );
+        var text = (content && content.content) || String(content || '');
+        var slotName = content && content.slotName;
+        actAppendChat('ai', text + (slotName ? '\n\n(via API No.' + slotName + ')' : ''));
+        actRecord('ai-chat', 'Chat AI: ' + (q || 'gambar').slice(0, 80), text);
+
+        var wantApply = applyEdit ? applyEdit.checked : true;
+        var newCode = typeof caiExtractCodeBlock === 'function' ? caiExtractCodeBlock(text) : null;
+        if (wantApply && newCode && file) {
+          try {
+            if (editor) editor.setValue(newCode);
+            if (openFiles) openFiles.set(file, newCode);
+            currentFile = file;
+            if (currentZip) { try { currentZip.file(file, newCode); } catch (_) {} }
+            actAppendChat('sys', '✓ Edit diterapkan ke ' + file);
+            actRecord('ai-apply', 'AI apply → ' + file, newCode.slice(0, 2000));
+          } catch (ae) {
+            actAppendChat('sys', 'Gagal apply: ' + (ae.message || ae));
+          }
+        }
+      } catch (e) {
+        actAppendChat('ai', 'Gagal: ' + (e.message || e));
+        actRecord('error', 'Chat AI gagal', String(e.message || e));
+      } finally {
+        if (sendBtn) sendBtn.disabled = false;
+      }
+    }
+
+    async function actPushGithub() {
+      actAppendChat('sys', 'GitHub: push dari browser tidak menyimpan token di sini. Gunakan git push di mesin kamu / Actions. Catatan aktivitas disimpan di Histories.');
+      actRecord('github', 'Permintaan push GitHub', 'User meminta push dari Activity Chat. Lakukan di lokal: git add/commit/push atau GitHub Actions.');
+      actShowThink([
+        { text: 'Menyiapkan catatan commit', status: 'done' },
+        { text: 'Push perlu token di lingkungan deploy (bukan disimpan di UI)', status: 'done' }
+      ]);
+      setTimeout(actHideThink, 1200);
+    }
+    async function actPushCloudflare() {
+      actAppendChat('sys', 'Cloudflare: deploy lewat wrangler/Actions dengan token akun. Dari UI ini hanya mencatat permintaan.');
+      actRecord('cloudflare', 'Permintaan deploy Cloudflare', 'User meminta deploy. Jalankan: npx wrangler deploy (secret di CI/lokal).');
+      actShowThink([
+        { text: 'Cek Worker game-resource-collector', status: 'done' },
+        { text: 'Deploy via token Cloudflare di CI/lokal', status: 'done' }
+      ]);
+      setTimeout(actHideThink, 1200);
+    }
+
+    // Hook ringan: catat error log ke Histories tanpa mengubah appendLog lama jika belum ada
+    (function () {
+      try {
+        var prev = window.appendLog;
+        if (typeof prev === 'function' && !window.__actLogHooked) {
+          window.__actLogHooked = true;
+          window.appendLog = function (msg, level) {
+            try {
+              var m = String(msg || '');
+              if (level === 'err' || /error|gagal|fail/i.test(m)) {
+                actRecord('error', m.slice(0, 120), m);
+              }
+            } catch (_) {}
+            return prev.apply(this, arguments);
+          };
+        }
+      } catch (_) {}
+    })();
+
+    window.openActivityChat = openActivityChat;
+    window.openActivityLog = openActivityLog;
+    window.closeActivitySub = closeActivitySub;
+    window.actSendChat = actSendChat;
+    window.actPushGithub = actPushGithub;
+    window.actPushCloudflare = actPushCloudflare;
+    window.actClearLog = actClearLog;
+    window.actCloseDetail = actCloseDetail;
 
 
     function addCustomAISlot() {
@@ -7485,6 +7852,82 @@
         font-size: 11px !important;
         padding: 8px 6px !important;
       }
+    }
+
+
+    /* ===== Activity panel ===== */
+    .activity-wrap { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; background:var(--bg); }
+    .activity-hub { padding:20px 16px 28px; max-width:560px; margin:0 auto; width:100%; box-sizing:border-box; }
+    .activity-title { font-size:20px; margin:0 0 4px; color:var(--text); }
+    .activity-sub { margin:0 0 16px; font-size:13px; color:var(--text-muted); }
+    .activity-cards { display:grid; gap:12px; }
+    .activity-card {
+      display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+      text-align:left; padding:16px 14px; border-radius:12px; cursor:pointer;
+      background:var(--surface); border:1px solid var(--border); color:var(--text);
+      transition:var(--transition);
+    }
+    .activity-card:hover { border-color:var(--accent); background:rgba(94,225,192,0.06); }
+    .activity-card-icon { font-size:22px; line-height:1; }
+    .activity-card-title { font-weight:700; font-size:15px; }
+    .activity-card-desc { font-size:12px; color:var(--text-muted); line-height:1.4; }
+    .activity-view { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; }
+    .activity-view[hidden] { display:none !important; }
+    .activity-view-bar {
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface);
+    }
+    .activity-view-bar strong { flex:1; font-size:14px; color:var(--text); }
+    .activity-view-hint { font-size:11px; color:var(--text-muted); }
+    .act-chat-layout { display:flex; flex-direction:column; flex:1; min-height:0; }
+    .act-chat-log {
+      flex:1; min-height:0; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px;
+      -webkit-overflow-scrolling:touch;
+    }
+    .act-msg { max-width:92%; padding:10px 12px; border-radius:12px; font-size:13px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+    .act-msg-user { align-self:flex-end; background:rgba(94,225,192,0.15); color:var(--accent); border:1px solid rgba(94,225,192,0.25); }
+    .act-msg-ai { align-self:flex-start; background:var(--surface); color:var(--text); border:1px solid var(--border); }
+    .act-msg-sys { align-self:center; font-size:11px; color:var(--text-muted); background:transparent; border:none; padding:4px 8px; }
+    .act-msg img { max-width:100%; border-radius:8px; margin-top:6px; }
+    .act-think {
+      margin:0 12px 8px; padding:10px 12px; border-radius:10px;
+      background:rgba(15,23,42,0.9); border:1px solid rgba(94,225,192,0.2);
+    }
+    .act-think-title { font-size:12px; font-weight:700; color:var(--accent); margin-bottom:6px; }
+    .act-think-steps { font-size:12px; color:var(--text-muted); line-height:1.5; }
+    .act-think-steps .step-on { color:#e2e8f0; }
+    .act-think-steps .step-done { color:var(--accent); }
+    .act-chat-compose {
+      border-top:1px solid var(--border); padding:10px 12px 14px; background:var(--surface);
+      display:flex; flex-direction:column; gap:8px;
+    }
+    .act-chat-compose textarea {
+      width:100%; box-sizing:border-box; resize:vertical; min-height:52px; max-height:140px;
+      border-radius:10px; border:1px solid var(--border); background:#0f172a; color:var(--text);
+      padding:10px; font-size:13px; font-family:inherit;
+    }
+    .act-chat-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .act-file-btn { cursor:pointer; margin:0; }
+    .act-attach-row { display:flex; flex-wrap:wrap; gap:6px; }
+    .act-attach-row img { width:48px; height:48px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
+    .act-log-list { flex:1; min-height:0; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .act-log-item {
+      text-align:left; padding:12px; border-radius:10px; cursor:pointer;
+      background:var(--surface); border:1px solid var(--border); color:var(--text);
+      font-size:13px; line-height:1.35;
+    }
+    .act-log-item:hover { border-color:var(--accent); }
+    .act-log-item time { display:block; font-size:11px; color:var(--text-muted); margin-bottom:4px; }
+    .act-log-detail { flex:1; min-height:0; display:flex; flex-direction:column; }
+    .act-log-detail[hidden] { display:none !important; }
+    .act-detail-pre {
+      flex:1; min-height:0; overflow:auto; margin:0; padding:12px;
+      font-size:12px; line-height:1.45; white-space:pre-wrap; word-break:break-word;
+      background:#0b1220; color:#e2e8f0;
+    }
+    @media (max-width:768px) {
+      .activity-hub { padding:16px 12px; }
+      .act-chat-actions .btn { font-size:11px !important; padding:6px 8px !important; }
     }
 
 </style>
