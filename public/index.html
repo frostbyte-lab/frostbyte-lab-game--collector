@@ -247,14 +247,25 @@
     .cai-overlay {
       position: fixed; inset: 0; z-index: 10050;
       background: rgba(0,0,0,.6); display: flex;
-      align-items: center; justify-content: center; padding: 16px;
+      align-items: center; justify-content: center; padding: 12px;
     }
     .cai-box {
       width: min(560px, 100%); max-height: 90vh; overflow: auto;
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 12px; box-shadow: var(--shadow-lg); padding: 16px 18px;
+      display: flex; flex-direction: column;
+      transition: width .2s ease, max-height .2s ease, max-width .2s ease;
     }
-    .cai-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    /* Mode chat: box jauh lebih leluasa */
+    .cai-box.cai-mode-chat {
+      width: min(920px, 96vw);
+      max-width: 96vw;
+      height: min(88vh, 900px);
+      max-height: 88vh;
+      overflow: hidden;
+      padding: 14px 16px 12px;
+    }
+    .cai-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:10px; flex-shrink:0; }
     .cai-head strong { font-size:16px; color:#fff; display:block; }
     .cai-sub { font-size:12px; color:var(--text-muted); }
     .cai-close {
@@ -310,19 +321,68 @@
     .cai-opt-body strong { font-size:14px; }
     .cai-opt-body small { font-size:11px; color: var(--text-muted); }
     .cai-panel { margin-top:4px; }
-    .cai-chat-log {
-      max-height: 220px; overflow-y:auto; margin-bottom:10px;
-      padding:10px; border-radius:8px; border:1px solid var(--border);
-      background: var(--bg); font-size:12px; line-height:1.5;
-      white-space: pre-wrap; word-break: break-word; min-height: 80px;
+    /* Panel chat: flex full height supaya log + input leluasa */
+    #cai-panel-chat.cai-panel {
+      display: none;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+      margin-top: 0;
     }
-    .cai-chat-log .cai-msg-user { color: var(--accent); margin-bottom:8px; }
-    .cai-chat-log .cai-msg-ai { color: var(--text-secondary); margin-bottom:10px; }
+    #cai-panel-chat.cai-panel[style*="block"],
+    #cai-panel-chat.cai-panel.is-open {
+      display: flex !important;
+    }
+    .cai-chat-log {
+      flex: 1 1 auto;
+      min-height: 200px;
+      max-height: none;
+      overflow-y: auto;
+      margin-bottom: 10px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .cai-mode-chat .cai-chat-log {
+      min-height: 280px;
+    }
+    .cai-chat-log .cai-msg-user {
+      color: var(--accent);
+      margin-bottom: 10px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(94,225,192,.08);
+    }
+    .cai-chat-log .cai-msg-ai {
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.03);
+    }
     .cai-chat-input {
-      width:100%; padding:10px; margin-bottom:10px; resize:vertical;
-      border-radius:8px; border:1px solid var(--border);
-      background: var(--bg); color: var(--text); font-size:13px;
+      width: 100%;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      resize: vertical;
+      min-height: 72px;
+      max-height: 180px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
       font-family: inherit;
+      flex-shrink: 0;
+    }
+    .cai-mode-chat .cai-actions {
+      flex-shrink: 0;
+      padding-top: 4px;
     }
     .cai-check { display:flex; align-items:center; gap:6px; font-size:12px; color: var(--text-muted); margin-right:auto; }
     .cai-panel label { display:block; font-size:11px; color:var(--text-muted); margin:8px 0 3px; }
@@ -3025,11 +3085,11 @@
           </div>
         </div>
 
-        <!-- Panel 2: Chat -->
+        <!-- Panel 2: Chat — area diperbesar (cai-mode-chat) -->
         <div id="cai-panel-chat" class="cai-panel" style="display:none;">
-          <p class="cai-hint">Bisa dipakai sebelum atau sesudah load/buka file. Jika minta edit kode dan ada file aktif di editor, perubahan <b>langsung diterapkan</b> ke file tersebut.</p>
+          <p class="cai-hint" style="margin-bottom:8px;flex-shrink:0;">Chat sebelum/sesudah buka file. Minta edit → bisa <b>langsung diterapkan</b> ke editor (centang di bawah).</p>
           <div id="cai-chat-log" class="cai-chat-log"></div>
-          <textarea id="cai-chat-input" class="cai-chat-input" rows="3" placeholder="Tulis permintaan… mis. perbaiki error di baris 42, rename fungsi, jelaskan kode ini…"></textarea>
+          <textarea id="cai-chat-input" class="cai-chat-input" rows="4" placeholder="Tulis permintaan… mis. perbaiki error di baris 42, rename fungsi, jelaskan kode ini, deteksi API/SDK…"></textarea>
           <div class="cai-actions">
             <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
             <label class="cai-check"><input type="checkbox" id="cai-apply-edit" checked> Terapkan edit ke editor</label>
@@ -4189,10 +4249,16 @@
       const pKey = document.getElementById('cai-panel-addkey');
       const title = document.getElementById('cai-title');
       const sub = document.getElementById('cai-sub');
+      const box = document.querySelector('#custom-ai-manager .cai-box');
       if (menu) menu.style.display = which === 'menu' ? 'flex' : 'none';
       if (pApply) pApply.style.display = which === 'apply' ? 'block' : 'none';
-      if (pChat) pChat.style.display = which === 'chat' ? 'block' : 'none';
+      if (pChat) {
+        pChat.style.display = which === 'chat' ? 'flex' : 'none';
+        pChat.classList.toggle('is-open', which === 'chat');
+      }
       if (pKey) pKey.style.display = which === 'addkey' ? 'block' : 'none';
+      // Perbesar box saat mode chat supaya area chat lebih leluasa
+      if (box) box.classList.toggle('cai-mode-chat', which === 'chat');
       if (which === 'menu') {
         if (title) title.textContent = 'Custom AI';
         if (sub) sub.textContent = 'Pilih opsi';
@@ -4202,7 +4268,10 @@
         renderCustomAISlots(loadCustomAISlots());
       } else if (which === 'chat') {
         if (title) title.textContent = '2 · Chat';
-        if (sub) sub.textContent = 'Edit kode langsung ke file di editor bila diminta';
+        if (sub) sub.textContent = 'Area lebih leluasa · edit langsung ke editor bila diminta';
+        // Scroll log ke bawah kalau sudah ada pesan
+        const log = document.getElementById('cai-chat-log');
+        if (log) setTimeout(function () { log.scrollTop = log.scrollHeight; }, 50);
       } else if (which === 'addkey') {
         if (title) title.textContent = '3 · Masukkan key baru';
         if (sub) sub.textContent = 'Otomatis masuk slot baru';
@@ -4297,6 +4366,13 @@
     function closeCustomAIManager() {
       const el = document.getElementById('custom-ai-manager');
       if (el) el.style.display = 'none';
+      const box = document.querySelector('#custom-ai-manager .cai-box');
+      if (box) box.classList.remove('cai-mode-chat');
+      const pChat = document.getElementById('cai-panel-chat');
+      if (pChat) {
+        pChat.classList.remove('is-open');
+        pChat.style.display = 'none';
+      }
     }
 
     document.addEventListener('click', function (e) {
