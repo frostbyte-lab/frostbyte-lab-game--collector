@@ -4800,15 +4800,15 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     const CAI_OPENAI_BASE = 'https://api.openai.com/v1';
     const CAI_GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
     const CAI_PROVIDERS = {
-      groq: { id: 'groq', label: 'Groq', baseUrl: CAI_GROQ_BASE, model: 'llama-3.3-70b-versatile', keyHint: 'gsk_...' },
+      groq: { id: 'groq', label: 'Groq', baseUrl: CAI_GROQ_BASE, model: 'llama-3.1-8b-instant', keyHint: 'gsk_...' },
       gpt: { id: 'gpt', label: 'GPT', baseUrl: CAI_OPENAI_BASE, model: 'gpt-4o-mini', keyHint: 'sk-...' }
     };
     // Compat defaults for old callers
     const CAI_DEFAULTS = [
-      { name: 'Groq', baseUrl: CAI_GROQ_BASE, apiKey: '', model: 'llama-3.3-70b-versatile', enabled: true },
+      { name: 'Groq', baseUrl: CAI_GROQ_BASE, apiKey: '', model: 'llama-3.1-8b-instant', enabled: true },
       { name: 'GPT', baseUrl: CAI_OPENAI_BASE, apiKey: '', model: 'gpt-4o-mini', enabled: true }
     ];
-    const CAI_MODEL_OPTIONS = ['llama-3.3-70b-versatile', 'gpt-4o-mini'];
+    const CAI_MODEL_OPTIONS = ['llama-3.1-8b-instant', 'gpt-4o-mini'];
 
     let caiCurrentProvider = 'groq';
     let caiCurrentEmailIdx = 0; // 0..4
