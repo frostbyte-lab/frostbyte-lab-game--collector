@@ -418,18 +418,44 @@
       gap: 8px;
       flex-wrap: nowrap;
       min-height: 0;
+      min-width: 0;
+    }
+    .workspace-header .fb-labb-title {
+      flex: 0 0 auto;
     }
     .workspace-header .workspace-actions {
+      display: flex;
+      align-items: center;
       gap: 6px;
-      flex-wrap: nowrap;
+      flex-wrap: nowrap !important;
       flex: 1 1 auto;
       min-width: 0;
-      justify-content: flex-end;
+      justify-content: flex-start;
       overflow-x: auto;
+      overflow-y: hidden;
       -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
+      overscroll-behavior-x: contain;
+      touch-action: pan-x;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(56, 189, 248, 0.45) transparent;
+      /* hint geser di HP */
+      mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 18px), transparent 100%);
+      -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 18px), transparent 100%);
+      padding-bottom: 2px;
     }
-    .workspace-header .workspace-actions::-webkit-scrollbar { display: none; }
+    .workspace-header .workspace-actions::-webkit-scrollbar {
+      height: 3px;
+    }
+    .workspace-header .workspace-actions::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.4);
+      border-radius: 99px;
+    }
+    .workspace-header .workspace-actions .btn,
+    .workspace-header .workspace-actions .btn-sm {
+      flex: 0 0 auto !important;
+      flex-shrink: 0 !important;
+      white-space: nowrap;
+    }
     .workspace-header .btn-sm {
       padding: 5px 10px !important;
       font-size: 11px !important;
@@ -2217,6 +2243,73 @@
       padding: 12px 16px;
     }
 
+    /* Keterangan fitur Collect (bisa dilipat) */
+    .collect-help {
+      margin-top: 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.55);
+      overflow: hidden;
+    }
+    .collect-help-toggle {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 14px;
+      border: 0;
+      background: transparent;
+      color: var(--text, #e2e8f0);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+    }
+    .collect-help-toggle .chev {
+      transition: transform 0.2s ease;
+      color: #94a3b8;
+    }
+    .collect-help.open .collect-help-toggle .chev {
+      transform: rotate(180deg);
+    }
+    .collect-help-body {
+      display: none;
+      padding: 0 10px 12px;
+      border-top: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    .collect-help.open .collect-help-body {
+      display: block;
+    }
+    .collect-help-item {
+      margin: 8px 0 0;
+      border-radius: 8px;
+      background: rgba(30, 41, 59, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .collect-help-item summary {
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #cbd5e1;
+      cursor: pointer;
+      list-style: none;
+    }
+    .collect-help-item summary::-webkit-details-marker { display: none; }
+    .collect-help-item summary::before {
+      content: '+ ';
+      color: #38bdf8;
+      font-weight: 700;
+    }
+    .collect-help-item[open] summary::before { content: '− '; }
+    .collect-help-item p {
+      margin: 0;
+      padding: 0 12px 10px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #94a3b8;
+    }
+
     .status-box {
       padding: 16px;
       background: var(--bg-secondary);
@@ -2755,6 +2848,51 @@
               Collect via GitHub
             </button>
             <button class="btn btn-secondary" onclick="clearStatus()">Clear</button>
+          </div>
+
+          <div class="collect-help" id="collect-help">
+            <button type="button" class="collect-help-toggle" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
+              <span>Cara pakai fitur Collect</span>
+              <span class="chev" aria-hidden="true">▾</span>
+            </button>
+            <div class="collect-help-body">
+              <details class="collect-help-item" open>
+                <summary>Game URL</summary>
+                <p>Tempel alamat game (http/https) yang boleh dikoleksi. Ini target Capture / GitHub Collect.</p>
+              </details>
+              <details class="collect-help-item">
+                <summary>Wait after load (detik)</summary>
+                <p>Waktu tunggu setelah halaman terbuka agar asset &amp; API sempat jalan sebelum di-pack. Game berat: 15–20 detik.</p>
+              </details>
+              <details class="collect-help-item">
+                <summary>Auto-spins</summary>
+                <p>Berapa kali tombol spin/play diklik otomatis supaya response spin/balance ikut tertangkap. 0 = tanpa spin. Umumnya 3–5.</p>
+              </details>
+              <details class="collect-help-item">
+                <summary>Delay antar spin (ms)</summary>
+                <p>Jeda antar klik spin (milidetik). Terlalu cepat bisa miss API; default 2200 ms.</p>
+              </details>
+              <details class="collect-help-item">
+                <summary>Buka History sekali</summary>
+                <p>Untuk Collect via GitHub: coba buka panel history game sekali agar endpoint history ikut tercapture.</p>
+              </details>
+              <details class="collect-help-item">
+                <summary>Capture (Cloudflare)</summary>
+                <p>Collect di Worker (Playwright). Cepat untuk paket kecil/sedang. Progress &amp; ZIP langsung di web ini. Jika terlalu besar → gunakan GitHub.</p>
+              </details>
+              <details class="collect-help-item">
+                <summary>Collect via GitHub</summary>
+                <p>Jalankan workflow Actions (auto-spin lebih kuat, cocok ZIP besar). Status tetap di halaman ini; tidak perlu buka tab GitHub.</p>
+              </details>
+              <details class="collect-help-item">
+                <summary>Clear</summary>
+                <p>Reset teks status / panel live capture di halaman Collect (tidak menghapus ZIP di Workspace).</p>
+              </details>
+              <details class="collect-help-item">
+                <summary>Resume missing (muncul jika belum lengkap)</summary>
+                <p>Setelah collect, jika ada file kurang, tombol Resume mencoba fetch ulang referensi yang hilang tanpa collect dari awal.</p>
+              </details>
+            </div>
           </div>
         </div>
 
@@ -8443,6 +8581,14 @@
         gap: 6px;
       }
       .workspace-header .fb-labb-name { max-width: 72px; overflow: hidden; text-overflow: ellipsis; }
+      .workspace-header .workspace-actions {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      .workspace-header .workspace-actions .btn {
+        flex-shrink: 0 !important;
+      }
       .workspace-header .btn-sm {
         padding: 5px 8px !important;
         font-size: 11px !important;
