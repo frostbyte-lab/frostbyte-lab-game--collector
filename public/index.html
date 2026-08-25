@@ -2867,11 +2867,11 @@
           <div class="collect-options" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 4px;">
             <div>
               <label for="collect-wait" style="font-size:12px;color:var(--text-muted);">Wait after load (detik)</label>
-              <input id="collect-wait" type="number" min="3" max="60" value="12" title="Waktu tunggu setelah halaman load agar asset/API sempat jalan">
+              <input id="collect-wait" type="number" min="3" max="60" value="15" title="Waktu tunggu setelah halaman load agar asset/API sempat jalan">
             </div>
             <div>
               <label for="collect-spins" style="font-size:12px;color:var(--text-muted);">Auto-spins</label>
-              <input id="collect-spins" type="number" min="0" max="15" value="3" title="Jumlah spin otomatis (GitHub Actions / capture interaktif)">
+              <input id="collect-spins" type="number" min="0" max="15" value="5" title="Jumlah spin otomatis (GitHub Actions / capture interaktif)">
             </div>
             <div>
               <label for="collect-spin-delay" style="font-size:12px;color:var(--text-muted);">Delay antar spin (ms)</label>
@@ -2906,6 +2906,9 @@
               Collect via GitHub
             </button>
             <button class="btn btn-secondary" onclick="clearStatus()">Clear</button>
+            <button class="btn btn-primary" type="button" onclick="prepareOfflinePipeline()" title="Custom API + cek api-map untuk Sandbox offline">
+              Siapkan Offline
+            </button>
           </div>
 
           <div class="collect-help" id="collect-help">
@@ -2917,6 +2920,14 @@
               <details class="collect-help-item" open>
                 <summary>Game URL</summary>
                 <p>Tempel alamat game (http/https) yang boleh dikoleksi. Ini target Capture / GitHub Collect.</p>
+              </details>
+              <details class="collect-help-item" open>
+                <summary>Alur offline (tanpa EDU)</summary>
+                <p>1) Set <b>Auto-spins</b> (default 5) + Wait → Collect via GitHub.<br>
+                2) ZIP terunduh → Workspace.<br>
+                3) <b>Siapkan Offline</b> / Custom API → isi base URL domain baru.<br>
+                4) Sandbox memakai <code>api-map.json</code> + snapshot untuk mock lokal.<br>
+                5) Download ZIP → hosting manual di server kamu.</p>
               </details>
               <details class="collect-help-item">
                 <summary>Wait after load (detik)</summary>
@@ -3283,6 +3294,9 @@
             <div class="file-panel-footer-row">
               <button type="button" class="btn btn-primary btn-sm" onclick="autoCustomApiSdk()" title="Auto Custom API/SDK — patch path, API base, bootstrap (bukan kelola API key)">
                 <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom API
+              </button>
+              <button type="button" class="btn btn-success btn-sm" onclick="prepareOfflinePipeline()" title="Cek api-map + Custom API + siap Sandbox">
+                Offline
               </button>
               <button type="button" class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi AI">
                 <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI
@@ -7920,6 +7934,59 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
      * 2) Opsional ringkasan AI
      * 3) Tawarkan Download ZIP (hosting manual di luar)
      */
+    /**
+     * Pipeline offline:
+     * 1) Cek ZIP + api-map (endpoint/snapshot)
+     * 2) Custom API (base URL domain baru)
+     * 3) Siap Sandbox mock dari api-map
+     */
+    async function prepareOfflinePipeline() {
+      try {
+        if (!currentZip) {
+          alert('Belum ada ZIP.\n\n1) Collect via GitHub (Auto-spins ≥ 3–5)\n2) Tunggu unduhan selesai / Load File\n3) Klik Siapkan Offline lagi.');
+          try {
+            var b = document.querySelector('.nav-btn[data-panel="collect"]');
+            if (b) b.click();
+          } catch (_) {}
+          return;
+        }
+        setLoading(true, 'Offline', 'Memeriksa api-map & paket…');
+        var rep = null;
+        try {
+          if (typeof gcInspectZipCompleteness === 'function') {
+            rep = await gcInspectZipCompleteness(currentZip);
+            if (typeof gcUpdateCollectProgress === 'function') gcUpdateCollectProgress(rep, 'offline check');
+          }
+        } catch (_) {}
+        setLoading(false);
+
+        var apiOk = rep && rep.items && rep.items.some(function (it) { return it.id === 'apimap' && it.ok; });
+        var fileN = (rep && rep.fileCount) || Object.keys(zipFileMap || {}).length;
+        var lines = [
+          'Paket: ~' + fileN + ' file · kelengkapan ' + ((rep && rep.pct) || 0) + '%',
+          apiOk ? '✓ api-map.json berisi endpoint/snapshot' : '○ api-map lemah/kosong — mock Sandbox generik (Collect auto-spin disarankan)',
+          '',
+          'Lanjut Custom API (base URL domain baru) + patch path?'
+        ];
+        if (!window.confirm(lines.join('\n'))) return;
+
+        await autoCustomApiSdk();
+
+        var go = window.confirm('Custom selesai.\n\nBuka Sandbox sekarang?\n(Mock lokal memakai api-map bila ada)');
+        if (go && typeof startPreview === 'function') {
+          try {
+            var ws = document.querySelector('.nav-btn[data-panel="workspace"]');
+            if (ws) ws.click();
+          } catch (_) {}
+          setTimeout(function () { startPreview('sandbox'); }, 200);
+        }
+      } catch (e) {
+        try { setLoading(false); } catch (_) {}
+        alert('Siapkan Offline gagal: ' + (e && e.message ? e.message : e));
+      }
+    }
+    window.prepareOfflinePipeline = prepareOfflinePipeline;
+
     async function autoCustomApiSdk() {
       if (!currentZip) {
         alert('Load ZIP collect dulu di Workspace.');
@@ -9060,8 +9127,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     // ========== Collect via Cloudflare (Playwright) ==========
     // Semua status & unduhan tetap di web ini — tidak buka tab GitHub.
     function gcCollectOptions() {
-      const wait = String(Math.min(60, Math.max(3, Number(document.getElementById('collect-wait')?.value) || 12)));
-      const spins = String(Math.min(15, Math.max(0, Number(document.getElementById('collect-spins')?.value) || 3)));
+      const wait = String(Math.min(60, Math.max(3, Number(document.getElementById('collect-wait')?.value) || 15)));
+      const spins = String(Math.min(15, Math.max(0, Number(document.getElementById('collect-spins')?.value) || 5)));
       const spinDelay = String(Math.min(8000, Math.max(500, Number(document.getElementById('collect-spin-delay')?.value) || 2200)));
       const history = String(document.getElementById('collect-history')?.value === '0' ? '0' : '1');
       return { wait_seconds: wait, auto_spins: spins, spin_delay_ms: spinDelay, auto_history: history };
@@ -9391,6 +9458,13 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
                 } catch (_) { loadedWs = false; }
                 if (loadedWs) {
                   statusEl.textContent = 'Status: Selesai — ZIP ' + sizeMb + ' MB diunduh & dimuat ke Workspace';
+                try {
+                  setTimeout(function () {
+                    if (window.confirm('ZIP dimuat ke Workspace.\n\nJalankan Siapkan Offline sekarang?\n(Custom API domain + cek api-map → Sandbox)')) {
+                      prepareOfflinePipeline();
+                    }
+                  }, 600);
+                } catch (_) {}
                 try { setTimeout(gcCollectToastHide, 2500); } catch (_) {}
                 } else {
                   statusEl.textContent = 'Status: Selesai — ZIP ' + sizeMb + ' MB diunduh ke Download. Buka Workspace → Load ZIP manual.';
