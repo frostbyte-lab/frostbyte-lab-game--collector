@@ -8397,78 +8397,155 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     /** Index basename → path relatif di ZIP (untuk rewrite URL absolut) */
     function gcBuildLocalAssetIndex() {
       const byBase = Object.create(null);
+      const byToken = Object.create(null);
       const paths = Object.keys(zipFileMap || {});
+      function addKey(map, key, p) {
+        if (!key || key.length < 3) return;
+        key = key.toLowerCase();
+        if (!map[key]) map[key] = [];
+        if (map[key].indexOf(p) < 0) map[key].push(p);
+      }
       paths.forEach(function (p) {
         if (/^BACKUP\//i.test(p)) return;
-        const base = p.split('/').pop();
+        const base = p.split('/').pop() || '';
         if (!base) return;
-        const key = base.toLowerCase();
-        if (!byBase[key]) byBase[key] = [];
-        byBase[key].push(p);
+        addKey(byBase, base, p);
+        // Tanpa awalan nomor collect: 0234-foo.png → foo.png
+        const stripped = base.replace(/^\d{2,6}-/, '');
+        if (stripped !== base) addKey(byBase, stripped, p);
+        // Tanpa ekstensi
+        const noExt = stripped.replace(/\.[a-z0-9]+$/i, '');
+        addKey(byBase, noExt, p);
+        // Token hash di nama (hex 6+)
+        const tokens = base.match(/[a-f0-9]{6,}/gi) || [];
+        tokens.forEach(function (tok) { addKey(byToken, tok, p); });
+        // Path penuh & suffix segments
+        addKey(byBase, p.toLowerCase(), p);
+        const parts = p.split('/');
+        if (parts.length >= 2) addKey(byBase, parts.slice(-2).join('/').toLowerCase(), p);
       });
-      return byBase;
+      return { byBase: byBase, byToken: byToken, paths: paths };
     }
 
-    function gcResolveLocalForUrl(absUrl, fileDir, byBase) {
-      let pathname = '';
-      try {
-        pathname = new URL(absUrl).pathname;
-      } catch (_) {
-        return null;
-      }
-      const base = pathname.split('/').pop() || '';
-      if (!base || base.length < 3) return null;
-      // skip API-looking paths as "local asset"
-      if (/\/api\/|spin|session|balance|verifysession/i.test(pathname) && !/\.(js|css|png|jpg|json|wasm)$/i.test(base)) {
-        return null;
-      }
-      const cands = byBase[base.toLowerCase()];
+    function gcPickBestPath(cands) {
       if (!cands || !cands.length) return null;
-      // prefer same folder depth / assets path
       let pick = cands[0];
       for (let i = 0; i < cands.length; i++) {
-        if (/assets?\/|static\/|res\//i.test(cands[i])) { pick = cands[i]; break; }
+        if (/assets?\/|static\/|data\/|res\//i.test(cands[i])) { pick = cands[i]; break; }
       }
-      // relative from fileDir
-      const dirParts = (fileDir || '').split('/').filter(Boolean);
-      const pickParts = pick.split('/');
-      // simple relative
-      let rel = pick;
-      if (dirParts.length) {
-        rel = pickParts.join('/');
-        // if file is in subfolder, try ../
-        const depth = dirParts.length;
-        rel = (depth ? new Array(depth + 1).join('../') : '') + pick;
-        // cleaner: if pick under same root, use path without leading
-        rel = pick.replace(/^\.\//, '');
-      }
-      return rel;
+      return pick;
     }
 
-    function gcRewriteAbsoluteInCode(code, filePath, byBase) {
+    function gcResolveLocalForUrl(absUrl, fileDir, index) {
+      const byBase = index.byBase || index;
+      const byToken = index.byToken || {};
+      let pathname = '';
+      let base = '';
+      try {
+        const u = new URL(absUrl);
+        pathname = decodeURIComponent(u.pathname || '');
+        base = pathname.split('/').pop() || '';
+      } catch (_) {
+        // relative-ish
+        base = String(absUrl).split('?')[0].split('/').pop() || '';
+        pathname = String(absUrl).split('?')[0];
+      }
+      if (!base || base.length < 3) return null;
+      if (/\/api\/|spin|session|balance|verifysession/i.test(pathname) && !/\.(js|css|png|jpe?g|webp|gif|json|wasm|mp3|ogg)$/i.test(base)) {
+        return null;
+      }
+      // 1) basename exact
+      let cands = byBase[base.toLowerCase()];
+      // 2) basename tanpa query-junk sudah di pop; coba stripped variants
+      if (!cands || !cands.length) {
+        const stripped = base.replace(/^\d{2,6}-/, '');
+        cands = byBase[stripped.toLowerCase()];
+      }
+      // 3) path suffix 104/xxx.png
+      if ((!cands || !cands.length) && pathname) {
+        const segs = pathname.replace(/^\//, '').split('/');
+        if (segs.length >= 2) {
+          const suf = segs.slice(-2).join('/').toLowerCase();
+          cands = byBase[suf];
+        }
+      }
+      // 4) token hash dari URL cocok token di file ZIP
+      if (!cands || !cands.length) {
+        const urlTokens = (base.match(/[a-f0-9]{6,}/gi) || []).concat(
+          (pathname.match(/[a-f0-9]{6,}/gi) || [])
+        );
+        const found = [];
+        urlTokens.forEach(function (tok) {
+          const arr = byToken[tok.toLowerCase()];
+          if (arr) arr.forEach(function (p) { if (found.indexOf(p) < 0) found.push(p); });
+        });
+        // Prefer same extension
+        const ext = (base.match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+        if (found.length) {
+          cands = ext
+            ? found.filter(function (p) { return p.toLowerCase().endsWith(ext); }).concat(found)
+            : found;
+        }
+      }
+      // 5) linear scan: file ZIP yang berakhiran basename CDN
+      if (!cands || !cands.length) {
+        const low = base.toLowerCase();
+        const paths = index.paths || Object.keys(zipFileMap || {});
+        const hit = [];
+        for (let i = 0; i < paths.length; i++) {
+          const p = paths[i];
+          const b = (p.split('/').pop() || '').toLowerCase();
+          if (b === low || b.endsWith('-' + low) || b.endsWith(low)) hit.push(p);
+        }
+        if (hit.length) cands = hit;
+      }
+      const pick = gcPickBestPath(cands);
+      if (!pick) return null;
+      return pick.replace(/^\.\//, '');
+    }
+
+    function gcRewriteAbsoluteInCode(code, filePath, index) {
       const fileDir = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/') + 1) : '';
       let n = 0;
       const report = [];
-      const next = String(code).replace(
+      let out = String(code);
+
+      function replacer(url) {
+        const local = gcResolveLocalForUrl(url, fileDir, index);
+        if (!local) return null;
+        n++;
+        report.push(url.slice(0, 70) + ' → ' + local);
+        return local;
+      }
+
+      out = out.replace(
         /\b(src|href|data-src|poster)\s*=\s*(["'])(https?:\/\/[^"']+)\2/gi,
         function (full, attr, q, url) {
-          const local = gcResolveLocalForUrl(url, fileDir, byBase);
+          const local = replacer(url);
           if (!local) return full;
-          n++;
-          report.push(attr + ': ' + url.slice(0, 60) + ' → ' + local);
           return attr + '=' + q + local + q;
         }
-      ).replace(
+      );
+      out = out.replace(
         /url\(\s*(["']?)(https?:\/\/[^"')\s]+)\1\s*\)/gi,
         function (full, q, url) {
-          const local = gcResolveLocalForUrl(url, fileDir, byBase);
+          const local = replacer(url);
           if (!local) return full;
-          n++;
-          report.push('css-url: ' + url.slice(0, 60) + ' → ' + local);
           return 'url(' + (q || '') + local + (q || '') + ')';
         }
       );
-      let out = next;
+      // String literal di JS/JSON: "https://cdn.../file.png?sign=..."
+      out = out.replace(
+        /(["'])(https?:\/\/[^"']+\.(?:png|jpe?g|gif|webp|svg|mp3|ogg|wav|js|mjs|css|json|woff2?|wasm)(?:\?[^"']*)?)\1/gi,
+        function (full, q, url) {
+          // skip tracking
+          if (/googletagmanager|google-analytics|gtag\/js|facebook\.net/i.test(url)) return full;
+          const local = replacer(url);
+          if (!local) return full;
+          return q + local + q;
+        }
+      );
+
       const before = out;
       out = out.replace(/top\.location\s*=\s*self\.location/gi, '/* frame-buster neutralized */');
       out = out.replace(/if\s*\(\s*top\s*!==\s*self\s*\)/gi, 'if(false)');
@@ -8604,6 +8681,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         );
         if (detailLines.length) {
           detailLines.slice(0, 8).forEach(function (l) { appendLog(l, 'ok'); });
+        } else {
+          appendLog('Auto Repair: 0 patch — coba cocokkan hash/nama tanpa awalan nomor; jika CDN beda hash total, file belum di ZIP.', 'warn');
         }
         const detail = document.getElementById('preview-error-detail');
         if (detail) {
