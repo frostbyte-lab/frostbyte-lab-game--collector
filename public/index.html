@@ -827,6 +827,93 @@
     .file-search {
       flex: 0 0 auto;
     }
+    .file-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .file-panel-header-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .file-panel-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .file-tree-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 28px 16px;
+      min-height: 180px;
+      gap: 10px;
+    }
+    .file-tree-empty-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(94, 225, 192, 0.1);
+      border: 1px solid rgba(94, 225, 192, 0.25);
+      color: var(--accent);
+      font-size: 22px;
+    }
+    .file-tree-empty h3 {
+      margin: 0;
+      font-size: 14px;
+      color: var(--text);
+      font-weight: 700;
+    }
+    .file-tree-empty p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--text-muted);
+      max-width: 200px;
+    }
+    .file-tree-empty .btn {
+      margin-top: 6px;
+      min-width: 140px;
+      justify-content: center;
+    }
+    .pv-net-badge {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .pv-net-badge.is-ready {
+      color: #042f2e;
+      background: #5ee1c0;
+      border-color: #5ee1c0;
+    }
+    .pv-net-badge.is-partial {
+      color: #422006;
+      background: #fbbf24;
+      border-color: #f59e0b;
+    }
+    .pv-net-badge.is-notready {
+      color: #fff;
+      background: #ef4444;
+      border-color: #ef4444;
+    }
+    .pv-net-badge.is-idle {
+      opacity: 0.75;
+    }
     .file-panel-footer {
       flex: 0 0 auto;
       display: flex;
@@ -835,6 +922,21 @@
       padding: 8px;
       border-top: 1px solid #1e1e1e;
       background: #2d2d2d;
+    }
+    .file-panel-footer-row {
+      display: flex;
+      gap: 6px;
+    }
+    .file-panel-footer-row .btn {
+      flex: 1 1 0;
+      min-width: 0;
+      justify-content: center;
+      font-size: 11px !important;
+      padding: 8px 6px !important;
+    }
+    .file-panel-footer-row.footer-ai .footer-ai-main {
+      flex: 1.2 1 0;
+      font-weight: 700;
     }
     .file-panel-footer-row {
       display: flex;
@@ -3240,6 +3342,7 @@
             </button>
             <div class="pane-tag">
               <span id="preview-stage-label">Game Preview</span>
+              <span id="preview-net-badge" class="pv-net-badge is-idle" title="Status jaringan sandbox">—</span>
               <span id="preview-viewport-label">live</span>
             </div>
             <div class="preview-stage">
@@ -3298,27 +3401,24 @@
         <div class="ws-backdrop" id="ws-backdrop" onclick="closeSidePanels()"></div>
         <!-- File Tree -->
         <div class="file-panel" id="file-panel">
-          <div class="file-panel-header"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-folder"></use></svg> EXPLORER</div>
+          <div class="file-panel-header">
+            <span class="file-panel-header-left"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-folder"></use></svg> Explorer</span>
+            <span class="file-panel-meta" id="explorer-meta"></span>
+          </div>
           <div class="file-search">
-            <input type="search" id="file-search" placeholder="Search files..." oninput="filterFiles()">
+            <input type="search" id="file-search" placeholder="Cari file…" oninput="filterFiles()">
           </div>
           <div class="file-tree" id="file-tree" role="tree"></div>
           <div class="file-panel-footer" id="file-panel-footer">
-            <div class="file-panel-footer-row">
+            <div class="file-panel-footer-row footer-primary">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="Load File">Load</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-download-file" onclick="downloadWorkspaceZip()" title="Download ZIP">ZIP</button>
               <button type="button" class="btn btn-primary btn-sm" onclick="saveFile()" title="Save">Save</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="Load File">Load File</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-download-file" onclick="downloadWorkspaceZip()" title="Download ZIP hasil edit (seluruh paket)">Download ZIP</button>
             </div>
-            <div class="file-panel-footer-row">
-              <button type="button" class="btn btn-primary btn-sm" onclick="autoCustomApiSdk()" title="Auto Custom API/SDK — patch path, API base, bootstrap (bukan kelola API key)">
-                <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom API
-              </button>
-              <button type="button" class="btn btn-success btn-sm" id="btn-ai-zip-repair" onclick="runAiZipRepair()" title="AI perbaiki ZIP (URL absolut→lokal, frame-buster) lalu auto Sandbox">
-                <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> AI
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-deteksi-ai" onclick="runDeteksiAI()" title="Lacak file error dari Scan Error — tandai merah di Explorer">
-                Deteksi AI
-              </button>
+            <div class="file-panel-footer-row footer-ai">
+              <button type="button" class="btn btn-success btn-sm footer-ai-main" id="btn-ai-zip-repair" onclick="runAiZipRepair()" title="AI perbaiki ZIP lalu auto Sandbox">AI</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-deteksi-ai" onclick="runDeteksiAI()" title="Lacak file error dari Scan">Deteksi</button>
+              <button type="button" class="btn btn-secondary btn-sm footer-more" onclick="autoCustomApiSdk()" title="Custom API path">API</button>
             </div>
           </div>
         </div>
@@ -4058,8 +4158,45 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
       const container = document.getElementById('file-tree');
       container.innerHTML = '';
+      const meta = document.getElementById('explorer-meta');
+      const list = (paths || []).filter(function (p) { return p && !String(p).endsWith('/'); });
+      if (meta) {
+        meta.textContent = list.length ? (list.length + ' file') : '';
+      }
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'file-tree-empty';
+        empty.innerHTML =
+          '<div class="file-tree-empty-icon" aria-hidden="true">📁</div>' +
+          '<h3>Belum ada paket</h3>' +
+          '<p>Load ZIP hasil Collect untuk melihat file, edit, dan preview offline.</p>' +
+          '<button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById(\'zip-input\').click()">Load File</button>';
+        container.appendChild(empty);
+        return;
+      }
       container.appendChild(buildTreeLevel(treeRoot, 0));
     }
+
+    function setPreviewNetBadge(status) {
+      const el = document.getElementById('preview-net-badge');
+      if (!el) return;
+      const st = String(status || '').toUpperCase();
+      el.classList.remove('is-ready', 'is-partial', 'is-notready', 'is-idle');
+      if (st === 'READY') {
+        el.textContent = 'READY';
+        el.classList.add('is-ready');
+      } else if (st === 'PARTIAL') {
+        el.textContent = 'PARTIAL';
+        el.classList.add('is-partial');
+      } else if (st === 'NOT READY' || st === 'NOT_READY') {
+        el.textContent = 'NOT READY';
+        el.classList.add('is-notready');
+      } else {
+        el.textContent = st || '—';
+        el.classList.add('is-idle');
+      }
+    }
+    window.setPreviewNetBadge = setPreviewNetBadge;
 
     function buildTreeLevel(node, depth) {
       const wrap = document.createElement('div');
@@ -8037,6 +8174,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         };
         const title = document.getElementById('preview-title');
         if (title) title.textContent = (activePreviewMode === 'web' ? 'Web Preview' : 'Sandbox Preview') + ' · ' + entryPath;
+        try { setPreviewNetBadge('…'); } catch(_){}
         appendLog('Preview dimuat: ' + entryPath, 'ok');
         try {
           if (window.__gcPreviewStuckTimer) clearTimeout(window.__gcPreviewStuckTimer);
@@ -8095,6 +8233,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
               window.__gcSandboxNet = extra;
               const badge =
                 st === 'READY' ? 'ok' : st === 'PARTIAL' ? 'warn' : 'err';
+              try { if (typeof setPreviewNetBadge === 'function') setPreviewNetBadge(st); } catch (_) {}
               appendLog(
                 'Sandbox network: ' + st +
                 ' · local=' + (extra.local || 0) +
