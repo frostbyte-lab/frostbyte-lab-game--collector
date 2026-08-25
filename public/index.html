@@ -4842,11 +4842,18 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B · enterprise' }
     ];
     const CAI_GEMINI_MODELS = [
-      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (default)' },
+      { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-      { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-      { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' }
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' }
     ];
+    /** Model Gemini lama (1.5) sudah dihapus Google — map ke 2.0 Flash */
+    function caiNormalizeGeminiModel(model) {
+      var m = String(model || '').trim();
+      if (!m) return 'gemini-2.0-flash';
+      if (/gemini-1\.5|gemini-pro|gemini-1\.0/i.test(m)) return 'gemini-2.0-flash';
+      return m;
+    }
     const CAI_MODEL_OPTIONS = CAI_GROQ_MODELS.map(function (m) { return m.id; }).concat(CAI_GEMINI_MODELS.map(function (m) { return m.id; }));
 
     let caiCurrentProvider = 'groq';
@@ -4896,7 +4903,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             },
             providerModels: {
               groq: String(pm.groq || 'openai/gpt-oss-20b'),
-              gemini: String(pm.gemini || pm.gpt || 'gemini-2.0-flash')
+              gemini: (typeof caiNormalizeGeminiModel === 'function' ? caiNormalizeGeminiModel(pm.gemini || pm.gpt) : String(pm.gemini || pm.gpt || 'gemini-2.0-flash'))
             }
           };
         }
@@ -5898,27 +5905,49 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
     async function callOpenAICompatible(slot, messages, options = {}) {
       const url = slot.baseUrl.replace(/\/+$/, '') + '/chat/completions';
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + slot.apiKey
-        },
-        body: JSON.stringify({
-          model: slot.model || (slot.provider === 'gemini' ? 'gemini-2.0-flash' : 'openai/gpt-oss-20b'),
-          messages,
-          temperature: options.temperature ?? 0.2,
-          max_tokens: Math.min(Number(options.max_tokens || 2000), 8000)
-        })
-      });
-      const text = await res.text();
-      let json = {};
-      try { json = JSON.parse(text); } catch (_) {}
+      var isGemini = /generativelanguage\.googleapis|gemini/i.test(String(slot.baseUrl || '') + ' ' + String(slot.provider || '') + ' ' + String(slot.model || ''));
+      var model = slot.model || (isGemini || slot.provider === 'gemini' ? 'gemini-2.0-flash' : 'openai/gpt-oss-20b');
+      if (isGemini || slot.provider === 'gemini') {
+        model = (typeof caiNormalizeGeminiModel === 'function') ? caiNormalizeGeminiModel(model) : model;
+      }
+      async function doCall(modelId) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + slot.apiKey
+          },
+          body: JSON.stringify({
+            model: modelId,
+            messages,
+            temperature: options.temperature ?? 0.2,
+            max_tokens: Math.min(Number(options.max_tokens || 2000), 8000)
+          })
+        });
+        const text = await res.text();
+        let json = {};
+        try { json = JSON.parse(text); } catch (_) {}
+        return { res: res, text: text, json: json };
+      }
+      var out = await doCall(model);
+      // Auto-retry sekali jika model Gemini lama / NOT_FOUND
+      if (!out.res.ok) {
+        var errMsg0 = (out.json.error && out.json.error.message) || out.json.message || out.text || '';
+        if (/not found|NOT_FOUND|not supported|model_not_found/i.test(errMsg0) && model !== 'gemini-2.0-flash' && (isGemini || /gemini/i.test(model))) {
+          model = 'gemini-2.0-flash';
+          out = await doCall(model);
+        }
+      }
+      const res = out.res;
+      const text = out.text;
+      const json = out.json;
       if (!res.ok) {
         let msg = json.error?.message || json.message || text.slice(0, 300) || ('HTTP ' + res.status);
-        // Hint migrasi model Groq Llama 3 yang deprecated di free/dev
         if (/does not exist|do not have access|model_not_found/i.test(msg) && /llama-3/i.test(String(slot.model || ''))) {
-          msg += ' — Coba model openai/gpt-oss-20b (Login AI → Groq → pilih model). Llama 3.x hanya untuk enterprise Groq.';
+          msg += ' — Coba model openai/gpt-oss-20b (Login AI → Groq → pilih model).';
+        }
+        if (/not found|NOT_FOUND|gemini-1\.5/i.test(msg)) {
+          msg += ' — Model Gemini lama tidak tersedia. Pilih gemini-2.0-flash di Login AI / Custom AI.';
         }
         const err = new Error(msg);
         err.status = res.status;
@@ -5931,7 +5960,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         || json.response
         || '';
       if (!content) throw new Error('Respons kosong dari API ' + (slot.name || ''));
-      return { content: String(content), model: json.model || slot.model, slotName: slot.name };
+      return { content: String(content), model: json.model || model, slotName: slot.name };
     }
 
     async function callCustomAIWithFailover(messages, options = {}) {
