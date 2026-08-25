@@ -6521,6 +6521,79 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       }
     }
 
+    function classifyAbsoluteUrl(url) {
+      const u = String(url || '');
+      const low = u.toLowerCase();
+      let host = '';
+      try { host = new URL(u).hostname; } catch (_) {}
+      const isApi = /\/api\/|\/game\/|spin|bet|balance|session|wallet|verifysession|gamedata|launch|auth|token|wss?:\/\//i.test(low)
+        || /graphql|socket\.io|xhr|ajax/i.test(low);
+      const isAsset = /\.(js|mjs|css|png|jpe?g|gif|webp|svg|avif|mp3|ogg|wav|mp4|webm|woff2?|ttf|otf|json|wasm|atlas|bin|data)(\?|#|$)/i.test(low)
+        || /\/assets?\/|\/static\/|\/cdn\/|\/res\/|\/img\/|\/fonts?\//i.test(low);
+      let kind = 'lain';
+      if (isApi && !isAsset) kind = 'API/backend';
+      else if (isAsset && !isApi) kind = 'asset';
+      else if (isApi && isAsset) kind = 'campuran (API+asset)';
+      else if (/fonts\.googleapis|gstatic|analytics|gtag|facebook|hotjar|sentry/i.test(low)) kind = 'tracking/font eksternal';
+      return { url: u, host: host, kind: kind };
+    }
+
+    function extractAbsoluteUrls(code) {
+      const found = [];
+      const seen = new Set();
+      const patterns = [
+        /\b(?:src|href|data-src|poster|xlink:href)\s*=\s*["'](https?:\/\/[^"']+)["']/gi,
+        /url\(\s*["']?(https?:\/\/[^"')\s]+)["']?\s*\)/gi,
+        /fetch\s*\(\s*["'](https?:\/\/[^"']+)["']/gi,
+        /(?:XMLHttpRequest|\.open)\s*\(\s*["'][^"']*["']\s*,\s*["'](https?:\/\/[^"']+)["']/gi,
+        /["'](https?:\/\/[^"']{12,})["']/g
+      ];
+      patterns.forEach(function (re) {
+        let m;
+        re.lastIndex = 0;
+        while ((m = re.exec(code)) !== null) {
+          const raw = m[1] || m[0];
+          if (!raw || !/^https?:\/\//i.test(raw)) continue;
+          if (/^https?:\/\/(localhost|127\.|0\.0\.0\.0)/i.test(raw)) continue;
+          const key = raw.split('#')[0];
+          if (seen.has(key)) continue;
+          seen.add(key);
+          found.push(classifyAbsoluteUrl(key));
+          if (found.length >= 40) break;
+        }
+      });
+      return found;
+    }
+
+    function formatUrlScanIssues(urls, fileLabel) {
+      const issues = [];
+      if (!urls.length) return issues;
+      const assets = urls.filter(function (x) { return x.kind === 'asset'; });
+      const apis = urls.filter(function (x) { return x.kind === 'API/backend' || x.kind === 'campuran (API+asset)'; });
+      const other = urls.filter(function (x) { return x.kind !== 'asset' && x.kind !== 'API/backend' && x.kind !== 'campuran (API+asset)'; });
+      issues.push('File: ' + (fileLabel || currentFile || '(aktif)') + ' — ' + urls.length + ' URL absolut');
+      if (assets.length) {
+        issues.push('▸ ASSET online (' + assets.length + ') — offline gagal jika tidak di ZIP / tidak di-rewrite:');
+        assets.forEach(function (x) {
+          issues.push('  · [' + x.kind + '] ' + x.url.slice(0, 180) + (x.host ? '  ← ' + x.host : ''));
+        });
+      }
+      if (apis.length) {
+        issues.push('▸ API/backend (' + apis.length + ') — Sandbox butuh mock / api-map / Hybrid:');
+        apis.forEach(function (x) {
+          issues.push('  · [' + x.kind + '] ' + x.url.slice(0, 180) + (x.host ? '  ← ' + x.host : ''));
+        });
+      }
+      if (other.length) {
+        issues.push('▸ Lainnya (' + other.length + '):');
+        other.forEach(function (x) {
+          issues.push('  · [' + x.kind + '] ' + x.url.slice(0, 180));
+        });
+      }
+      issues.push('Saran: asset → path lokal di ZIP · API → api-map/mock atau Hybrid · Auto Repair / Analisa Game');
+      return issues;
+    }
+
     function analyzeCurrentCode() {
       const issues = [];
       if (!editor) return issues;
@@ -6528,23 +6601,49 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       const file = (currentFile || '').toLowerCase();
       if (file.endsWith('.html') || file.endsWith('.htm')) {
         if (!/<html[\s>]/i.test(code) && code.length > 50) issues.push('HTML: tag <html> tidak ditemukan');
-        if (/src=["']https?:\/\//i.test(code)) issues.push('HTML: ada resource absolut (online) — offline mungkin gagal');
+        const abs = extractAbsoluteUrls(code);
+        if (abs.length) {
+          formatUrlScanIssues(abs, currentFile).forEach(function (line) { issues.push(line); });
+        }
         if (/frame-bust|top\.location|parent\.location/i.test(code)) issues.push('HTML/JS: frame-buster terdeteksi — bisa di-neutralize');
-      }
-      if (file.endsWith('.js') || file.endsWith('.mjs')) {
+      } else if (file.endsWith('.js') || file.endsWith('.mjs')) {
         if (/\bundefined is not a function\b/i.test(code)) issues.push('JS: pola error umum di kode');
-        if (/fetch\s*\(\s*['"]https?:\/\//i.test(code)) issues.push('JS: fetch ke URL absolut — butuh Hybrid mode jika API live');
+        const abs = extractAbsoluteUrls(code);
+        if (abs.length) {
+          formatUrlScanIssues(abs, currentFile).forEach(function (line) { issues.push(line); });
+        }
         const open = (code.match(/\{/g) || []).length;
         const close = (code.match(/\}/g) || []).length;
         if (open !== close) issues.push('JS: jumlah { dan } tidak seimbang (' + open + ' vs ' + close + ')');
-      }
-      if (file.endsWith('.css')) {
+      } else if (file.endsWith('.css')) {
+        const abs = extractAbsoluteUrls(code);
+        if (abs.length) formatUrlScanIssues(abs, currentFile).forEach(function (line) { issues.push(line); });
         const open = (code.match(/\{/g) || []).length;
         const close = (code.match(/\}/g) || []).length;
         if (open !== close) issues.push('CSS: jumlah { dan } tidak seimbang');
+      } else if (code.trim()) {
+        const abs = extractAbsoluteUrls(code);
+        if (abs.length) formatUrlScanIssues(abs, currentFile).forEach(function (line) { issues.push(line); });
       }
       if (!code.trim()) issues.push('File kosong');
       return issues;
+    }
+
+    /** Scan entry HTML di ZIP jika file aktif bukan HTML (preview sering index.html) */
+    async function analyzePreviewEntryHtml() {
+      const extra = [];
+      if (!currentZip || !zipFileMap) return extra;
+      const names = Object.keys(zipFileMap);
+      const entry = names.find(function (n) { return /(^|\/)index\.html?$/i.test(n); })
+        || names.find(function (n) { return /\.html?$/i.test(n) && !/BACKUP\//i.test(n); });
+      if (!entry) return extra;
+      if (currentFile && String(currentFile).replace(/\\/g, '/') === entry) return extra;
+      try {
+        const code = openFiles.has(entry) ? openFiles.get(entry) : await zipFileMap[entry].async('string');
+        const abs = extractAbsoluteUrls(code);
+        if (abs.length) formatUrlScanIssues(abs, entry).forEach(function (line) { extra.push(line); });
+      } catch (_) {}
+      return extra;
     }
 
     function openAnalysisPanel() {
@@ -6563,9 +6662,13 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       runAnalysis();
     }
 
-    function runAnalysis() {
+    async function runAnalysis() {
       startDetailLoadingDots('Scan Error berjalan');
-      const issues = analyzeCurrentCode();
+      let issues = analyzeCurrentCode();
+      try {
+        const more = await analyzePreviewEntryHtml();
+        if (more && more.length) issues = issues.concat(more);
+      } catch (_) {}
       const box = document.getElementById('error-log') || document.getElementById('file-info');
       const detail = document.getElementById('preview-error-detail');
       if (!currentZip && !currentFile) {
@@ -6589,8 +6692,9 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         }
       } else {
         if (issues.length) {
-          appendLog('Analysis: ' + issues.length + ' issue sumber ditemukan', 'err');
-          issues.forEach(i => appendLog(String(i), 'err'));
+          appendLog('Analysis: ' + issues.length + ' baris temuan sumber', issues.some(function (x) { return /API\/backend|offline/i.test(x); }) ? 'err' : 'warn');
+          issues.slice(0, 12).forEach(function (i) { appendLog(String(i), /API\/backend|✗|offline/i.test(i) ? 'err' : 'warn'); });
+          if (issues.length > 12) appendLog('… +' + (issues.length - 12) + ' baris (lihat DETAIL ERROR)', 'warn');
         }
         if (runtime.length) {
           appendLog('Runtime/network tertangkap: ' + runtime.length, 'warn');
@@ -6598,8 +6702,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (detail) {
           const lines = [];
           if (issues.length) {
-            lines.push('— Scan sumber —');
-            issues.forEach(i => lines.push('✗ ' + i));
+            lines.push('— Scan sumber (URL absolut) —');
+            issues.forEach(i => lines.push(String(i).indexOf('·') === 0 || String(i).indexOf('▸') === 0 ? String(i) : '✗ ' + i));
           }
           if (runtime.length) {
             lines.push('— Runtime / Network —');
