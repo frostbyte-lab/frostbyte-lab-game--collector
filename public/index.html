@@ -3062,7 +3062,7 @@
 
         <div class="hosting-card" id="edu-custom-panel">
           <h3>Custom EDU System</h3>
-          <p style="margin:0 0 10px;font-size:12px;color:var(--text-muted);">Load ZIP → isi form → <b>Terapkan System</b> → notifikasi &amp; checklist → Preview → Download ZIP siap upload EDU.</p>
+          <p style="margin:0 0 10px;font-size:12px;color:var(--text-muted);">Opsional. Untuk offline: cukup <b>Custom API</b> + Sandbox. Form ini hanya jika masih pakai network EDU.</p>
           <label style="font-size:12px;color:var(--text-muted);">Nama game (tampil di web EDU)</label>
           <input type="text" id="edu-game-name" placeholder="Contoh: Fortune Tiger" style="width:100%;margin:4px 0 10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
           <label style="font-size:12px;color:var(--text-muted);">Domain / API EDU</label>
@@ -3395,7 +3395,7 @@
 
         <div style="margin-bottom:14px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);">
           <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text);">File sudah di-custom (EDU)</div>
-          <div id="custom-patched-list" style="font-size:11px;line-height:1.45;color:var(--text-muted);max-height:140px;overflow:auto;-webkit-overflow-scrolling:touch;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;">Belum ada. Load ZIP → Hosting → Terapkan System, atau pakai AI di bawah.</div>
+          <div id="custom-patched-list" style="font-size:11px;line-height:1.45;color:var(--text-muted);max-height:140px;overflow:auto;-webkit-overflow-scrolling:touch;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;">Belum ada. Load ZIP → Custom API / Deteksi AI. Hosting EDU opsional.</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="refreshCustomPatchedList()">Refresh list</button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="scanCustomTargetsAI()">AI: pilih file API/RNG</button>
@@ -6124,7 +6124,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (!el) return;
       var report = window.__eduSystemReport;
       if (!report || !report.files || !report.files.length) {
-        el.textContent = 'Belum ada file di-custom.\nLoad ZIP → Hosting → Terapkan System\natau pakai tombol AI di bawah.';
+        el.textContent = 'Belum ada file di-custom.\nLoad ZIP → Custom API (bawah)\natau Deteksi AI. Hosting EDU opsional.';
         return;
       }
       var lines = [];
@@ -6386,16 +6386,19 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         appendLog('API belum terlihat: ' + missingApis.join(', '), 'warn');
       }
 
-      // --- EDU system markers (setelah Terapkan System) ---
-      appendLog('—— Deteksi system EDU ——', 'ok');
+      // --- Offline / sandbox readiness (bukan wajib EDU) ---
+      appendLog('—— Mode offline / sandbox ——', 'ok');
       let eduApiHits = 0;
       let eduSdk = false;
       let eduOrigin = false;
+      let offlineHints = 0;
       for (const [path, content] of scanned) {
         if (!content) continue;
         if (content.includes('__EDU_API_PATHS__') || content.includes('__EDU_API__')) eduApiHits++;
         if (content.includes('edu-game-client.js') || content.includes('EduGameClient')) eduSdk = true;
         if (content.includes('__EDU_ORIGIN__') || content.includes('edu-network.pages.dev')) eduOrigin = true;
+        if (content.includes('GC_API_MAP') || content.includes('__gcApiMap') || /api-map\.json/i.test(path)) offlineHints++;
+        if (content.includes('sandbox') || content.includes('OFFLINE')) offlineHints++;
         for (const p of DETECT_API_PATHS) {
           if (content.includes(p) && !apiMap.has(p)) {
             if (!apiMap.has(p)) apiMap.set(p, []);
@@ -6403,10 +6406,14 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           }
         }
       }
-      if (eduApiHits || eduSdk) {
-        appendLog('EDU markers: API map ' + (eduApiHits ? '✓' : '·') + ' · SDK ' + (eduSdk ? '✓' : '·') + ' · origin ' + (eduOrigin ? '✓' : '·'), 'ok');
+      // EDU hanya info opsional — tidak diwajibkan
+      if (eduApiHits || eduSdk || eduOrigin) {
+        appendLog('Catatan: ada jejak EDU di paket (opsional, tidak wajib).', 'ok');
       } else {
-        appendLog('EDU markers: belum ada — buka Hosting → Terapkan System dulu.', 'warn');
+        appendLog('Mode offline: fokus Sandbox + api-map + Custom API (tanpa Hosting EDU).', 'ok');
+      }
+      if (apiMap.size === 0) {
+        appendLog('API path 0 — Collect ulang (auto-spin) atau Custom API agar path/base URL terisi.', 'warn');
       }
 
       // --- Balance fields ---
@@ -6435,7 +6442,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           lines.push('│  • ' + d + note);
         });
       }
-      lines.push('├─ Deteksi API EDU ────────────');
+      lines.push('├─ Deteksi API game ───────────');
       var apiOk = 0;
       DETECT_API_PATHS.forEach(function (p) {
         const ok = apiMap.has(p);
@@ -6454,8 +6461,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       lines.push('└─────────────────────────────');
       if (apiOk === 0) {
         lines.push('');
-        lines.push('Tips: API masih 0 → Hosting → Terapkan System');
-        lines.push('Lalu Deteksi AI lagi.');
+        lines.push('Tips: API 0 → Collect auto-spin + Custom API (bukan wajib EDU)');
+        lines.push('Lalu Deteksi AI / Sandbox lagi.');
       }
       const reportText = lines.join('\n');
 
@@ -6473,7 +6480,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       appendLog('Deteksi AI selesai. Temuan unik: domain ' + domainMap.size + ', API ' + apiMap.size + ', balance ' + balanceMap.size + '.', total ? 'ok' : 'warn');
       var tip = '';
       if (apiMap.size === 0) {
-        tip = '\n\nAPI = 0 artinya path /api/game/* belum ada di file.\nBuka Hosting → isi form → tombol Terapkan System, lalu Deteksi AI lagi.';
+        tip = '\n\nAPI = 0: path /api/game/* belum ada.\nCollect ulang (auto-spin) atau Custom API (base URL domain kamu).\nHosting EDU tidak wajib untuk mode offline/Sandbox.';
       }
       if (typeof setLoading === 'function') setLoading(false);
       var summaryMsg = 'Deteksi AI selesai (analisa TOTAL ZIP).\nDomain: ' + domainMap.size + '\nAPI: ' + apiMap.size + '\nBalance: ' + balanceMap.size + tip + '\n\nFile teks dipindai: ' + scanned.length + ' / path ' + paths.length + '\n\nLihat log panel.';
