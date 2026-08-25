@@ -18,7 +18,7 @@
     
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs/loader.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="/offline-analyze.js"></script>
+  <script src="/offline-analyze.js?v=20260826b"></script>
   <script type="module" src="https://unpkg.com/@google/model-viewer@4.0.0/dist/model-viewer.min.js"></script>
   
   <style>
@@ -8715,7 +8715,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           (window.__pvLastErrors || []).forEach(function (e) {
             net.push({ kind: e.kind || 'log', text: e.text || String(e), file: e.file || '' });
           });
-          if (window.__gcRuntimeNetwork && window.__gcRuntimeNetwork.length) {
+          if (window.__gcRuntimeNetwork && Array.isArray(window.__gcRuntimeNetwork)) {
             window.__gcRuntimeNetwork.forEach(function (x) { net.push(x); });
           }
         } catch (_) {}
@@ -8747,9 +8747,15 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
         // —— 5. Change-plan + sandbox mock ——
         setLoading(true, 'Pipeline Offline', '5/6 Change-plan & sandbox…');
-        var plan = GCOfflineAnalyze.buildChangePlan
-          ? GCOfflineAnalyze.buildChangePlan(report.files || report)
-          : (report.changePlan || {});
+        var plan = report.changePlan || {};
+        try {
+          if (GCOfflineAnalyze.buildChangePlan) {
+            plan = GCOfflineAnalyze.buildChangePlan(Array.isArray(report.files) ? report.files : []);
+          }
+        } catch (pe) {
+          plan = report.changePlan || plan;
+          if (typeof appendLog === 'function') appendLog('change-plan fallback: ' + (pe.message || pe), 'warn');
+        }
         currentZip.file('pipeline/change-plan.json', JSON.stringify(plan, null, 2));
         currentZip.file('pipeline/analysis-report.json', JSON.stringify(report, null, 2));
         var conv = null;
