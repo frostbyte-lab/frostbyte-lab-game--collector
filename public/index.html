@@ -2833,6 +2833,7 @@
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
           <button type="button" class="btn btn-secondary btn-sm" id="btn-analisa-game" onclick="runAnalisaGame()" title="Analisa dependency → offline sandbox">Analisa Game</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-restore-backup" onclick="gcRestoreBackupMenu()" title="Pulihkan dari BACKUP/offline-conversion/original/">Restore Backup</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-hosting-top" onclick="openHostingPage()" title="Hosting paket game">Hosting</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Custom AI — multi API failover">Custom AI</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
@@ -8526,7 +8527,23 @@
       <div id="gc-oa-result-body"></div>
       <div class="gc-oa-actions">
         <button type="button" class="btn btn-secondary btn-sm" onclick="gcOaCloseAll()">Tutup</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gcOaCloseAll(); gcRestoreBackupMenu();">Restore Backup</button>
         <button type="button" class="btn btn-success btn-sm" onclick="gcOaCloseAll(); startPreview('sandbox');">Sandbox Test</button>
+      </div>
+    </div>
+  </div>
+  <div id="gc-restore-modal" class="gc-oa-overlay" role="dialog" aria-modal="true">
+    <div class="gc-oa-modal" style="max-width:520px;">
+      <h3>Restore dari Backup</h3>
+      <p style="font-size:12px;color:#94a3b8;line-height:1.45;margin:0 0 10px;">
+        File asli disimpan di <code>BACKUP/offline-conversion/original/</code> saat konversi offline.
+        Pulihkan file yang salah diubah tanpa mengulang collect.
+      </p>
+      <div id="gc-restore-list" class="gc-oa-list" style="max-height:280px;"></div>
+      <div class="gc-oa-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gcRestoreClose()">Tutup</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gcRestoreCurrentFile()">Restore file aktif</button>
+        <button type="button" class="btn btn-success btn-sm" onclick="gcRestoreAllBackups()">Restore semua</button>
       </div>
     </div>
   </div>
@@ -8538,6 +8555,125 @@
     if (el) el.textContent = 'Status: ' + msg;
     if (typeof appendLog === 'function') appendLog(msg, 'ok');
   }
+
+  /** BACKUP path: original/assets__js__foo.js → assets/js/foo.js */
+  function gcBackupKeyToPath(backupPath) {
+    var prefix = 'BACKUP/offline-conversion/original/';
+    var p = String(backupPath || '');
+    if (p.indexOf(prefix) !== 0) return null;
+    return p.slice(prefix.length).replace(/__/g, '/');
+  }
+
+  function gcListBackupOriginals() {
+    var list = [];
+    if (typeof zipFileMap === 'undefined' || !zipFileMap) return list;
+    Object.keys(zipFileMap).forEach(function (k) {
+      if (/^BACKUP\/offline-conversion\/original\//i.test(k)) {
+        var orig = gcBackupKeyToPath(k);
+        if (orig) list.push({ backupPath: k, originalPath: orig });
+      }
+    });
+    list.sort(function (a, b) { return a.originalPath.localeCompare(b.originalPath); });
+    return list;
+  }
+
+  async function gcReadZipText(path) {
+    if (typeof openFiles !== 'undefined' && openFiles.has(path)) return openFiles.get(path);
+    if (!zipFileMap || !zipFileMap[path]) throw new Error('File tidak ada: ' + path);
+    return zipFileMap[path].async('string');
+  }
+
+  async function gcWriteRestoredFile(originalPath, content) {
+    if (typeof openFiles !== 'undefined') openFiles.set(originalPath, content);
+    if (typeof currentZip !== 'undefined' && currentZip) {
+      currentZip.file(originalPath, content);
+      zipFileMap[originalPath] = currentZip.file(originalPath);
+    }
+    if (typeof currentFile !== 'undefined' && currentFile === originalPath && typeof editor !== 'undefined' && editor) {
+      try { editor.setValue(content); } catch (e) {}
+    }
+    if (typeof renderFileTree === 'function' && zipFileMap) {
+      try { renderFileTree(Object.keys(zipFileMap)); } catch (e) {}
+    }
+  }
+
+  window.gcRestoreClose = function () {
+    var m = document.getElementById('gc-restore-modal');
+    if (m) m.classList.remove('show');
+  };
+
+  window.gcRestoreOne = async function (backupPath, originalPath) {
+    try {
+      var content = await gcReadZipText(backupPath);
+      await gcWriteRestoredFile(originalPath, content);
+      if (typeof appendLog === 'function') appendLog('Restore: ' + originalPath + ' ← backup', 'ok');
+      alert('Dipulihkan: ' + originalPath);
+      window.gcRestoreBackupMenu();
+    } catch (e) {
+      alert('Gagal restore: ' + (e.message || e));
+    }
+  };
+
+  window.gcRestoreCurrentFile = async function () {
+    if (typeof currentFile === 'undefined' || !currentFile) {
+      alert('Buka file di editor dulu.');
+      return;
+    }
+    var key = 'BACKUP/offline-conversion/original/' + currentFile.replace(/\//g, '__');
+    if (!zipFileMap || !zipFileMap[key]) {
+      alert('Tidak ada backup untuk file aktif:\n' + currentFile);
+      return;
+    }
+    if (!confirm('Pulihkan file aktif dari backup?\n\n' + currentFile)) return;
+    await window.gcRestoreOne(key, currentFile);
+  };
+
+  window.gcRestoreAllBackups = async function () {
+    var items = gcListBackupOriginals();
+    if (!items.length) {
+      alert('Tidak ada file di BACKUP/offline-conversion/original/.');
+      return;
+    }
+    if (!confirm('Pulihkan ' + items.length + ' file dari backup?\nFile hasil konversi akan diganti isi aslinya.')) return;
+    var ok = 0, fail = 0;
+    for (var i = 0; i < items.length; i++) {
+      try {
+        var content = await gcReadZipText(items[i].backupPath);
+        await gcWriteRestoredFile(items[i].originalPath, content);
+        ok++;
+      } catch (e) { fail++; }
+    }
+    if (typeof appendLog === 'function') {
+      appendLog('Restore semua: ' + ok + ' ok' + (fail ? ', ' + fail + ' gagal' : ''), fail ? 'warn' : 'ok');
+    }
+    alert('Restore selesai: ' + ok + ' file' + (fail ? ' · gagal ' + fail : ''));
+    window.gcRestoreClose();
+  };
+
+  window.gcRestoreBackupMenu = function () {
+    if (typeof currentZip === 'undefined' || !currentZip) {
+      alert('Load ZIP dulu di Workspace.');
+      return;
+    }
+    var items = gcListBackupOriginals();
+    var box = document.getElementById('gc-restore-list');
+    var modal = document.getElementById('gc-restore-modal');
+    if (!box || !modal) return;
+    if (!items.length) {
+      box.innerHTML = '<p style="font-size:13px;color:#94a3b8;padding:8px;">Belum ada backup original.<br>Jalankan <b>Analisa Game → Backup &amp; Konversi</b> dulu.</p>';
+    } else {
+      box.innerHTML = items.map(function (it) {
+        var bp = JSON.stringify(it.backupPath);
+        var op = JSON.stringify(it.originalPath);
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 6px;border-bottom:1px solid rgba(148,163,184,.12);">' +
+          '<span style="font-size:12px;color:#e2e8f0;word-break:break-all;">' + it.originalPath.replace(/</g, '&lt;') + '</span>' +
+          '<button type="button" class="btn btn-secondary btn-sm" style="flex-shrink:0;" onclick=\'gcRestoreOne(' + bp + ',' + op + ')\'>Restore</button>' +
+          '</div>';
+      }).join('');
+    }
+    modal.classList.add('show');
+  };
+
   window.runAnalisaGame = async function() {
     if (typeof currentZip === 'undefined' || !currentZip) {
       alert('Load ZIP dulu di Workspace (Load File), baru Analisa Game.');
