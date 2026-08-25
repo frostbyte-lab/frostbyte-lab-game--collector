@@ -3702,6 +3702,17 @@
             const paths = []; zip.forEach((relativePath, zipEntry) => { if (zipEntry.dir) return; const normalizedPath = String(relativePath).replaceAll('\\', '/').replace(/^\.\//, '').replace(/^\/+/, ''); if (!normalizedPath) return; paths.push(normalizedPath); zipFileMap[normalizedPath] = zipEntry; });
             paths.sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); renderFileTree(paths); if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file · ' + formatBytes(file.size) + ')'; appendLog('ZIP siap dibaca: ' + file.name + ' — ' + paths.length + ' file · ' + formatBytes(file.size) + ' (ekstraksi saat file dibuka)', 'ok');
             const fp = document.getElementById('file-panel'); if (fp && fp.classList.contains('collapsed')) toggleFilePanel(); if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 100); setLoading(true, 'ZIP siap diedit', paths.length + ' file ditemukan · klik file untuk membukanya'); setTimeout(() => setLoading(false), 550);
+            // Process 5: clear cache lama + (opsional) cache paket kecil ke SW untuk preview offline
+            try {
+              if (typeof gcClearZipSWCache === 'function') gcClearZipSWCache();
+              if (paths.length <= 120 && typeof gcPutZipAssetsToSW === 'function' && typeof gcSwReady === 'function' && gcSwReady()) {
+                gcPutZipAssetsToSW({ paths, clear: false }).then(function (r) {
+                  if (r && r.ok) appendLog('SW cache: ' + (r.count || 0) + ' asset siap untuk preview offline', 'ok');
+                }).catch(function () {});
+              } else if (paths.length > 120) {
+                appendLog('SW cache: paket besar — asset di-cache saat Run Preview', 'ok');
+              }
+            } catch (_) {}
           } else {
             setLoading(true, 'Membuka file', file.name + ' · membaca isi...'); const content = await file.text(); currentZip = new JSZip(); currentZip.file(file.name, content); zipFileMap[file.name] = { async: async (type) => type === 'string' ? content : new Blob([content]) }; openFiles.set(file.name, content); renderFileTree([file.name]); if (projectNameEl) projectNameEl.textContent = file.name + ' (1 file)'; openFile(file.name, content, content.length); appendLog('File dimuat: ' + file.name, 'ok'); setLoading(false);
           }
@@ -6085,6 +6096,122 @@
       activePreviewBlobUrls = [];
     }
 
+    /** Service Worker helpers — cache ZIP assets di /__gc__/ untuk preview offline (process 5) */
+    function gcSwReady() {
+      return !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+    }
+
+    function gcMimeOfPath(path) {
+      const ext = (String(path).split('.').pop() || '').toLowerCase();
+      const map = {
+        html: 'text/html', htm: 'text/html', js: 'text/javascript', mjs: 'text/javascript',
+        css: 'text/css', json: 'application/json', png: 'image/png', jpg: 'image/jpeg',
+        jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml',
+        woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf',
+        mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', mp4: 'video/mp4',
+        webm: 'video/webm', wasm: 'application/wasm', atlas: 'text/plain', txt: 'text/plain'
+      };
+      return map[ext] || 'application/octet-stream';
+    }
+
+    function gcPostToSW(payload, timeoutMs) {
+      return new Promise((resolve) => {
+        if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+          resolve({ ok: false, error: 'no-controller' });
+          return;
+        }
+        const channel = new MessageChannel();
+        const t = setTimeout(() => resolve({ ok: false, error: 'timeout' }), timeoutMs || 45000);
+        channel.port1.onmessage = (ev) => {
+          clearTimeout(t);
+          resolve(ev.data || { ok: false });
+        };
+        try {
+          navigator.serviceWorker.controller.postMessage(payload, [channel.port2]);
+        } catch (e) {
+          clearTimeout(t);
+          resolve({ ok: false, error: String(e.message || e) });
+        }
+      });
+    }
+
+    async function gcClearZipSWCache() {
+      return gcPostToSW({ type: 'CLEAR_ZIP' }, 8000);
+    }
+
+    /**
+     * Tulis aset ZIP ke Cache Storage via SW (path → /__gc__/path).
+     * Batch agar tidak membebani memory HP.
+     */
+    async function gcPutZipAssetsToSW(options) {
+      const opts = options || {};
+      if (!gcSwReady()) return { ok: false, error: 'no-sw', count: 0 };
+      const paths = opts.paths || Object.keys(zipFileMap || {});
+      if (!paths.length) return { ok: true, count: 0 };
+
+      if (opts.clear) {
+        await gcClearZipSWCache();
+      }
+
+      const BATCH = 20;
+      let total = 0;
+      for (let i = 0; i < paths.length; i += BATCH) {
+        const slice = paths.slice(i, i + BATCH);
+        const assets = [];
+        for (const p of slice) {
+          const entry = zipFileMap[p];
+          if (!entry) continue;
+          try {
+            let buffer;
+            if (openFiles.has(p) && typeof openFiles.get(p) === 'string') {
+              buffer = new TextEncoder().encode(openFiles.get(p)).buffer;
+            } else if (entry.async) {
+              buffer = await entry.async('arraybuffer');
+            } else continue;
+            // Skip sangat besar per file (SW message limit)
+            if (buffer.byteLength > 8 * 1024 * 1024) continue;
+            assets.push({ path: p, buffer, mime: gcMimeOfPath(p) });
+          } catch (_) {}
+        }
+        if (!assets.length) continue;
+        const transfer = assets.map(a => a.buffer).filter(Boolean);
+        const result = await new Promise((resolve) => {
+          if (!navigator.serviceWorker.controller) {
+            resolve({ ok: false });
+            return;
+          }
+          const channel = new MessageChannel();
+          const t = setTimeout(() => resolve({ ok: false, error: 'timeout' }), 60000);
+          channel.port1.onmessage = (ev) => {
+            clearTimeout(t);
+            resolve(ev.data || { ok: false });
+          };
+          try {
+            navigator.serviceWorker.controller.postMessage(
+              { type: 'PUT_ZIP_ASSETS', clear: false, assets },
+              [channel.port2, ...transfer]
+            );
+          } catch (e) {
+            clearTimeout(t);
+            // fallback tanpa transfer list
+            try {
+              navigator.serviceWorker.controller.postMessage(
+                { type: 'PUT_ZIP_ASSETS', clear: false, assets },
+                [channel.port2]
+              );
+            } catch (e2) {
+              resolve({ ok: false, error: String(e2.message || e2) });
+            }
+          }
+        });
+        if (result && result.ok) total += result.count || assets.length;
+        if (opts.onProgress) {
+          try { opts.onProgress(Math.min(paths.length, i + slice.length), paths.length, total); } catch (_) {}
+        }
+      }
+      return { ok: true, count: total };
+    }
+
     function switchPreviewMode(mode, shouldReload) {
       activePreviewMode = mode === 'web' ? 'web' : 'sandbox';
       const webButton = document.getElementById('preview-mode-web');
@@ -6193,14 +6320,47 @@
         }
         if (running) running.textContent = 'File: ' + entryPath;
 
-        // Build blob map for relative assets (simple offline sandbox)
+        // Build asset map: prefer Service Worker /__gc__/ (offline-stable), else blob:
         const blobUrls = {};
+        const useSwAssets = typeof gcSwReady === 'function' && gcSwReady();
+        if (useSwAssets) {
+          appendLog('Menulis asset ke Service Worker cache (/__gc__/)…', 'ok');
+          try {
+            const put = await gcPutZipAssetsToSW({
+              paths: Object.keys(zipFileMap),
+              clear: true,
+              onProgress: function (done, all, cached) {
+                if (done === all || done % 40 === 0) {
+                  const running2 = document.getElementById('preview-file-running');
+                  if (running2) running2.textContent = 'SW cache: ' + cached + ' / ' + all;
+                }
+              }
+            });
+            if (put && put.ok) {
+              appendLog('SW cache preview: ' + (put.count || 0) + ' file', 'ok');
+              const origin = window.location.origin;
+              for (const p of Object.keys(zipFileMap)) {
+                blobUrls[p] = origin + '/__gc__/' + encodeURI(p.split('/').map(encodeURIComponent).join('/').replace(/%2F/gi, '/'));
+                // encodeURI keeps slashes if we join carefully
+                blobUrls[p] = origin + '/__gc__/' + p.split('/').map(function (seg) {
+                  return encodeURIComponent(seg);
+                }).join('/');
+              }
+            } else {
+              appendLog('SW cache gagal (' + ((put && put.error) || 'unknown') + ') — fallback blob URL', 'warn');
+            }
+          } catch (eSw) {
+            appendLog('SW cache error — fallback blob: ' + (eSw.message || eSw), 'warn');
+          }
+        }
+
         const textExt = /\.(html?|js|mjs|css|json|svg|xml|txt|md)$/i;
+        // Lengkapi path yang belum punya URL (SW gagal sebagian / tanpa SW)
         for (const [p, entry] of Object.entries(zipFileMap)) {
+          if (blobUrls[p] && String(blobUrls[p]).indexOf('/__gc__/') >= 0) continue;
           try {
             if (textExt.test(p)) {
               let content = openFiles.has(p) ? openFiles.get(p) : await entry.async('string');
-              // For HTML/CSS/JS we may rewrite later; first store
               const mime = p.endsWith('.css') ? 'text/css' : p.endsWith('.js') || p.endsWith('.mjs') ? 'text/javascript' :
                 p.endsWith('.html') || p.endsWith('.htm') ? 'text/html' : p.endsWith('.json') ? 'application/json' : 'text/plain';
               blobUrls[p] = URL.createObjectURL(new Blob([content], { type: mime }));
