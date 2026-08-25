@@ -6281,6 +6281,8 @@
 
     async function startPreview(mode) {
       mode = mode || 'sandbox';
+      const isHybrid = mode === 'hybrid';
+      window.__gcHybridPreview = isHybrid;
       activePreviewMode = mode === 'web' ? 'web' : 'sandbox';
       if (!currentZip) {
         alert('Load File (ZIP) dulu sebelum Run / Preview.');
@@ -6289,6 +6291,7 @@
       }
       releasePreviewAssets();
       if (typeof closeHostingPage === 'function') closeHostingPage();
+      if (isHybrid) appendLog('Preview Hybrid: asset eksternal via /api/asset-proxy (same-origin)', 'ok');
 
       // Masuk mode preview split (tetap di Workspace, tidak pindah tab browser)
       const pm = document.getElementById('preview-mode');
@@ -6423,6 +6426,7 @@
         Object.keys(previewAssetMap).forEach((p) => { previewAssetNames[p.split('/').pop()] = previewAssetMap[p]; });
         const previewBaseUrl = window.location.origin + '/';
         const sandboxMode = activePreviewMode !== 'web';
+        const hybridMode = Boolean(window.__gcHybridPreview);
 
         // Baca api-map.json (prioritas) atau bangun ringkas dari keterangan.json
         let apiMapPayload = null;
@@ -6458,11 +6462,13 @@
 
         const bridge = `<script>(function(){
   var GC_SANDBOX = ${sandboxMode ? 'true' : 'false'};
+  var GC_HYBRID = ${hybridMode ? 'true' : 'false'};
   var GC_BASE_URL = ${JSON.stringify(previewBaseUrl)};
+  var GC_ORIGIN = ${JSON.stringify(window.location.origin)};
   var GC_ASSET_MAP = ${JSON.stringify(previewAssetMap)};
   var GC_ASSET_NAMES = ${JSON.stringify(previewAssetNames)};
   var GC_API_MAP = ${JSON.stringify(apiMapPayload)};
-  var stats = { local: 0, mocked: 0, external: 0, blocked: 0, urls: [] };
+  var stats = { local: 0, mocked: 0, external: 0, blocked: 0, proxied: 0, urls: [] };
   function send(type, msg, extra){
     try { parent.postMessage({ source:'gc-preview', type:type, msg:String(msg||''), extra:extra||null }, '*'); } catch(e){}
   }
@@ -6614,14 +6620,23 @@
     });
   }
 
+  function viaProxy(u){
+    return GC_ORIGIN + '/api/asset-proxy?url=' + encodeURIComponent(u);
+  }
+  function isStaticAssetUrl(u){
+    return /\\.(png|jpe?g|gif|webp|svg|avif|mp3|ogg|wav|mp4|webm|woff2?|ttf|otf|css|js|mjs|json|wasm|atlas)(\\?|$)/i.test(String(u||''));
+  }
   function resolveRequestUrl(raw){
     var asset = gcAssetUrl(typeof raw === 'string' ? raw : (raw && raw.url));
     if (asset) return { kind: 'local', url: asset };
     var u = typeof raw === 'string' ? raw : (raw && raw.url) || '';
     try { u = new URL(u, GC_BASE_URL).toString(); } catch (e) {}
-    if (GC_SANDBOX && isApiLike(u)) return { kind: 'mock', url: u };
-    if (GC_SANDBOX && isExternalHttp(u) && !gcAssetUrl(u)) {
-      // di sandbox: blokir external non-asset → mock generik atau blocked
+    // Hybrid: asset/CDN eksternal → same-origin proxy (bukan offline murni)
+    if (GC_HYBRID && isExternalHttp(u) && !gcAssetUrl(u) && !isApiLike(u) && isStaticAssetUrl(u)) {
+      return { kind: 'proxy', url: viaProxy(u) };
+    }
+    if (GC_SANDBOX && !GC_HYBRID && isApiLike(u)) return { kind: 'mock', url: u };
+    if (GC_SANDBOX && !GC_HYBRID && isExternalHttp(u) && !gcAssetUrl(u)) {
       if (isApiLike(u) || /json|api/i.test(u)) return { kind: 'mock', url: u };
       return { kind: 'blocked', url: u };
     }
@@ -6648,6 +6663,17 @@
       if (resolved.kind === 'blocked') {
         track('blocked', resolved.url);
         return mockResponse(resolved.url);
+      }
+      if (resolved.kind === 'proxy') {
+        track('proxied', resolved.url);
+        input = resolved.url;
+        return of.call(this, input, init).then(function(res){
+          if (!res.ok) send('warn', 'NET proxy '+res.status+' — '+resolved.url);
+          return res;
+        }).catch(function(err){
+          send('err', 'NET proxy failed — '+(err && err.message || err));
+          throw err;
+        });
       }
       track('external', resolved.url);
       return of.call(this, typeof input === 'string' ? resolved.url : input, init).then(function(res){
@@ -6693,6 +6719,7 @@
           return;
         }
         if (self.__gc_kind === 'local') track('local', self.__gc_url);
+        else if (self.__gc_kind === 'proxy') track('proxied', self.__gc_url);
         else if (self.__gc_kind === 'pass') track('external', self.__gc_url);
         self.addEventListener('error', function(){ send('err', 'NET XHR error — '+ (self.__gc_url||'')); });
         self.addEventListener('load', function(){ if (self.status>=400) send('err', 'NET XHR '+self.status+' — '+(self.__gc_url||'')); });
@@ -6765,6 +6792,7 @@
                 'Sandbox network: ' + st +
                 ' · local=' + (extra.local || 0) +
                 ' · mocked=' + (extra.mocked || 0) +
+                ' · proxied=' + (extra.proxied || 0) +
                 ' · external=' + (extra.external || 0) +
                 ' · blocked=' + (extra.blocked || 0),
                 badge

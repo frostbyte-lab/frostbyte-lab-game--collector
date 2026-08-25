@@ -13,6 +13,7 @@ import { buildAllowedSet, shouldIncludeResource } from "./classify/select-filter
 import { classifyApiSemantics } from "./classify/api-semantics.js";
 import { buildKeterangan } from "./package/keterangan.js";
 import { buildApiMap } from "./package/api-map.js";
+import { handleAssetProxy } from "./lib/asset-proxy.js";
 import { smartPackage } from "./package/smart-rewrite.js";
 import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
@@ -181,8 +182,9 @@ export default {
       return Response.json({
         ok: true,
         service: "game-collector-pro",
-        version: "4.3-r2",
+        version: "4.4-proxy",
         github: Boolean(env.GITHUB_TOKEN),
+        assetProxy: true,
         limits: {
           mode: env.COLLECTOR_BUCKET
             ? "worker + r2-large + github-actions-fallback"
@@ -192,9 +194,18 @@ export default {
           maxZipResponseMB: Math.round(MAX_ZIP_RESPONSE / 1024 / 1024),
           r2: Boolean(env.COLLECTOR_BUCKET),
           historyKV: hasKV(env),
-          progressKV: hasProgressStore(env)
+          progressKV: hasProgressStore(env),
+          assetProxyMaxMB: 12
         }
       });
+    }
+
+    // Asset proxy same-origin (tanpa R2) — Hybrid online
+    if (
+      (request.method === "GET" || request.method === "HEAD") &&
+      url.pathname === "/api/asset-proxy"
+    ) {
+      return handleAssetProxy(request, url);
     }
 
     if (request.method === "POST" && url.pathname === "/api/ai/analyze") {
