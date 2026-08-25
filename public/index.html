@@ -4826,12 +4826,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const CAI_GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
     const CAI_PROVIDERS = {
       groq: { id: 'groq', label: 'Groq', baseUrl: CAI_GROQ_BASE, model: 'openai/gpt-oss-20b', keyHint: 'gsk_...' },
-      gemini: { id: 'gemini', label: 'Gemini', baseUrl: CAI_GEMINI_BASE, model: 'gemini-2.0-flash', keyHint: 'AIza...' }
+      gemini: { id: 'gemini', label: 'Gemini', baseUrl: CAI_GEMINI_BASE, model: 'gemini-3.6-flash', keyHint: 'AIza...' }
     };
     // Compat defaults for old callers
     const CAI_DEFAULTS = [
       { name: 'Groq', baseUrl: CAI_GROQ_BASE, apiKey: '', model: 'openai/gpt-oss-20b', enabled: true },
-      { name: 'Gemini', baseUrl: CAI_GEMINI_BASE, apiKey: '', model: 'gemini-2.0-flash', enabled: true }
+      { name: 'Gemini', baseUrl: CAI_GEMINI_BASE, apiKey: '', model: 'gemini-3.6-flash', enabled: true }
     ];
     // Groq: Llama 3 (enterprise) + model gratis/developer yang direkomendasikan Groq pasca deprecation Aug 2026
     const CAI_GROQ_MODELS = [
@@ -4842,16 +4842,16 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B · enterprise' }
     ];
     const CAI_GEMINI_MODELS = [
-      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (default)' },
-      { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
+      { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (default)' },
+      { id: 'gemini-3.6-pro', label: 'Gemini 3.6 Pro' },
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' }
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (legacy)' }
     ];
-    /** Model Gemini lama (1.5) sudah dihapus Google — map ke 2.0 Flash */
+    /** Model Gemini usang (1.5 / 2.0) → 3.6 Flash sesuai API Google */
     function caiNormalizeGeminiModel(model) {
       var m = String(model || '').trim();
-      if (!m) return 'gemini-2.0-flash';
-      if (/gemini-1\.5|gemini-pro|gemini-1\.0/i.test(m)) return 'gemini-2.0-flash';
+      if (!m) return 'gemini-3.6-flash';
+      if (/gemini-1\.5|gemini-1\.0|gemini-pro$|gemini-2\.0/i.test(m)) return 'gemini-3.6-flash';
       return m;
     }
     const CAI_MODEL_OPTIONS = CAI_GROQ_MODELS.map(function (m) { return m.id; }).concat(CAI_GEMINI_MODELS.map(function (m) { return m.id; }));
@@ -4866,7 +4866,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         gemini: mk(),
         active: null,
         providerEnabled: { groq: true, gemini: true },
-        providerModels: { groq: 'openai/gpt-oss-20b', gemini: 'gemini-2.0-flash' }
+        providerModels: { groq: 'openai/gpt-oss-20b', gemini: 'gemini-3.6-flash' }
       };
     }
 
@@ -4903,7 +4903,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             },
             providerModels: {
               groq: String(pm.groq || 'openai/gpt-oss-20b'),
-              gemini: (typeof caiNormalizeGeminiModel === 'function' ? caiNormalizeGeminiModel(pm.gemini || pm.gpt) : String(pm.gemini || pm.gpt || 'gemini-2.0-flash'))
+              gemini: (typeof caiNormalizeGeminiModel === 'function' ? caiNormalizeGeminiModel(pm.gemini || pm.gpt) : String(pm.gemini || pm.gpt || 'gemini-3.6-flash'))
             }
           };
         }
@@ -5096,7 +5096,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         apiKey,
         enabled: true
       };
-      if (!acc.providerModels) acc.providerModels = { groq: 'openai/gpt-oss-20b', gemini: 'gemini-2.0-flash' };
+      if (!acc.providerModels) acc.providerModels = { groq: 'openai/gpt-oss-20b', gemini: 'gemini-3.6-flash' };
       if (modelSel) acc.providerModels[caiCurrentProvider] = modelSel;
       else if (!acc.providerModels[caiCurrentProvider]) {
         acc.providerModels[caiCurrentProvider] = (CAI_PROVIDERS[caiCurrentProvider] || {}).model;
@@ -5879,7 +5879,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         name: n,
         baseUrl: CAI_GEMINI_BASE,
         apiKey: '',
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.6-flash',
         enabled: true
       });
       localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
@@ -5906,7 +5906,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     async function callOpenAICompatible(slot, messages, options = {}) {
       const url = slot.baseUrl.replace(/\/+$/, '') + '/chat/completions';
       var isGemini = /generativelanguage\.googleapis|gemini/i.test(String(slot.baseUrl || '') + ' ' + String(slot.provider || '') + ' ' + String(slot.model || ''));
-      var model = slot.model || (isGemini || slot.provider === 'gemini' ? 'gemini-2.0-flash' : 'openai/gpt-oss-20b');
+      var model = slot.model || (isGemini || slot.provider === 'gemini' ? 'gemini-3.6-flash' : 'openai/gpt-oss-20b');
       if (isGemini || slot.provider === 'gemini') {
         model = (typeof caiNormalizeGeminiModel === 'function') ? caiNormalizeGeminiModel(model) : model;
       }
@@ -5933,8 +5933,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       // Auto-retry sekali jika model Gemini lama / NOT_FOUND
       if (!out.res.ok) {
         var errMsg0 = (out.json.error && out.json.error.message) || out.json.message || out.text || '';
-        if (/not found|NOT_FOUND|not supported|model_not_found/i.test(errMsg0) && model !== 'gemini-2.0-flash' && (isGemini || /gemini/i.test(model))) {
-          model = 'gemini-2.0-flash';
+        if (/not found|NOT_FOUND|not supported|model_not_found/i.test(errMsg0) && model !== 'gemini-3.6-flash' && (isGemini || /gemini/i.test(model))) {
+          model = 'gemini-3.6-flash';
           out = await doCall(model);
         }
       }
@@ -5947,7 +5947,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           msg += ' — Coba model openai/gpt-oss-20b (Login AI → Groq → pilih model).';
         }
         if (/not found|NOT_FOUND|gemini-1\.5/i.test(msg)) {
-          msg += ' — Model Gemini lama tidak tersedia. Pilih gemini-2.0-flash di Login AI / Custom AI.';
+          msg += ' — Model Gemini lama tidak tersedia. Pilih gemini-3.6-flash di Login AI / Custom AI.';
         }
         const err = new Error(msg);
         err.status = res.status;
