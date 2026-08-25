@@ -3168,7 +3168,7 @@
         <div class="pv-detail">
           <div class="pv-detail-label">Detail error yg terjadi</div>
           <div class="pv-detail-body is-loading" id="preview-error-detail" data-state="loading">
-            <span class="pv-detail-text">Belum ada error — menunggu diagnostik </span><span class="pv-dots-anim" id="pv-dots">.</span>
+            <span class="pv-detail-text">Belum ada error — menunggu diagnostik </span><span class="pv-dots-anim" id="pv-dots-static">.</span>
           </div>
           <div class="pv-detail-footer">
             <div class="pv-filename" id="pv-filename">
@@ -3217,8 +3217,8 @@
               <button type="button" class="btn btn-secondary btn-sm" id="btn-download-file" onclick="downloadWorkspaceZip()" title="Download ZIP hasil edit (seluruh paket)">Download ZIP</button>
             </div>
             <div class="file-panel-footer-row">
-              <button type="button" class="btn btn-primary btn-sm" onclick="autoCustomApiSdk()" title="Auto Custom API/SDK — patch path, API base, bootstrap (+ AI)">
-                <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom
+              <button type="button" class="btn btn-primary btn-sm" onclick="autoCustomApiSdk()" title="Auto Custom API/SDK — patch path, API base, bootstrap (bukan kelola API key)">
+                <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom API
               </button>
               <button type="button" class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi AI">
                 <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI
@@ -4498,13 +4498,62 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     let aiDecorations = [];
     let aiLastIssues = [];
 
+    async function resolveAIContext() {
+      var file = (typeof currentFile !== 'undefined' && currentFile) ? currentFile : null;
+      var code = '';
+      try {
+        if (file && typeof editor !== 'undefined' && editor) code = editor.getValue() || '';
+      } catch (_) {}
+      if (file && !code && typeof openFiles !== 'undefined' && openFiles && openFiles.has(file)) {
+        code = openFiles.get(file) || '';
+      }
+      if (file && !code && typeof zipFileMap !== 'undefined' && zipFileMap && zipFileMap[file]) {
+        try { code = await zipFileMap[file].async('string'); } catch (_) {}
+      }
+      if ((!file || !String(code).trim()) && typeof zipFileMap !== 'undefined' && zipFileMap) {
+        var keys = Object.keys(zipFileMap);
+        var prefer = keys.filter(function (k) { return /(^|\/)index\.html?$/i.test(k); });
+        if (!prefer.length) prefer = keys.filter(function (k) { return /\.(html?|js|mjs|json)$/i.test(k); });
+        for (var i = 0; i < prefer.length && i < 12; i++) {
+          var cand = prefer[i];
+          try {
+            var txt = (openFiles && openFiles.has(cand)) ? openFiles.get(cand) : await zipFileMap[cand].async('string');
+            if (txt && String(txt).trim().length > 20) {
+              file = cand;
+              code = txt;
+              try {
+                if (typeof openFile === 'function') openFile(cand, txt, txt.length);
+                else {
+                  currentFile = cand;
+                  if (openFiles) openFiles.set(cand, txt);
+                  if (editor) editor.setValue(txt);
+                }
+              } catch (_) {}
+              break;
+            }
+          } catch (_) {}
+        }
+      }
+      if (!file || !String(code || '').trim()) {
+        throw new Error('Load ZIP di Workspace atau buka file teks (.html/.js/.json) terlebih dahulu.');
+      }
+      if (typeof currentFile !== 'undefined') currentFile = file;
+      var lang = 'plaintext';
+      try { lang = document.getElementById('editor-lang')?.textContent || 'plaintext'; } catch (_) {}
+      var issues = [];
+      try {
+        if (typeof analyzeCurrentCode === 'function' && currentFile === file && editor) issues = analyzeCurrentCode() || [];
+      } catch (_) {}
+      return { filename: file, language: lang, code: code, staticIssues: issues };
+    }
     function activeAIContext() {
-      if (!currentFile || !editor) throw new Error('Buka file teks terlebih dahulu.');
+      /* sync fallback — prefer resolveAIContext() */
+      if (!currentFile || !editor) throw new Error('Load ZIP / buka file teks di Workspace terlebih dahulu.');
       return {
         filename: currentFile,
         language: document.getElementById('editor-lang')?.textContent || 'plaintext',
         code: editor.getValue() || '',
-        staticIssues: analyzeCurrentCode()
+        staticIssues: (typeof analyzeCurrentCode === 'function' ? analyzeCurrentCode() : [])
       };
     }
 
@@ -4632,7 +4681,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         window.__useCustomAI = true;
         return requestCustomAI(action, question);
       }
-      const context = activeAIContext();
+      const context = await resolveAIContext();
       const response = document.getElementById('ai-response');
       if (response) {
         response.style.display = 'block';
@@ -5101,7 +5150,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     var ACT_SANDBOX_MOCK = {
       version: 1,
       generatedAt: '2026-08-25T10:00:00.000Z',
-      note: 'Manual mock untuk Sandbox',
+      note: 'Manual mock untuk Sandbox (template — isi endpoints dari collect agar tidak generik)',
       totals: { endpoints: 0, withSnapshot: 0 },
       endpoints: [],
       routes: []
@@ -5131,15 +5180,20 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         try {
           if (typeof currentZip !== 'undefined' && currentZip) {
             currentZip.file('sandbox-mock-api.json', jsonText);
+            currentZip.file('api-map.json', jsonText);
             if (typeof zipFileMap !== 'undefined') {
               zipFileMap['sandbox-mock-api.json'] = currentZip.file('sandbox-mock-api.json');
+              zipFileMap['api-map.json'] = currentZip.file('api-map.json');
             }
-            if (typeof openFiles !== 'undefined' && openFiles) openFiles.set('sandbox-mock-api.json', jsonText);
+            if (typeof openFiles !== 'undefined' && openFiles) {
+              openFiles.set('sandbox-mock-api.json', jsonText);
+              openFiles.set('api-map.json', jsonText);
+            }
             if (typeof renderFileTree === 'function') {
               try { renderFileTree(Object.keys(zipFileMap || {})); } catch (_) {}
             }
-            if (typeof appendLog === 'function') appendLog('Secret: sandbox-mock-api.json ditambahkan ke ZIP Workspace', 'ok');
-            alert('Tersimpan: sandbox-mock-api.json di Workspace.\\nDownload ZIP untuk membawa file ini.');
+            if (typeof appendLog === 'function') appendLog('Secret: api-map.json + sandbox-mock-api.json (template)', 'ok');
+            alert('Tersimpan: api-map.json + sandbox-mock-api.json.\nEndpoints kosong = template. Collect lengkap agar Sandbox tidak generik.');
           } else {
             // Tanpa ZIP: unduh file saja sebagai pengingat
             var blob = new Blob([jsonText], { type: 'application/json' });
@@ -5635,7 +5689,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
 
     async function requestCustomAI(action, question) {
-      const context = activeAIContext();
+      const context = await resolveAIContext();
       const response = document.getElementById('ai-response');
       if (response) {
         response.style.display = 'block';
@@ -6221,7 +6275,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       const base = baseText || 'Belum ada error — menunggu diagnostik';
       let n = 1;
       // Titik bertambah: . → .. → ... → .... → ulang
-      detail.innerHTML = '<span class="pv-detail-text"></span><span class="pv-dots-anim" id="pv-dots">.</span>';
+      detail.innerHTML = '<span class="pv-detail-text"></span><span class="pv-dots-anim" id="pv-dots-dynamic">.</span>';
       const textEl = detail.querySelector('.pv-detail-text');
       const dotsEl = detail.querySelector('#pv-dots');
       if (textEl) textEl.textContent = base + ' ';
@@ -6359,9 +6413,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const aiPanel = document.getElementById('ai-panel');
         if (aiPanel) aiPanel.classList.remove('hidden');
         if (label === 'Custom AI' && (!currentFile || !editor)) {
-          appendLog('Custom AI: buka file teks terlebih dahulu.', 'warn');
-          alert('Buka file teks terlebih dahulu sebelum memakai Custom AI.');
-          return;
+          appendLog('Custom AI: belum ada file aktif — akan coba file dari ZIP saat chat/analisis.', 'warn');
+          try { if (typeof openCustomAIManager === 'function') openCustomAIManager(); } catch (_) {}
         }
         if (label === 'Custom AI' && (text || context)) {
           try {
