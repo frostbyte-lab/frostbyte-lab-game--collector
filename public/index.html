@@ -6990,6 +6990,59 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (previewReload) previewReload(activePreviewMode);
     }
 
+
+    function gcShowPreviewSuggest(opts) {
+      opts = opts || {};
+      var modal = document.getElementById('gc-preview-suggest');
+      if (!modal) return;
+      var title = document.getElementById('gc-ps-title');
+      var body = document.getElementById('gc-ps-body');
+      var list = document.getElementById('gc-ps-list');
+      if (title) title.textContent = opts.title || 'Preview bermasalah';
+      if (body) body.textContent = opts.body || 'Sandbox mendeteksi masalah. Ikuti saran di bawah.';
+      if (list) {
+        var reasons = opts.reasons || [];
+        list.innerHTML = reasons.map(function (r) { return '<li>' + String(r).replace(/</g, '&lt;') + '</li>'; }).join('');
+      }
+      modal.classList.add('show');
+      try {
+        if (typeof actRecord === 'function') {
+          actRecord('preview', opts.title || 'Preview bermasalah', (opts.body || '') + '\n' + (opts.reasons || []).join('\n'));
+        }
+      } catch (_) {}
+    }
+    function gcPreviewSuggestClose() {
+      var modal = document.getElementById('gc-preview-suggest');
+      if (modal) modal.classList.remove('show');
+    }
+    function gcPreviewSuggestCollect() {
+      gcPreviewSuggestClose();
+      try {
+        var btn = document.querySelector('.nav-btn[data-panel="collect"]');
+        if (btn) btn.click();
+      } catch (_) {}
+      try {
+        if (typeof appendLog === 'function') appendLog('Saran: jalankan Collect via GitHub dengan Auto-spin agar api-map.json terisi.', 'warn');
+      } catch (_) {}
+    }
+    function gcPreviewSuggestDetect() {
+      gcPreviewSuggestClose();
+      try {
+        if (typeof runDeteksiAI === 'function') runDeteksiAI();
+      } catch (_) {}
+    }
+    function gcPreviewSuggestCustom() {
+      gcPreviewSuggestClose();
+      try {
+        if (typeof autoCustomApiSdk === 'function') autoCustomApiSdk();
+      } catch (_) {}
+    }
+    window.gcShowPreviewSuggest = gcShowPreviewSuggest;
+    window.gcPreviewSuggestClose = gcPreviewSuggestClose;
+    window.gcPreviewSuggestCollect = gcPreviewSuggestCollect;
+    window.gcPreviewSuggestDetect = gcPreviewSuggestDetect;
+    window.gcPreviewSuggestCustom = gcPreviewSuggestCustom;
+
     async function startPreview(mode) {
       mode = mode || 'sandbox';
       const isHybrid = mode === 'hybrid';
@@ -7625,6 +7678,26 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const title = document.getElementById('preview-title');
         if (title) title.textContent = (activePreviewMode === 'web' ? 'Web Preview' : 'Sandbox Preview') + ' · ' + entryPath;
         appendLog('Preview dimuat: ' + entryPath, 'ok');
+        try {
+          if (window.__gcPreviewStuckTimer) clearTimeout(window.__gcPreviewStuckTimer);
+          window.__gcPreviewStuckTimer = setTimeout(function () {
+            var net = window.__gcSandboxNet || {};
+            var st = net.status || '';
+            if (st === 'READY') return;
+            gcShowPreviewSuggest({
+              title: 'Preview tampak stuck',
+              body: 'Setelah beberapa detik, Sandbox belum READY. Sering karena api-map kosong atau request eksternal.',
+              reasons: [
+                'Collect ulang (GitHub) dengan Auto-spin agar API tertangkap.',
+                'Pastikan api-map.json punya endpoints + snapshot (bukan []).',
+                'Custom API: set base URL ke domain hosting kamu.',
+                'Coba Hybrid jika asset masih di CDN asal.',
+                'Scan Error untuk melihat error runtime di iframe.'
+              ],
+              focus: 'stuck'
+            });
+          }, 12000);
+        } catch (_) {}
         if (apiMapPayload && apiMapPayload.endpoints && apiMapPayload.endpoints.length) {
           const snapN = (apiMapPayload.endpoints || []).filter(function (e) { return e && e.snapshot; }).length;
           appendLog(
@@ -7635,6 +7708,19 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           );
         } else {
           appendLog('API map: kosong — mock pattern saja. Collect ulang agar api-map.json ikut.', 'warn');
+          try {
+            gcShowPreviewSuggest({
+              title: 'API map kosong',
+              body: 'Sandbox tidak menemukan api-map.json berisi endpoint. Game sering stuck di layar loading/jaringan sibuk.',
+              reasons: [
+                'Collect ulang dengan Auto-spin aktif agar request /spin, /balance, /session tertangkap.',
+                'Pastikan artifact ZIP memuat api-map.json (bukan hanya asset gambar).',
+                'Atau Activity → Secret Code untuk template api-map (masih perlu data API asli).',
+                'Lalu Custom API untuk rewrite base URL ke domain hosting kamu.'
+              ],
+              focus: 'apimap'
+            });
+          } catch (_) {}
         }
 
         // Terima pesan error + laporan network dari bridge iframe
@@ -7671,6 +7757,27 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
               if (countEl && st !== 'READY') {
                 countEl.textContent = st + (extra.external ? ' · ' + extra.external + ' ext' : '');
               }
+              try {
+                if (st === 'NOT READY' || (st === 'PARTIAL' && (extra.external || 0) > 2)) {
+                  window.__gcPreviewFailCount = (window.__gcPreviewFailCount || 0) + 1;
+                  if (window.__gcPreviewFailCount >= 2) {
+                    window.__gcPreviewFailCount = 0;
+                    gcShowPreviewSuggest({
+                      title: 'Preview network ' + st,
+                      body: 'Sandbox mendeteksi request eksternal/terblokir. Game mungkin stuck atau fitur online tidak jalan.',
+                      reasons: [
+                        'Collect ulang dengan Auto-spin agar api-map.json berisi snapshot.',
+                        'Pastikan asset lokal lengkap (tidak banyak NET external/blocked).',
+                        'Custom API: set base URL ke domain hosting kamu.',
+                        'Coba mode Hybrid jika asset masih di CDN asal.'
+                      ],
+                      focus: 'network'
+                    });
+                  }
+                } else if (st === 'READY') {
+                  window.__gcPreviewFailCount = 0;
+                }
+              } catch (_) {}
               return;
             }
             const lvl = d.type === 'warn' ? 'warn' : 'err';
@@ -9693,6 +9800,25 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     .gc-ct-list li.no { color:#fbbf24; }
     .gc-ct-note { margin:8px 0 0; font-size:11px; color:#64748b; }
 
+
+    .gc-preview-suggest {
+      position: fixed; inset: 0; z-index: 12100; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(8,15,30,.72); backdrop-filter: blur(4px); padding: 16px;
+    }
+    .gc-preview-suggest.show { display: flex; }
+    .gc-preview-suggest-box {
+      width: min(420px, 100%); max-height: min(80vh, 560px); overflow: auto;
+      background: #0f172a; border: 1px solid rgba(94,225,192,.35); border-radius: 14px;
+      padding: 16px 16px 14px; color: #e2e8f0; box-shadow: 0 16px 48px rgba(0,0,0,.4);
+    }
+    .gc-preview-suggest-box h3 { margin: 0 0 8px; font-size: 16px; color: #5ee1c0; }
+    .gc-preview-suggest-box p { margin: 0 0 10px; font-size: 13px; line-height: 1.45; color: #cbd5e1; }
+    .gc-preview-suggest-box ul { margin: 0 0 14px; padding-left: 18px; font-size: 12px; line-height: 1.5; color: #94a3b8; }
+    .gc-preview-suggest-box li { margin-bottom: 4px; }
+    .gc-preview-suggest-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .gc-preview-suggest-actions .btn { flex: 1 1 auto; justify-content: center; }
+
 </style>
 <script>(function(){var a=[],s=null,o=window.appendLog;function add(v){var t=String(v||""),u=t.toLowerCase(),k=u.indexOf("python")>=0||u.indexOf("numpy")>=0?"PY3":u.indexOf(".css")>=0?"CSS":u.indexOf(".html")>=0||u.indexOf("tag")>=0?"HTML":u.indexOf("fetch")>=0||u.indexOf("404")>=0?"NET":"JS";var f="runtime output",m=t.match(/[A-Za-z0-9_./-]+\.(html?|css|m?js|py3?)/i);if(m)f=m[0];return{kind:k,file:f,title:t,detail:t}}function draw(){var box=document.getElementById("preview-diagnostics-list"),q=document.getElementById("preview-log-filter");if(!box)return;var n=q?q.value.toLowerCase():"",v=a.filter(function(x){return!n||(x.kind+" "+x.file+" "+x.title).toLowerCase().indexOf(n)>=0});box.innerHTML=v.length?v.map(function(x){return"<button type=\"button\" class=\"preview-diagnostic"+ (x===s?" active":"") +" data-i=\""+a.indexOf(x)+"\"><b class=\"preview-diagnostic-kind\">"+x.kind+"</b><span><strong class=\"preview-diagnostic-title\">"+x.title+"</strong><small class=\"preview-diagnostic-meta\">"+x.file+"</small></span></button>"}).join(""):"<div style=\"padding:18px;color:var(--text-muted)\">No diagnostics yet.</div>";Array.prototype.forEach.call(box.querySelectorAll("[data-i]"),function(b){b.onclick=function(){s=a[Number(b.getAttribute("data-i"))];var d=document.getElementById("preview-error-detail");if(d)d.textContent=s.detail+"\n\nFile: "+s.file;draw()}})}window.appendLog=function(v){if(typeof o==="function")o.apply(this,arguments);s=add(v);a.push(s);draw()};var sw=window.switchPreviewMode;window.switchPreviewMode=function(m){var r=sw?sw.apply(this,arguments):null,w=document.querySelector("#preview-mode .preview-workspace");if(w)w.classList.toggle("preview-web",m==="web");return r};var f=document.getElementById("preview-log-filter");if(f)f.oninput=draw;var c=document.getElementById("preview-log-clear");if(c)c.onclick=function(){a=[];s=null;draw()};draw()})();</script>
 
@@ -9708,6 +9834,21 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     <div class="gc-ct-bar"><i id="gc-ct-bar" style="width:0%"></i></div>
     <ul class="gc-ct-list" id="gc-ct-list"></ul>
     <p class="gc-ct-note" id="gc-ct-note">Memastikan paket lengkap sebelum unduh…</p>
+  </div>
+
+
+  <div id="gc-preview-suggest" class="gc-preview-suggest" role="dialog" aria-modal="true">
+    <div class="gc-preview-suggest-box">
+      <h3 id="gc-ps-title">Preview bermasalah</h3>
+      <p id="gc-ps-body">Sandbox mendeteksi masalah. Ikuti saran di bawah.</p>
+      <ul id="gc-ps-list"></ul>
+      <div class="gc-preview-suggest-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gcPreviewSuggestClose()">Tutup</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="gc-ps-btn-collect" onclick="gcPreviewSuggestCollect()">Collect ulang</button>
+        <button type="button" class="btn btn-primary btn-sm" id="gc-ps-btn-detect" onclick="gcPreviewSuggestDetect()">Deteksi AI</button>
+        <button type="button" class="btn btn-success btn-sm" id="gc-ps-btn-custom" onclick="gcPreviewSuggestCustom()">Custom API</button>
+      </div>
+    </div>
   </div>
 
 <div id="gc-oa-summary" class="gc-oa-overlay" role="dialog" aria-modal="true">
