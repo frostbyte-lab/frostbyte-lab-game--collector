@@ -6573,15 +6573,30 @@
       }
     }
     var s = String(url || '').toLowerCase();
+    function wrap(data) {
+      return {
+        ok: true, mock: true, __gcMock: true, __gcFrom: 'pattern',
+        err: null, error: 0, code: 0, status: 'ok',
+        dt: data, data: data,
+        balance: data.balance != null ? data.balance : balance,
+        bl: data.balance != null ? data.balance : balance
+      };
+    }
     if (/spin|bet|play/.test(s)) {
       var win = Math.random() > 0.7 ? Math.floor(Math.random() * 500) : 0;
       balance += win;
-      return { ok: true, win: win, balance: balance, symbols: [[1,2,3],[4,5,6],[7,8,9]], mock: true, __gcFrom: 'pattern' };
+      var symbols = [[1,2,3],[4,5,6],[7,8,9]];
+      return Object.assign(wrap({
+        win: win, winAmount: win, balance: balance, symbols: symbols, reels: symbols, rl: symbols,
+        si: session.id, roundId: 'r-' + Date.now()
+      }), { win: win, symbols: symbols, reels: symbols });
     }
-    if (/balance|wallet|credit/.test(s)) return { ok: true, balance: balance, mock: true, __gcFrom: 'pattern' };
-    if (/session|auth|token|login|init/.test(s)) return { ok: true, session: session, balance: balance, mock: true, __gcFrom: 'pattern' };
-    if (/history|result/.test(s)) return { ok: true, items: [], balance: balance, mock: true, __gcFrom: 'pattern' };
-    return { ok: true, mock: true, balance: balance, session: session, url: String(url||'').slice(0,120), __gcFrom: 'fallback' };
+    if (/balance|wallet|credit/.test(s)) return wrap({ balance: balance, credit: balance, currency: 'IDR' });
+    if (/session|auth|token|login|init|launch|verifysession/.test(s)) {
+      return Object.assign(wrap({ session: session, token: 'sandbox-token', balance: balance, playerId: 'p-sandbox' }), { session: session });
+    }
+    if (/history|result/.test(s)) return wrap({ items: [], list: [], balance: balance });
+    return Object.assign(wrap({ balance: balance, session: session }), { session: session, url: String(url||'').slice(0,120), __gcFrom: 'fallback' });
   }
   function mockResponse(url){
     var data = mockPayload(url);

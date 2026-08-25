@@ -27,32 +27,72 @@ function kindFromEntry(r) {
 
 function mockTemplateForKind(kind) {
   const balance = 100000;
-  const session = { id: "sandbox-local", ok: true };
+  const session = { id: "sandbox-local", ok: true, si: "sandbox-local" };
+  // Bentuk respons multi-provider (umum di slot Asia): dt/err + data nested
+  const wrap = (data) => ({
+    ok: true,
+    mock: true,
+    __gcMock: true,
+    err: null,
+    error: 0,
+    code: 0,
+    status: "ok",
+    dt: data,
+    data,
+    ...data
+  });
+
   switch (kind) {
     case "spin":
     case "spin-request":
-    case "spin-result":
-      return {
-        ok: true,
-        mock: true,
-        win: 0,
+    case "spin-result": {
+      const win = 0;
+      const symbols = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9]
+      ];
+      return wrap({
+        win,
+        winAmount: win,
         balance,
-        symbols: [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
-        reels: [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-      };
+        bl: balance,
+        credit: balance,
+        symbols,
+        reels: symbols,
+        rl: symbols,
+        si: session.si,
+        roundId: "r-" + Date.now(),
+        ct: Date.now()
+      });
+    }
     case "balance":
-      return { ok: true, mock: true, balance };
+      return wrap({ balance, bl: balance, credit: balance, currency: "IDR" });
     case "session":
     case "auth":
-      return { ok: true, mock: true, session, balance, token: "sandbox-token" };
+      return wrap({
+        session,
+        token: "sandbox-token",
+        accessToken: "sandbox-token",
+        balance,
+        bl: balance,
+        playerId: "p-sandbox"
+      });
     case "init":
     case "launch":
-      return { ok: true, mock: true, session, balance, config: { rtp: 96, lines: 20 } };
+      return wrap({
+        session,
+        balance,
+        bl: balance,
+        config: { rtp: 96, lines: 20, betLevels: [100, 200, 500, 1000] },
+        gameInfo: { name: "sandbox-game", offline: true },
+        symbols: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      });
     case "history":
     case "result":
-      return { ok: true, mock: true, items: [], balance };
+      return wrap({ items: [], list: [], balance, bl: balance });
     default:
-      return { ok: true, mock: true, balance, session };
+      return wrap({ balance, session });
   }
 }
 

@@ -133,22 +133,37 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 
 ## Deploy
 
+Checklist lengkap: **[docs/DEPLOY.md](docs/DEPLOY.md)**
+
 ```bash
-export CLOUDFLARE_API_TOKEN=...
-export CLOUDFLARE_ACCOUNT_ID=...
-npx wrangler deploy
+npm install
+npx wrangler secret put GITHUB_TOKEN   # opsional, untuk GitHub collect
+npm run deploy
+curl -s https://<worker>.workers.dev/api/health
 ```
 
-Secret yang dipakai: `GITHUB_TOKEN` (untuk trigger/status Actions).  
-Binding opsional nanti: `COLLECTOR_BUCKET` (R2), `GC_HISTORY` (KV).
+Secret: `GITHUB_TOKEN`. Binding: Browser `MYBROWSER`, KV `GC_HISTORY`, AI (opsional). R2 sengaja opsional.
 
 ---
 
-## Lanjut kerja disarankan
+## Android APK
 
-1. User enable **R2** di Dashboard → implement bind + download URL besar  
-2. **KV history**  
-3. **SSE/progress** collect  
-4. Baru polish Preview (SW asset / proxy / engine pack)
+| Path | Jenis |
+|------|--------|
+| **[mobile-capacitor/](mobile-capacitor/)** | Capacitor → WebView ke URL Worker (disarankan untuk app penuh) |
+| [android-app/](android-app/) | Expo ZipScope (pembaca ZIP native, terpisah) |
+
+```bash
+cd mobile-capacitor && npm install && npx cap add android && npx cap sync && npx cap open android
+```
+
+---
+
+## Lanjut kerja (opsional / sengaja ditunda)
+
+1. R2 untuk ZIP sangat besar di Worker  
+2. Progress SSE penuh (sekarang poll)  
+3. Custom domain  
+4. Mock per-provider lebih dalam (snapshot collect tetap prioritas)
 
 *Update catatan ini setiap selesai satu item prioritas.*

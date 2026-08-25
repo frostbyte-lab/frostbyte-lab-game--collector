@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Game Collector Pro</title>
+  <style>
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: system-ui, sans-serif; background: #0b1220; color: #e2e8f0; text-align: center;
+      padding: 24px;
+    }
+    a { color: #38bdf8; }
+    p { opacity: 0.85; font-size: 14px; line-height: 1.5; max-width: 320px; }
+  </style>
+</head>
+<body>
+  <div>
+    <h1 style="font-size:18px;margin:0 0 8px;">Game Collector Pro</h1>
+    <p>
+      Shell Capacitor. Jika Anda melihat halaman ini, <code>server.url</code> belum aktif
+      atau sedang offline. Set URL Worker di <code>capacitor.config.json</code> lalu
+      <code>npx cap sync</code>.
+    </p>
+    <p>
+      <a id="go" href="https://game-resource-collector.technologiesfrostbyte.workers.dev">Buka di browser</a>
+    </p>
+  </div>
+  <script>
+    // Fallback: coba arahkan ke live app jika dibuka tanpa server.url
+    var u = "https://game-resource-collector.technologiesfrostbyte.workers.dev";
+    try {
+      if (location.protocol === "http:" || location.protocol === "https:") {
+        /* stay */
+      } else {
+        location.replace(u);
+      }
+    } catch (e) {}
+  </script>
+</body>
+</html>

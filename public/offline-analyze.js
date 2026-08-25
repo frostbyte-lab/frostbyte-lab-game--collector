@@ -291,17 +291,21 @@
       "  g.__GC_SHIM_INSTALLED__ = true;\n" +
       "  var balance = typeof g.__GC_MOCK_BALANCE__ === 'number' ? g.__GC_MOCK_BALANCE__ : 100000;\n" +
       "  var session = { id: 'sandbox-' + Date.now(), ok: true };\n" +
+      "  function wrap(data) {\n" +
+      "    return { ok: true, mock: true, __gcMock: true, err: null, error: 0, code: 0, status: 'ok', dt: data, data: data, balance: data.balance != null ? data.balance : balance, bl: data.balance != null ? data.balance : balance };\n" +
+      "  }\n" +
       "  function payload(url) {\n" +
       "    var s = String(url || '').toLowerCase();\n" +
       "    if (/spin|bet|play/.test(s)) {\n" +
       "      var win = Math.random() > 0.7 ? Math.floor(Math.random() * 500) : 0;\n" +
       "      balance += win;\n" +
-      "      return { ok: true, win: win, balance: balance, symbols: [[1,2,3],[4,5,6],[7,8,9]], mock: true };\n" +
+      "      var symbols = [[1,2,3],[4,5,6],[7,8,9]];\n" +
+      "      return Object.assign(wrap({ win: win, winAmount: win, balance: balance, symbols: symbols, reels: symbols, rl: symbols, si: session.id, roundId: 'r-' + Date.now() }), { win: win, symbols: symbols, reels: symbols });\n" +
       "    }\n" +
-      "    if (/balance|wallet|credit/.test(s)) return { ok: true, balance: balance, mock: true };\n" +
-      "    if (/session|auth|token|login|init/.test(s)) return { ok: true, session: session, balance: balance, mock: true };\n" +
-      "    if (/history|result/.test(s)) return { ok: true, items: [], balance: balance, mock: true };\n" +
-      "    return { ok: true, mock: true, balance: balance, session: session };\n" +
+      "    if (/balance|wallet|credit/.test(s)) return wrap({ balance: balance, credit: balance, currency: 'IDR' });\n" +
+      "    if (/session|auth|token|login|init|launch|verifysession/.test(s)) return Object.assign(wrap({ session: session, token: 'sandbox-token', balance: balance, playerId: 'p-sandbox' }), { session: session });\n" +
+      "    if (/history|result/.test(s)) return wrap({ items: [], list: [], balance: balance });\n" +
+      "    return wrap({ balance: balance, session: session });\n" +
       "  }\n" +
       "  function jsonResp(data) {\n" +
       "    var body = JSON.stringify(data);\n" +
