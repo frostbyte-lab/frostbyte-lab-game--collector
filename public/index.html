@@ -7924,6 +7924,23 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
   }
   function gcAssetUrl(input){
     if (typeof input !== 'string' || !input) return null;
+    // Langsung cek map (path relatif /shared/...)
+    var raw = input.split('?')[0].split('#')[0];
+    var noSlash = raw.replace(/^\/+/, '');
+    if (GC_ASSET_MAP[raw]) return GC_ASSET_MAP[raw];
+    if (GC_ASSET_MAP[noSlash]) return GC_ASSET_MAP[noSlash];
+    if (GC_ASSET_MAP['./' + noSlash]) return GC_ASSET_MAP['./' + noSlash];
+    var bare = noSlash.split('/').pop();
+    if (bare && GC_ASSET_NAMES[bare]) return GC_ASSET_NAMES[bare];
+    // suffix match: .../shared/984721902a/index.json
+    try {
+      var keys = Object.keys(GC_ASSET_MAP);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        if (k === noSlash || k.endsWith('/' + noSlash) || k.endsWith(noSlash)) return GC_ASSET_MAP[k];
+        if (noSlash.endsWith(k) || (bare && k.endsWith('/' + bare))) return GC_ASSET_MAP[k];
+      }
+    } catch (e1) {}
     try {
       var resolved = new URL(input, GC_BASE_URL);
       var assetPath = decodeURIComponent(resolved.pathname || '').replace(/^\/+/, '');
@@ -7932,9 +7949,26 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     } catch (err) {}
     return null;
   }
+  function gcSafeUrl(u){
+    if (typeof u !== 'string' || !u) return u;
+    // Perbaiki host rusak https://api./path
+    if (/^https?:\\/\\/api\\.\\//i.test(u) || /^https?:\\/\\/api\\.\\//i.test(u)) {
+      var rest = u.replace(/^https?:\\/\\/api\\.?/i, '');
+      return rest.charAt(0) === '/' ? rest : '/' + rest;
+    }
+    if (/^https?:\\/\\/api\\.\\w*\\/what-is-my-ip/i.test(u) || /what-is-my-ip/i.test(u)) {
+      return '/sandbox/what-is-my-ip';
+    }
+    try {
+      if (/^https?:/i.test(u)) { new URL(u); }
+    } catch (e) {
+      return '/__gc_invalid__';
+    }
+    return u;
+  }
   function isApiLike(u){
     var s = String(u || '').toLowerCase();
-    return /\\/api\\/|\\/game\\/(init|session|balance|bet|spin|result|history)|gamewallet|verifysession|game-api|game-proxy|\\/spin\\b|\\/bet\\b|\\/balance\\b|\\/session\\b|graphql|\\/v1\\/|\\/v2\\//i.test(s);
+    return /\\/api\\/|\\/game\\/(init|session|balance|bet|spin|result|history)|gamewallet|verifysession|game-api|game-proxy|\\/spin\\b|\\/bet\\b|\\/balance\\b|\\/session\\b|graphql|\\/v1\\/|\\/v2\\//i.test(s) || /what-is-my-ip|\/shared\/[^?#]+index\.json/i.test(s);
   }
   function isExternalHttp(u){
     try {
@@ -7999,6 +8033,17 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         }
         return tpl;
       }
+    }
+    if (/\/shared\/.*index\.json/i.test(String(url||'')) || /984721902a/i.test(String(url||''))) {
+      return {
+        ok: true, mock: true, __gcMock: true, __gcFrom: 'shared-index',
+        err: null, error: 0, code: 0, status: 'ok',
+        list: [], files: [], data: [], resources: [],
+        dt: { list: [], files: [] }, version: 1, offline: true
+      };
+    }
+    if (/what-is-my-ip/i.test(String(url||''))) {
+      return { ok: true, mock: true, ip: '127.0.0.1', country: 'XX', __gcFrom: 'ip-mock' };
     }
     var s = String(url || '').toLowerCase();
     function wrap(data) {
@@ -8070,10 +8115,18 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     return /\\.(png|jpe?g|gif|webp|svg|avif|mp3|ogg|wav|mp4|webm|woff2?|ttf|otf|css|js|mjs|json|wasm|atlas)(\\?|$)/i.test(String(u||''));
   }
   function resolveRequestUrl(raw){
-    var asset = gcAssetUrl(typeof raw === 'string' ? raw : (raw && raw.url));
+    var rawStr = typeof raw === 'string' ? raw : (raw && raw.url) || '';
+    rawStr = gcSafeUrl(rawStr);
+    var asset = gcAssetUrl(rawStr);
     if (asset) return { kind: 'local', url: asset };
-    var u = typeof raw === 'string' ? raw : (raw && raw.url) || '';
-    try { u = new URL(u, GC_BASE_URL).toString(); } catch (e) {}
+    var u = rawStr || '';
+    // Path /shared/... tanpa file lokal → tetap relative valid (hindari Invalid URL)
+    if (/^\\/(shared|assets|static|resource|resources)\\//i.test(u)) {
+      if (GC_SANDBOX && !GC_HYBRID) return { kind: 'mock', url: u };
+    }
+    try { u = new URL(u, GC_BASE_URL).toString(); } catch (e) {
+      if (GC_SANDBOX) return { kind: 'mock', url: rawStr || '/__gc_invalid__' };
+    }
     // Hybrid: asset/CDN eksternal → same-origin proxy (bukan offline murni)
     if (GC_HYBRID && isExternalHttp(u) && !gcAssetUrl(u) && !isApiLike(u) && isStaticAssetUrl(u)) {
       return { kind: 'proxy', url: viaProxy(u) };
@@ -8921,7 +8974,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
         function injectBootstrap(html, base, gid) {
           if (/__GC_CUSTOM_BOOTSTRAP__/i.test(html)) return { html: html, injected: false };
-          var boot = '\n<!-- __GC_CUSTOM_BOOTSTRAP__ -->\n<script>\n(function(){\n  var API_BASE = ' + JSON.stringify(base || '') + ';\n  var GAME_ID = ' + JSON.stringify(gid || 'game-1') + ';\n  window.__GC_API_BASE__ = API_BASE;\n  window.__GC_GAME_ID__ = GAME_ID;\n  function fix(u){\n    if (!u || typeof u !== "string") return u;\n    if (/^\\/(shared|assets|static|resource|resources)\\//i.test(u)) return "." + u;\n    if (API_BASE && /^https?:\\/\\/api\\.\\//i.test(u)) return API_BASE + u.replace(/^https?:\\/\\/api\\./i, "");\n    return u;\n  }\n  try {\n    var _o = XMLHttpRequest.prototype.open;\n    XMLHttpRequest.prototype.open = function(m,u){\n      var a = Array.prototype.slice.call(arguments);\n      if (typeof a[1]==="string") a[1]=fix(a[1]);\n      return _o.apply(this,a);\n    };\n  } catch(e){}\n  try {\n    var _f = window.fetch;\n    if (_f) window.fetch = function(input, init){\n      if (typeof input==="string") input=fix(input);\n      return _f.call(this, input, init);\n    };\n  } catch(e2){}\n})();\n</scr' + 'ipt>\n';
+          var boot = '\n<!-- __GC_CUSTOM_BOOTSTRAP__ -->\n<script>\n(function(){\n  var API_BASE = ' + JSON.stringify(base || '') + ';\n  var GAME_ID = ' + JSON.stringify(gid || 'game-1') + ';\n  window.__GC_API_BASE__ = API_BASE;\n  window.__GC_GAME_ID__ = GAME_ID;\n  function fix(u){\n    if (!u || typeof u !== "string") return u;\n    // Jangan biarkan host rusak https://api./...\n    if (/^https?:\\/\\/api\\.\\//i.test(u) || /^https?:\\/\\/api\\.$/i.test(u)) {\n      var path = u.replace(/^https?:\\/\\/api\\.?/i, "") || "/";\n      if (API_BASE) return API_BASE.replace(/\\/$/, "") + (path.charAt(0) === "/" ? path : "/" + path);\n      return path.charAt(0) === "/" ? path : "/" + path;\n    }\n    if (/what-is-my-ip/i.test(u)) return API_BASE ? (API_BASE.replace(/\\/$/, "") + "/what-is-my-ip") : "/sandbox/what-is-my-ip";\n    if (/^\\/(shared|assets|static|resource|resources)\\//i.test(u)) {\n      try {\n        if (window.__GC_ASSETS && window.__GC_ASSETS[u.replace(/^\\//,"")]) return window.__GC_ASSETS[u.replace(/^\\//,"")];\n        if (window.__GC_ASSETS && window.__GC_ASSETS[u]) return window.__GC_ASSETS[u];\n      } catch(e){}\n      return u;\n    }\n    return u;\n  }\n  try {\n    var _o = XMLHttpRequest.prototype.open;\n    XMLHttpRequest.prototype.open = function(m,u){\n      var a = Array.prototype.slice.call(arguments);\n      if (typeof a[1]==="string") {\n        a[1]=fix(a[1]);\n        // Cegah Invalid URL\n        try { if (/^https?:/i.test(a[1])) new URL(a[1]); } catch(err) { a[1] = "/__gc_invalid__"; }\n      }\n      return _o.apply(this,a);\n    };\n  } catch(e){}\n  try {\n    var _f = window.fetch;\n    if (_f) window.fetch = function(input, init){\n      if (typeof input==="string") input=fix(input);\n      return _f.call(this, input, init);\n    };\n  } catch(e2){}\n})();\n</scr' + 'ipt>\n';
           if (/<\/head>/i.test(html)) return { html: html.replace(/<\/head>/i, boot + '</head>'), injected: true };
           if (/<\/body>/i.test(html)) return { html: html.replace(/<\/body>/i, boot + '<' + '/body>'), injected: true };
           return { html: boot + html, injected: true };
