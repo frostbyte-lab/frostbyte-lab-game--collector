@@ -3366,63 +3366,69 @@
       </div>
     </div>
 
-    <!-- Login AI: sesi Groq + GPT (pribadi) -->
+    <!-- Login AI: Groq / GPT → Email 1-5 (email + API key) -->
     <div id="custom-ai-manager" class="cai-overlay" style="display:none;">
       <div class="cai-box">
         <div class="cai-head">
           <div>
             <strong id="cai-title">Login AI</strong>
-            <span class="cai-sub" id="cai-sub">Sesi Groq + GPT</span>
+            <span class="cai-sub" id="cai-sub">Groq · GPT · Email 1–5</span>
           </div>
           <button type="button" class="cai-close" onclick="closeCustomAIManager()" aria-label="Tutup">✕</button>
         </div>
 
-        <!-- Status sesi -->
         <div id="cai-session-status" class="cai-hint" style="margin:0 0 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,.2);font-size:12px;">
-          Belum login. Isi key Groq dan/atau GPT lalu Login.
+          Belum login. Pilih Groq atau GPT → Email 1–5 → isi email + API key → Login.
         </div>
 
-        <!-- Menu login -->
+        <!-- Menu utama -->
         <div id="cai-menu" class="cai-menu">
-          <button type="button" class="cai-opt" onclick="caiShowPanel('apply')">
+          <button type="button" class="cai-opt" onclick="caiShowPanel('groq')">
             <span class="cai-opt-num">1</span>
             <span class="cai-opt-body">
-              <strong>Login / Atur Key</strong>
-              <small>Groq + GPT · sesi tersimpan di browser ini</small>
+              <strong>Groq</strong>
+              <small>Email 1–5 · login · terapkan ke semua tombol AI</small>
+            </span>
+          </button>
+          <button type="button" class="cai-opt" onclick="caiShowPanel('gpt')">
+            <span class="cai-opt-num">2</span>
+            <span class="cai-opt-body">
+              <strong>GPT</strong>
+              <small>Email 1–5 · login · terapkan ke semua tombol AI</small>
             </span>
           </button>
           <button type="button" class="cai-opt" onclick="caiShowPanel('chat')">
-            <span class="cai-opt-num">2</span>
+            <span class="cai-opt-num">💬</span>
             <span class="cai-opt-body">
               <strong>Chat</strong>
-              <small>Pakai AI yang sudah login · edit ke editor</small>
+              <small>Pakai AI yang sudah login</small>
             </span>
           </button>
           <button type="button" class="cai-opt" onclick="caiLogoutAI()" id="cai-opt-logout">
             <span class="cai-opt-num">⎋</span>
             <span class="cai-opt-body">
               <strong>Logout AI</strong>
-              <small>Hapus sesi key dari browser ini</small>
+              <small>Hapus sesi aktif (key tetap tersimpan di slot)</small>
             </span>
           </button>
         </div>
 
-        <!-- Panel 1: Login / Atur Key (Groq + GPT) -->
+        <!-- Panel Groq / GPT email slots -->
         <div id="cai-panel-apply" class="cai-panel" style="display:none;">
-          <p class="cai-hint">Isi key lalu <b>Login</b>. Urutan = prioritas failover (limit → AI berikutnya). Semua tombol AI memakai sesi ini.</p>
+          <p class="cai-hint" id="cai-provider-hint">Pilih Email 1–5, isi email + API key, lalu Login.</p>
+          <div id="cai-email-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
           <div id="cai-list" class="cai-list"></div>
           <div class="cai-actions">
             <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="addCustomAISlot()">+ Slot lain</button>
-            <button type="button" class="btn btn-primary btn-sm" onclick="caiLoginAI()">Login</button>
+            <button type="button" class="btn btn-primary btn-sm" id="cai-login-btn" onclick="caiLoginAI()">Login / Terapkan</button>
           </div>
         </div>
 
-        <!-- Panel 2: Chat — area diperbesar (cai-mode-chat) -->
+        <!-- Panel Chat -->
         <div id="cai-panel-chat" class="cai-panel" style="display:none;">
-          <p class="cai-hint" style="margin-bottom:8px;flex-shrink:0;">Chat sebelum/sesudah buka file. Minta edit → bisa <b>langsung diterapkan</b> ke editor (centang di bawah).</p>
+          <p class="cai-hint" style="margin-bottom:8px;flex-shrink:0;">Chat memakai sesi AI yang sudah login.</p>
           <div id="cai-chat-log" class="cai-chat-log"></div>
-          <textarea id="cai-chat-input" class="cai-chat-input" rows="4" placeholder="Tulis permintaan… mis. perbaiki error di baris 42, rename fungsi, jelaskan kode ini, deteksi API/SDK…"></textarea>
+          <textarea id="cai-chat-input" class="cai-chat-input" rows="4" placeholder="Tulis permintaan…"></textarea>
           <div class="cai-actions">
             <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
             <label class="cai-check"><input type="checkbox" id="cai-apply-edit" checked> Terapkan edit ke editor</label>
@@ -3430,22 +3436,8 @@
           </div>
         </div>
 
-        <!-- Panel 3: Add key -->
-        <div id="cai-panel-addkey" class="cai-panel" style="display:none;">
-          <p class="cai-hint">Key baru otomatis masuk <b>slot baru</b> di ujung rantai failover.</p>
-          <label>Nama slot (opsional)</label>
-          <input id="cai-new-name" type="text" placeholder="otomatis: nomor berikutnya">
-          <label>API Key</label>
-          <input id="cai-new-key" type="password" placeholder="AIza... (Gemini) / gsk_... / sk-...">
-          <label>Base URL (OpenAI-compatible)</label>
-          <input id="cai-new-base" type="text" value="https://generativelanguage.googleapis.com/v1beta/openai" placeholder="https://generativelanguage.googleapis.com/v1beta/openai">
-          <label>Model</label>
-          <input id="cai-new-model" type="text" value="gemini-2.0-flash" placeholder="gemini-2.0-flash">
-          <div class="cai-actions" style="margin-top:12px;">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
-            <button type="button" class="btn btn-primary btn-sm" onclick="caiAddNewKey()">Simpan ke slot baru</button>
-          </div>
-        </div>
+        <!-- dummy keep id for old code paths -->
+        <div id="cai-panel-addkey" class="cai-panel" style="display:none;"></div>
       </div>
     </div>
 
@@ -4799,190 +4791,283 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
 
 
-    // ===== Login AI — sesi Groq + GPT (pribadi, localStorage) =====
+
+    // ===== Login AI: Groq / GPT → Email 1-5 (email + API key) =====
     const CAI_STORAGE = 'gc_custom_ai_apis';
     const CAI_SESSION = 'gc_ai_session';
+    const CAI_ACCOUNTS = 'gc_ai_accounts_v2';
     const CAI_GROQ_BASE = 'https://api.groq.com/openai/v1';
     const CAI_OPENAI_BASE = 'https://api.openai.com/v1';
     const CAI_GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
-    // Default 2 AI: Groq dulu, GPT cadangan
+    const CAI_PROVIDERS = {
+      groq: { id: 'groq', label: 'Groq', baseUrl: CAI_GROQ_BASE, model: 'llama-3.3-70b-versatile', keyHint: 'gsk_...' },
+      gpt: { id: 'gpt', label: 'GPT', baseUrl: CAI_OPENAI_BASE, model: 'gpt-4o-mini', keyHint: 'sk-...' }
+    };
+    // Compat defaults for old callers
     const CAI_DEFAULTS = [
       { name: 'Groq', baseUrl: CAI_GROQ_BASE, apiKey: '', model: 'llama-3.3-70b-versatile', enabled: true },
       { name: 'GPT', baseUrl: CAI_OPENAI_BASE, apiKey: '', model: 'gpt-4o-mini', enabled: true }
     ];
-    const CAI_MODEL_OPTIONS = [
-      'llama-3.3-70b-versatile',
-      'llama-3.1-8b-instant',
-      'openai/gpt-oss-20b',
-      'gpt-4o-mini',
-      'gpt-4o',
-      'gpt-4.1-mini',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash'
-    ];
+    const CAI_MODEL_OPTIONS = ['llama-3.3-70b-versatile', 'gpt-4o-mini'];
 
-    function loadCustomAISlots() {
-      try {
-        const raw = JSON.parse(localStorage.getItem(CAI_STORAGE) || 'null');
-        if (Array.isArray(raw) && raw.length) {
-          return raw.map((s, i) => ({
-            name: String(s.name || (i + 1)),
-            baseUrl: String(s.baseUrl || CAI_GEMINI_BASE).replace(/\/+$/, ''),
-            apiKey: String(s.apiKey || ''),
-            model: String(s.model || 'gemini-2.0-flash'),
-            enabled: s.enabled !== false
-          }));
-        }
-      } catch (_) {}
-      // migrate single key from gc_custom if present
-      try {
-        const old = JSON.parse(localStorage.getItem('gc_custom') || '{}');
-        if (old.aiKey) {
-          const slots = CAI_DEFAULTS.map((d, i) => ({ ...d }));
-          slots[0].apiKey = old.aiKey;
-          return slots;
-        }
-      } catch (_) {}
-      return CAI_DEFAULTS.map(d => ({ ...d }));
+    let caiCurrentProvider = 'groq';
+    let caiCurrentEmailIdx = 0; // 0..4
+
+    function caiEmptyAccounts() {
+      const mk = () => Array.from({ length: 5 }, (_, i) => ({ email: '', apiKey: '', enabled: false }));
+      return { groq: mk(), gpt: mk(), active: null };
     }
 
-    function saveCustomAISlots() {
-      const list = document.getElementById('cai-list');
-      if (!list) return loadCustomAISlots();
-      const slots = [];
-      list.querySelectorAll('.cai-card').forEach((card, i) => {
-        slots.push({
-          name: (card.querySelector('[data-f="name"]')?.value || String(i + 1)).trim() || String(i + 1),
-          baseUrl: (card.querySelector('[data-f="baseUrl"]')?.value || CAI_GEMINI_BASE).trim().replace(/\/+$/, ''),
-          apiKey: (card.querySelector('[data-f="apiKey"]')?.value || '').trim(),
-          model: (card.querySelector('[data-f="model"]')?.value || 'gemini-2.0-flash').trim(),
-          enabled: !!(card.querySelector('[data-f="enabled"]')?.checked)
-        });
-      });
+    function loadAIAccounts() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(CAI_ACCOUNTS) || 'null');
+        if (raw && Array.isArray(raw.groq) && Array.isArray(raw.gpt)) {
+          const norm = (arr) => {
+            const out = [];
+            for (let i = 0; i < 5; i++) {
+              const s = arr[i] || {};
+              out.push({
+                email: String(s.email || '').trim(),
+                apiKey: String(s.apiKey || '').trim(),
+                enabled: !!s.enabled
+              });
+            }
+            return out;
+          };
+          return {
+            groq: norm(raw.groq),
+            gpt: norm(raw.gpt),
+            active: raw.active && typeof raw.active === 'object' ? raw.active : null
+          };
+        }
+      } catch (_) {}
+      // migrate from old slot storage if present
+      try {
+        const old = JSON.parse(localStorage.getItem(CAI_STORAGE) || 'null');
+        if (Array.isArray(old) && old.length) {
+          const acc = caiEmptyAccounts();
+          let gi = 0, pi = 0;
+          old.forEach((s) => {
+            const key = String(s.apiKey || '').trim();
+            if (!key) return;
+            const base = String(s.baseUrl || '');
+            const email = String(s.name || s.email || '').trim();
+            if (/groq/i.test(base) || /^gsk_/.test(key)) {
+              if (gi < 5) { acc.groq[gi] = { email: email || ('akun' + (gi + 1) + '@groq.local'), apiKey: key, enabled: s.enabled !== false }; gi++; }
+            } else {
+              if (pi < 5) { acc.gpt[pi] = { email: email || ('akun' + (pi + 1) + '@openai.local'), apiKey: key, enabled: s.enabled !== false }; pi++; }
+            }
+          });
+          const first = acc.groq.find((x) => x.apiKey) ? { provider: 'groq', index: acc.groq.findIndex((x) => x.apiKey) }
+            : acc.gpt.find((x) => x.apiKey) ? { provider: 'gpt', index: acc.gpt.findIndex((x) => x.apiKey) } : null;
+          acc.active = first;
+          localStorage.setItem(CAI_ACCOUNTS, JSON.stringify(acc));
+          return acc;
+        }
+      } catch (_) {}
+      return caiEmptyAccounts();
+    }
+
+    function saveAIAccounts(acc) {
+      localStorage.setItem(CAI_ACCOUNTS, JSON.stringify(acc));
+      // sync to legacy slot format for callCustomAIFailover
+      const slots = accountsToSlots(acc);
       localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
-      // keep first key mirrored for old custom panel
       try {
         const s = JSON.parse(localStorage.getItem('gc_custom') || '{}');
-        s.aiKey = (slots.find(x => x.apiKey) || {}).apiKey || '';
+        s.aiKey = (slots.find((x) => x.apiKey) || {}).apiKey || '';
         localStorage.setItem('gc_custom', JSON.stringify(s));
       } catch (_) {}
-      const loggedIn = slots.some(s => s.enabled && s.apiKey);
+      const loggedIn = !!(acc.active && acc[acc.active.provider] && acc[acc.active.provider][acc.active.index] && acc[acc.active.provider][acc.active.index].apiKey);
       window.__useCustomAI = loggedIn;
       try {
         localStorage.setItem(CAI_SESSION, JSON.stringify({
           loggedIn,
           at: Date.now(),
-          providers: slots.filter(s => s.enabled && s.apiKey).map(s => s.name)
+          providers: slots.filter((s) => s.enabled && s.apiKey).map((s) => s.name)
         }));
       } catch (_) {}
       if (typeof updateAILoginUI === 'function') updateAILoginUI();
-      if (typeof appendLog === 'function') {
-        appendLog(loggedIn
-          ? ('Login AI: sesi aktif (' + slots.filter(s => s.enabled && s.apiKey).map(s => s.name).join(' → ') + ')')
-          : 'Login AI: belum ada key aktif', loggedIn ? 'ok' : 'warn');
+      return acc;
+    }
+
+    function accountsToSlots(acc) {
+      const slots = [];
+      const order = [];
+      // active first, then other filled slots as failover
+      if (acc.active && acc[acc.active.provider] && acc[acc.active.provider][acc.active.index]) {
+        order.push({ provider: acc.active.provider, index: acc.active.index });
       }
+      ['groq', 'gpt'].forEach((p) => {
+        (acc[p] || []).forEach((slot, i) => {
+          if (!slot.apiKey) return;
+          if (acc.active && acc.active.provider === p && acc.active.index === i) return;
+          order.push({ provider: p, index: i });
+        });
+      });
+      order.forEach(({ provider, index }) => {
+        const meta = CAI_PROVIDERS[provider];
+        const slot = acc[provider][index];
+        slots.push({
+          name: meta.label + ' · Email ' + (index + 1) + (slot.email ? ' · ' + slot.email : ''),
+          baseUrl: meta.baseUrl,
+          apiKey: slot.apiKey,
+          model: meta.model,
+          enabled: true,
+          email: slot.email,
+          provider,
+          slotIndex: index
+        });
+      });
       return slots;
     }
 
+    /** Legacy: loadCustomAISlots — dipakai callCustomAIFailover */
+    function loadCustomAISlots() {
+      return accountsToSlots(loadAIAccounts());
+    }
+
+    function saveCustomAISlots() {
+      // read current provider form into accounts then save
+      const acc = loadAIAccounts();
+      const list = document.getElementById('cai-list');
+      if (list) {
+        const email = (list.querySelector('[data-f="email"]')?.value || '').trim();
+        const apiKey = (list.querySelector('[data-f="apiKey"]')?.value || '').trim();
+        if (!acc[caiCurrentProvider]) return loadCustomAISlots();
+        acc[caiCurrentProvider][caiCurrentEmailIdx] = {
+          email,
+          apiKey,
+          enabled: !!apiKey
+        };
+      }
+      saveAIAccounts(acc);
+      return accountsToSlots(acc);
+    }
+
+    function renderEmailTabs() {
+      const tabs = document.getElementById('cai-email-tabs');
+      if (!tabs) return;
+      const acc = loadAIAccounts();
+      const slots = acc[caiCurrentProvider] || [];
+      tabs.innerHTML = '';
+      for (let i = 0; i < 5; i++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-secondary btn-sm';
+        btn.style.cssText = 'flex:0 0 auto;' + (caiCurrentEmailIdx === i ? 'border-color:var(--accent);color:var(--accent);' : '');
+        const filled = !!(slots[i] && slots[i].apiKey);
+        const isActive = acc.active && acc.active.provider === caiCurrentProvider && acc.active.index === i;
+        btn.textContent = 'Email ' + (i + 1) + (isActive ? ' ●' : filled ? ' ✓' : '');
+        btn.onclick = function () {
+          // save current fields before switch
+          try { saveCustomAISlots(); } catch (_) {}
+          caiCurrentEmailIdx = i;
+          renderEmailTabs();
+          renderCustomAISlots();
+        };
+        tabs.appendChild(btn);
+      }
+    }
+
+    function renderCustomAISlots() {
+      const list = document.getElementById('cai-list');
+      if (!list) return;
+      const acc = loadAIAccounts();
+      const meta = CAI_PROVIDERS[caiCurrentProvider] || CAI_PROVIDERS.groq;
+      const slot = (acc[caiCurrentProvider] || [])[caiCurrentEmailIdx] || { email: '', apiKey: '' };
+      const hint = document.getElementById('cai-provider-hint');
+      if (hint) {
+        hint.innerHTML = '<b>' + meta.label + '</b> · Email ' + (caiCurrentEmailIdx + 1) +
+          ' — isi email (label) + API key (<code>' + meta.keyHint + '</code>), lalu <b>Login / Terapkan</b>.';
+      }
+      list.innerHTML =
+        '<div class="cai-card" style="padding:12px;">' +
+          '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">' + meta.label + ' · Email ' + (caiCurrentEmailIdx + 1) + '</div>' +
+          '<label style="font-size:11px;color:var(--text-muted);">Email (label akun)</label>' +
+          '<input data-f="email" type="email" placeholder="akun' + (caiCurrentEmailIdx + 1) + '@email.com" value="' +
+            String(slot.email || '').replace(/"/g, '&quot;') +
+            '" style="width:100%;margin:4px 0 10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);">' +
+          '<label style="font-size:11px;color:var(--text-muted);">API Key</label>' +
+          '<input data-f="apiKey" type="password" placeholder="' + meta.keyHint + '" value="' +
+            String(slot.apiKey || '').replace(/"/g, '&quot;') +
+            '" style="width:100%;margin:4px 0 0;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);">' +
+          '<p style="margin:10px 0 0;font-size:11px;color:var(--text-muted);">Model otomatis: <code>' + meta.model + '</code> (tidak perlu dipilih)</p>' +
+        '</div>';
+    }
+
     function caiLoginAI() {
-      const slots = saveCustomAISlots();
-      const active = slots.filter(s => s.enabled && String(s.apiKey || '').trim());
-      if (!active.length) {
-        alert('Isi minimal 1 API key (Groq atau GPT) lalu Login lagi.');
+      const acc = loadAIAccounts();
+      const list = document.getElementById('cai-list');
+      const email = (list && list.querySelector('[data-f="email"]')?.value || '').trim();
+      const apiKey = (list && list.querySelector('[data-f="apiKey"]')?.value || '').trim();
+      if (!apiKey) {
+        alert('API key wajib diisi untuk Email ' + (caiCurrentEmailIdx + 1) + '.');
         return;
       }
-      alert('Login AI berhasil.\nAktif: ' + active.map(s => s.name).join(' → ') + '\n\nSemua tombol AI memakai sesi ini.');
+      if (!acc[caiCurrentProvider]) acc[caiCurrentProvider] = caiEmptyAccounts()[caiCurrentProvider];
+      acc[caiCurrentProvider][caiCurrentEmailIdx] = {
+        email: email || ('email' + (caiCurrentEmailIdx + 1)),
+        apiKey,
+        enabled: true
+      };
+      acc.active = { provider: caiCurrentProvider, index: caiCurrentEmailIdx };
+      saveAIAccounts(acc);
+      const label = CAI_PROVIDERS[caiCurrentProvider].label + ' · Email ' + (caiCurrentEmailIdx + 1);
+      if (typeof appendLog === 'function') appendLog('Login AI: aktif → ' + label + (email ? ' (' + email + ')' : ''), 'ok');
+      alert('Login berhasil.\nAktif: ' + label + (email ? '\n' + email : '') + '\n\nSemua tombol AI memakai sesi ini.');
       caiShowPanel('menu');
     }
 
     function caiLogoutAI() {
-      if (!confirm('Logout AI? Key dihapus dari browser ini.')) return;
-      const cleared = CAI_DEFAULTS.map(d => ({ ...d, apiKey: '' }));
-      localStorage.setItem(CAI_STORAGE, JSON.stringify(cleared));
-      try { localStorage.setItem(CAI_SESSION, JSON.stringify({ loggedIn: false, at: Date.now(), providers: [] })); } catch (_) {}
-      try {
-        const s = JSON.parse(localStorage.getItem('gc_custom') || '{}');
-        s.aiKey = '';
-        localStorage.setItem('gc_custom', JSON.stringify(s));
-      } catch (_) {}
-      window.__useCustomAI = false;
-      if (typeof updateAILoginUI === 'function') updateAILoginUI();
-      if (typeof appendLog === 'function') appendLog('Login AI: logout — sesi dihapus', 'warn');
-      alert('Sudah logout. AI tidak aktif sampai login lagi.');
+      if (!confirm('Logout sesi AI aktif? Key di slot Email tetap tersimpan.')) return;
+      const acc = loadAIAccounts();
+      acc.active = null;
+      saveAIAccounts(acc);
+      if (typeof appendLog === 'function') appendLog('Login AI: logout sesi aktif', 'warn');
+      alert('Sesi AI dinonaktifkan. Login lagi lewat Groq/GPT → Email bila perlu.');
       caiShowPanel('menu');
     }
 
     function updateAILoginUI() {
+      const acc = loadAIAccounts();
       let loggedIn = false;
-      let providers = [];
-      try {
-        const slots = loadCustomAISlots().filter(s => s && s.enabled && String(s.apiKey || '').trim());
-        loggedIn = slots.length > 0;
-        providers = slots.map(s => s.name);
-        window.__useCustomAI = loggedIn;
-      } catch (_) {}
+      let label = '';
+      if (acc.active && acc[acc.active.provider] && acc[acc.active.provider][acc.active.index] && acc[acc.active.provider][acc.active.index].apiKey) {
+        loggedIn = true;
+        const meta = CAI_PROVIDERS[acc.active.provider] || { label: acc.active.provider };
+        const email = acc[acc.active.provider][acc.active.index].email;
+        label = meta.label + ' E' + (acc.active.index + 1);
+        if (email) label = meta.label;
+      }
+      window.__useCustomAI = loggedIn;
       const status = document.getElementById('cai-session-status');
       if (status) {
-        status.textContent = loggedIn
-          ? ('Sesi aktif: ' + providers.join(' → ') + ' · semua tombol AI memakai ini')
-          : 'Belum login. Isi key Groq dan/atau GPT lalu Login.';
-        status.style.borderColor = loggedIn ? 'rgba(34,197,94,.45)' : 'var(--border)';
-        status.style.color = loggedIn ? '#86efac' : 'var(--text-muted)';
+        if (loggedIn) {
+          const meta = CAI_PROVIDERS[acc.active.provider];
+          const slot = acc[acc.active.provider][acc.active.index];
+          status.textContent = 'Sesi aktif: ' + meta.label + ' · Email ' + (acc.active.index + 1) +
+            (slot.email ? ' · ' + slot.email : '') + ' — semua tombol AI memakai ini';
+          status.style.borderColor = 'rgba(34,197,94,.45)';
+          status.style.color = '#86efac';
+        } else {
+          status.textContent = 'Belum login. Pilih Groq atau GPT → Email 1–5 → isi email + API key → Login.';
+          status.style.borderColor = 'var(--border)';
+          status.style.color = 'var(--text-muted)';
+        }
       }
       const topBtn = document.getElementById('btn-custom-ai-top');
-      if (topBtn) topBtn.textContent = loggedIn ? ('AI: ' + (providers[0] || 'ON')) : 'Login AI';
+      if (topBtn) topBtn.textContent = loggedIn ? ('AI: ' + label) : 'Login AI';
       const pvBtn = document.getElementById('btn-pv-custom');
-      if (pvBtn) pvBtn.textContent = loggedIn ? ('AI: ' + (providers[0] || 'ON')) : 'Login AI';
+      if (pvBtn) pvBtn.textContent = loggedIn ? ('AI: ' + label) : 'Login AI';
     }
 
-    function renderCustomAISlots(slots) {
-      const list = document.getElementById('cai-list');
-      if (!list) return;
-      list.innerHTML = '';
-      slots.forEach((slot, idx) => {
-        const next = slots[idx + 1];
-        const limitNote = next
-          ? ('Limit → gunakan API AI No.' + (next.name || (idx + 2)))
-          : (idx === slots.length - 1 ? 'Slot terakhir (tidak ada failover berikutnya)' : '');
-        const card = document.createElement('div');
-        card.className = 'cai-card';
-        card.innerHTML =
-          '<div class="cai-card-top">' +
-            '<span class="cai-badge">' + (slot.name || (idx + 1)) + '</span>' +
-            '<label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;"><input type="checkbox" data-f="enabled"' + (slot.enabled !== false ? ' checked' : '') + '> Aktif</label>' +
-            '<button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="removeCustomAISlot(' + idx + ')">Hapus</button>' +
-          '</div>' +
-          '<div class="cai-card-row">' +
-            '<div><label>Nama</label><input data-f="name" value="' + escapeHtmlAttr(slot.name || String(idx + 1)) + '" placeholder="' + (idx + 1) + '"></div>' +
-            '<div><label>Model</label><select data-f="model">' + caiModelOptionsHtml(slot.model) + '</select></div>' +
-          '</div>' +
-          '<label>Base URL (OpenAI-compatible)</label>' +
-          '<input data-f="baseUrl" value="' + escapeHtmlAttr(slot.baseUrl || '') + '" placeholder="https://generativelanguage.googleapis.com/v1beta/openai">' +
-          '<label>API Key</label>' +
-          '<input data-f="apiKey" type="password" value="' + escapeHtmlAttr(slot.apiKey || '') + '" placeholder="gsk_... / sk-...">' +
-          (limitNote ? '<div class="cai-limit-note">' + limitNote + '</div>' : '');
-        list.appendChild(card);
-      });
-    }
-
-    function escapeHtmlAttr(s) {
-      return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-    }
-
-    function caiModelOptionsHtml(selected) {
-      const opts = (typeof CAI_MODEL_OPTIONS !== 'undefined' && CAI_MODEL_OPTIONS.length)
-        ? CAI_MODEL_OPTIONS.slice()
-        : ['gemini-2.0-flash', 'gemini-1.5-flash', 'openai/gpt-oss-20b'];
-      const sel = selected || opts[0];
-      if (sel && !opts.includes(sel)) opts.unshift(sel);
-      return opts.map(function (m) {
-        return '<option value="' + escapeHtmlAttr(m) + '"' + (m === sel ? ' selected' : '') + '>' + escapeHtmlAttr(m) + '</option>';
-      }).join('');
-    }
-
+    function addCustomAISlot() { /* no-op: fixed Email 1-5 */ }
+    function caiAddNewKey() { /* removed */ }
 
     try { window.__useCustomAI = loadCustomAISlots().some(s => s.enabled && s.apiKey); } catch (_) { window.__useCustomAI = false; }
     try { setTimeout(function () { if (typeof updateAILoginUI === 'function') updateAILoginUI(); }, 0); } catch (_) {}
+
 
     function openCustomAIManager() {
       const el = document.getElementById('custom-ai-manager');
@@ -5000,193 +5085,39 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       const title = document.getElementById('cai-title');
       const sub = document.getElementById('cai-sub');
       const box = document.querySelector('#custom-ai-manager .cai-box');
+      if (which === 'groq' || which === 'gpt') {
+        caiCurrentProvider = which;
+        which = 'apply';
+      }
       if (menu) menu.style.display = which === 'menu' ? 'flex' : 'none';
       if (pApply) pApply.style.display = which === 'apply' ? 'block' : 'none';
       if (pChat) {
         pChat.style.display = which === 'chat' ? 'flex' : 'none';
         pChat.classList.toggle('is-open', which === 'chat');
       }
-      if (pKey) pKey.style.display = which === 'addkey' ? 'block' : 'none';
+      if (pKey) pKey.style.display = 'none';
       if (box) box.classList.toggle('cai-mode-chat', which === 'chat');
       if (which === 'menu') {
         if (title) title.textContent = 'Login AI';
-        if (sub) sub.textContent = 'Sesi Groq + GPT';
+        if (sub) sub.textContent = 'Groq · GPT · Email 1–5';
         if (typeof updateAILoginUI === 'function') updateAILoginUI();
       } else if (which === 'apply') {
-        if (title) title.textContent = '1 · Login / Atur Key';
-        if (sub) sub.textContent = 'Groq dulu, GPT cadangan · failover otomatis';
-        // Jika storage masih default lama / kosong, tampilkan template Groq+GPT
-        let slots = loadCustomAISlots();
-        if (!slots.length || slots.every(s => !String(s.apiKey || '').trim() && /^(1|2|3)$/.test(String(s.name || '')))) {
-          slots = CAI_DEFAULTS.map(d => ({ ...d }));
-        }
-        renderCustomAISlots(slots);
+        const meta = CAI_PROVIDERS[caiCurrentProvider] || CAI_PROVIDERS.groq;
+        if (title) title.textContent = meta.label + ' · Email 1–5';
+        if (sub) sub.textContent = 'Login / terapkan ke semua tombol AI';
+        renderEmailTabs();
+        renderCustomAISlots();
       } else if (which === 'chat') {
-        if (title) title.textContent = '2 · Chat';
-        if (sub) sub.textContent = 'Pakai AI yang sudah login';
+        if (title) title.textContent = 'Chat AI';
+        if (sub) sub.textContent = 'Pakai sesi yang sudah login';
         if (!hasCustomAIKeys()) {
-          alert('Belum login AI. Isi key Groq/GPT dulu.');
-          caiShowPanel('apply');
+          alert('Belum login AI. Pilih Groq atau GPT → Email 1–5 dulu.');
+          caiShowPanel('menu');
           return;
         }
         const log = document.getElementById('cai-chat-log');
         if (log) setTimeout(function () { log.scrollTop = log.scrollHeight; }, 50);
-      } else if (which === 'addkey') {
-        if (title) title.textContent = 'Slot tambahan';
-        if (sub) sub.textContent = 'Opsional';
-        const nk = document.getElementById('cai-new-key');
-        if (nk) nk.value = '';
-        const nn = document.getElementById('cai-new-name');
-        if (nn) nn.value = '';
       }
-    }
-
-    function caiAppendChat(role, text) {
-      const log = document.getElementById('cai-chat-log');
-      if (!log) return;
-      const div = document.createElement('div');
-      div.className = role === 'user' ? 'cai-msg-user' : 'cai-msg-ai';
-      div.textContent = (role === 'user' ? 'Anda: ' : 'AI: ') + text;
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
-    }
-
-    function caiExtractCodeBlock(text) {
-      const m = String(text || '').match(/```(?:[\w.+-]+)?\n([\s\S]*?)```/);
-      return m ? m[1].replace(/\s+$/, '') : null;
-    }
-
-    async function caiSendChat() {
-      const input = document.getElementById('cai-chat-input');
-      const sendBtn = document.getElementById('cai-chat-send');
-      const applyEdit = document.getElementById('cai-apply-edit');
-      const q = (input && input.value || '').trim();
-      if (!q) { if (input) input.focus(); return; }
-      caiAppendChat('user', q);
-      if (input) input.value = '';
-      if (sendBtn) sendBtn.disabled = true;
-      try {
-        /* Ambil konteks file aktif; jika kosong tapi ZIP ada → buka kandidat terbaik */
-        async function resolveWorkspaceContext() {
-          let file = (typeof currentFile !== 'undefined' && currentFile) ? currentFile : null;
-          let code = '';
-          if (file && typeof editor !== 'undefined' && editor) {
-            try { code = editor.getValue() || ''; } catch (_) {}
-          }
-          if (file && !code && openFiles && openFiles.has(file)) code = openFiles.get(file) || '';
-          if (file && !code && zipFileMap && zipFileMap[file]) {
-            try { code = await zipFileMap[file].async('string'); } catch (_) {}
-          }
-          if ((!file || !code) && zipFileMap && Object.keys(zipFileMap).length) {
-            var keys = Object.keys(zipFileMap);
-            var prefer = keys.filter(function (k) {
-              return /(^|\/)index\.html?$/i.test(k) || /(^|\/)main\.(js|mjs)$/i.test(k) || /(^|\/)app\.(js|mjs)$/i.test(k);
-            });
-            if (!prefer.length) {
-              prefer = keys.filter(function (k) { return /\.(html?|js|mjs|json)$/i.test(k); });
-            }
-            for (var i = 0; i < prefer.length && i < 8; i++) {
-              var cand = prefer[i];
-              try {
-                var txt = openFiles && openFiles.has(cand) ? openFiles.get(cand) : await zipFileMap[cand].async('string');
-                if (txt && txt.length > 20) {
-                  file = cand;
-                  code = txt;
-                  if (typeof openFile === 'function') {
-                    try { openFile(cand, txt, txt.length); } catch (_) {}
-                  } else {
-                    currentFile = cand;
-                    if (openFiles) openFiles.set(cand, txt);
-                    if (editor) { try { editor.setValue(txt); } catch (_) {} }
-                  }
-                  break;
-                }
-              } catch (_) {}
-            }
-          }
-          var list = [];
-          try {
-            list = Object.keys(zipFileMap || {}).filter(function (k) {
-              return k && !k.endsWith('/') && /\.(html?|js|mjs|json|css)$/i.test(k);
-            }).slice(0, 40);
-          } catch (_) {}
-          return { file: file, code: code || '', list: list, hasZip: !!(currentZip || (zipFileMap && Object.keys(zipFileMap).length)) };
-        }
-
-        const ctx = await resolveWorkspaceContext();
-        const hasFile = !!(ctx.file && ctx.code);
-        const filename = hasFile ? ctx.file : '(tidak ada file teks di Workspace)';
-        const code = ctx.code;
-
-        const system = [
-          'Anda asisten kode di Game Collector Pro (Custom AI) di Workspace.',
-          'Jawab ringkas dalam Bahasa Indonesia.',
-          'Konteks file/ZIP sudah dilampirkan sistem — JANGAN bilang file tidak ditemukan jika ada blok KODE SAAT INI atau DAFTAR FILE.',
-          'Jika user meminta edit/perbaiki/ubah/error dan ada kode file, kembalikan FILE LENGKAP yang sudah diperbaiki dalam SATU blok markdown code fence (```).',
-          'Jangan potong file. Pertahankan bagian yang tidak terkait permintaan.',
-          'Jika hanya tanya (bukan edit), jawab tanpa code fence penuh kecuali cuplikan pendek.'
-        ].join(' ');
-
-        var userMsg = 'PERMINTAAN:\n' + q + '\n';
-        if (hasFile) {
-          userMsg += '\nFILE AKTIF: ' + filename + '\n\nKODE SAAT INI:\n```\n' + code.slice(0, 28000) + '\n```\n';
-        } else if (ctx.hasZip) {
-          userMsg += '\nZIP sudah diload. Belum ada file teks yang bisa dibaca otomatis.\nDAFTAR FILE (sample):\n' + (ctx.list.join('\n') || '(kosong)') + '\n';
-        } else {
-          userMsg += '\nBelum ada ZIP/file di Workspace. Minta user Load File / Collect dulu.\n';
-        }
-
-        const { content, slotName } = await callCustomAIWithFailover([
-          { role: 'system', content: system },
-          { role: 'user', content: userMsg }
-        ], { max_tokens: 4000 });
-        caiAppendChat('ai', content + (slotName ? '\n\n(via API No.' + slotName + ')' : ''));
-        const wantApply = applyEdit ? applyEdit.checked : true;
-        const newCode = caiExtractCodeBlock(content);
-        if (wantApply && newCode && hasFile) {
-          /* Langsung terapkan ke editor + ZIP (checkbox sudah ON) — tanpa confirm ekstra */
-          try {
-            if (editor) editor.setValue(newCode);
-            if (typeof openFiles !== 'undefined' && openFiles) openFiles.set(ctx.file, newCode);
-            currentFile = ctx.file;
-            if (currentZip) {
-              try { currentZip.file(ctx.file, newCode); } catch (_) {}
-            }
-            if (zipFileMap && currentZip) {
-              try { zipFileMap[ctx.file] = currentZip.file(ctx.file); } catch (_) {}
-            }
-            if (typeof appendLog === 'function') appendLog('Custom AI: edit diterapkan → ' + ctx.file, 'ok');
-            caiAppendChat('ai', '✓ Perubahan diterapkan ke: ' + ctx.file + ' (sudah masuk buffer ZIP; Download ZIP / Save bila perlu).');
-          } catch (applyErr) {
-            caiAppendChat('ai', 'Gagal menerapkan ke editor: ' + (applyErr.message || applyErr));
-          }
-        } else if (wantApply && newCode && !hasFile) {
-          caiAppendChat('ai', '(AI memberi kode, tapi tidak ada file target. Buka file di Explorer lalu kirim ulang.)');
-        }
-      } catch (e) {
-        caiAppendChat('ai', 'Gagal: ' + (e.message || e));
-        if (typeof appendLog === 'function') appendLog('Custom AI Chat: ' + (e.message || e), 'err');
-      } finally {
-        if (sendBtn) sendBtn.disabled = false;
-      }
-    }
-
-    function caiAddNewKey() {
-      const key = (document.getElementById('cai-new-key')?.value || '').trim();
-      if (!key) { alert('Isi API Key dulu.'); return; }
-      const slots = loadCustomAISlots();
-      const name = (document.getElementById('cai-new-name')?.value || '').trim() || String(slots.length + 1);
-      const baseUrl = (document.getElementById('cai-new-base')?.value || CAI_GEMINI_BASE).trim().replace(/\/+$/, '');
-      const model = (document.getElementById('cai-new-model')?.value || 'gemini-2.0-flash').trim();
-      slots.push({ name: name, baseUrl: baseUrl, apiKey: key, model: model, enabled: true });
-      localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
-      window.__useCustomAI = true;
-      if (typeof appendLog === 'function') appendLog('Custom AI: key baru masuk slot No.' + name, 'ok');
-      alert('Key tersimpan di slot No.' + name + '.');
-      // clear and go to apply list
-      const nk = document.getElementById('cai-new-key');
-      if (nk) nk.value = '';
-      caiShowPanel('apply');
     }
 
     function closeCustomAIManager() {
