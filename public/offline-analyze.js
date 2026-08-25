@@ -274,7 +274,9 @@
         "sandbox/mock-api.js"
       ]
     };
-    files.forEach(function (f) {
+    // Terima array files ATAU objek report { files: [...] }
+    var list = Array.isArray(files) ? files : (files && Array.isArray(files.files) ? files.files : []);
+    list.forEach(function (f) {
       const act = f.userAction || f.action;
       if (act === "KEEP") plan.keep.push(f.path);
       else if (act === "REVIEW") plan.review.push(f.path);

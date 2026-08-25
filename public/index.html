@@ -8748,7 +8748,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         // —— 5. Change-plan + sandbox mock ——
         setLoading(true, 'Pipeline Offline', '5/6 Change-plan & sandbox…');
         var plan = GCOfflineAnalyze.buildChangePlan
-          ? GCOfflineAnalyze.buildChangePlan(report)
+          ? GCOfflineAnalyze.buildChangePlan(report.files || report)
           : (report.changePlan || {});
         currentZip.file('pipeline/change-plan.json', JSON.stringify(plan, null, 2));
         currentZip.file('pipeline/analysis-report.json', JSON.stringify(report, null, 2));
