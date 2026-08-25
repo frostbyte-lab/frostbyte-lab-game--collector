@@ -3449,6 +3449,11 @@
               <span class="activity-card-title">Console</span>
               <span class="activity-card-desc">Log gaya terminal (status collect / AI). Bukan instal paket sistem — app ini berjalan di browser/Worker.</span>
             </button>
+            <button type="button" class="activity-card activity-card-secret" id="btn-activity-secret" onclick="openActivitySecret()">
+              <span class="activity-card-icon" aria-hidden="true">🔐</span>
+              <span class="activity-card-title">Secret Code</span>
+              <span class="activity-card-desc">Pengingat Sandbox mock API — masukkan kode, lalu simpan template ke Workspace</span>
+            </button>
           </div>
 
           <details class="fb-portfolio">
@@ -5081,6 +5086,70 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (chat) chat.hidden = false;
       actRecord('nav', 'Buka Chat AI', 'User membuka Chat AI dari Activity');
     }
+    /** Secret Code — password gate + Sandbox mock reminder (Activity only) */
+    var ACT_SECRET_CODE = '75752566';
+    var ACT_SANDBOX_MOCK = {
+      version: 1,
+      generatedAt: '2026-08-25T10:00:00.000Z',
+      note: 'Manual mock untuk Sandbox',
+      totals: { endpoints: 0, withSnapshot: 0 },
+      endpoints: [],
+      routes: []
+    };
+    function openActivitySecret() {
+      var pw = window.prompt('Secret Code — masukkan password:');
+      if (pw === null) return;
+      if (String(pw).trim() !== ACT_SECRET_CODE) {
+        alert('Kode salah.');
+        try { if (typeof actRecord === 'function') actRecord('secret', 'Secret Code: gagal', 'Password salah'); } catch (_) {}
+        return;
+      }
+      var jsonText = JSON.stringify(ACT_SANDBOX_MOCK, null, 2);
+      var msg =
+        'Kode benar.\\n\\nPengingat Sandbox mock:\\n' +
+        '- File: sandbox-mock-api.json\\n' +
+        '- note: Manual mock untuk Sandbox\\n' +
+        '- endpoints/routes kosong (template)\\n\\n' +
+        'Simpan template ini ke Workspace ZIP sekarang?';
+      var save = window.confirm(msg);
+      try {
+        if (typeof actRecord === 'function') {
+          actRecord('secret', 'Secret Code: OK — pengingat Sandbox mock', jsonText);
+        }
+      } catch (_) {}
+      if (save) {
+        try {
+          if (typeof currentZip !== 'undefined' && currentZip) {
+            currentZip.file('sandbox-mock-api.json', jsonText);
+            if (typeof zipFileMap !== 'undefined') {
+              zipFileMap['sandbox-mock-api.json'] = currentZip.file('sandbox-mock-api.json');
+            }
+            if (typeof openFiles !== 'undefined' && openFiles) openFiles.set('sandbox-mock-api.json', jsonText);
+            if (typeof renderFileTree === 'function') {
+              try { renderFileTree(Object.keys(zipFileMap || {})); } catch (_) {}
+            }
+            if (typeof appendLog === 'function') appendLog('Secret: sandbox-mock-api.json ditambahkan ke ZIP Workspace', 'ok');
+            alert('Tersimpan: sandbox-mock-api.json di Workspace.\\nDownload ZIP untuk membawa file ini.');
+          } else {
+            // Tanpa ZIP: unduh file saja sebagai pengingat
+            var blob = new Blob([jsonText], { type: 'application/json' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'sandbox-mock-api.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            alert('ZIP belum diload. File pengingat diunduh: sandbox-mock-api.json');
+          }
+        } catch (e) {
+          alert('Gagal simpan: ' + (e && e.message ? e.message : e));
+        }
+      } else {
+        alert('Pengingat dicatat di Histories (detail JSON).');
+      }
+    }
+    window.openActivitySecret = openActivitySecret;
+
     function openActivityTerminal() {
       var hub = document.getElementById('activity-hub');
       var chat = document.getElementById('activity-chat-view');
