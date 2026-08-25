@@ -2898,6 +2898,16 @@
 
         <div class="collect-card" style="padding: 16px;">
           <div id="status" class="status-box">Status: Ready</div>
+          <div id="gc-collect-meta" class="gc-collect-meta hidden">
+            <div class="gc-cm-row"><span>Kelengkapan</span><strong id="gc-cm-pct">0%</strong></div>
+            <div class="gc-cm-bar"><i id="gc-cm-bar" style="width:0%"></i></div>
+            <div class="gc-cm-files" id="gc-cm-files">—</div>
+            <div class="gc-cm-name-row">
+              <label for="gc-dl-name">Nama file unduhan</label>
+              <input type="text" id="gc-dl-name" value="game-resources.zip" spellcheck="false" />
+            </div>
+            <div class="gc-cm-checklist" id="gc-cm-checklist"></div>
+          </div>
           <div id="gc-live-capture" class="gc-live-capture hidden">
             <div class="gc-live-head">
               <span class="title">File tertangkap (live)</span>
@@ -8692,6 +8702,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       }
 
       statusEl.textContent = 'Status: Memulai Collect via GitHub · wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + '...';
+      try { gcCollectToastShow('Collect via GitHub…'); gcUpdateCollectProgress({ pct: 5, fileCount: 0, items: GC_PACK_CHECKLIST.map(function(c){ return { label: c.label, ok: false, optional: !!c.optional }; }) }, 'antrian'); } catch (_) {}
 
       try {
         const res = await fetch('/api/github/collect', {
@@ -8747,6 +8758,11 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           const phase = data.phase || data.current_step || '';
           const label = phase || data.status || '';
           statusEl.textContent = 'Status: ' + data.status + (label ? ' — ' + label : '');
+            try {
+              var soft = data.status === 'completed' ? 90 : (data.status === 'in_progress' ? 55 : 25);
+              gcCollectToastShow('Collect: ' + data.status);
+              gcUpdateCollectProgress({ pct: soft, fileCount: 0, items: GC_PACK_CHECKLIST.map(function(c){ return { label: c.label, ok: false, optional: !!c.optional }; }) }, label || data.status);
+            } catch (_) {}
 
           if (data.status === 'completed') {
             clearInterval(_ghPollTimer);
@@ -8776,13 +8792,25 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
                 var sizeMb = (blob.size / 1024 / 1024).toFixed(1);
                 // 1) Unduh file ke HP (cadangan kalau auto-load Workspace gagal di Android)
                 try {
-                  var a = document.createElement('a');
-                  a.href = URL.createObjectURL(blob);
-                  a.download = 'game-resources.zip';
-                  document.body.appendChild(a);
-                  a.click();
-                  setTimeout(function () { try { URL.revokeObjectURL(a.href); } catch (_) {} }, 60000);
-                  a.remove();
+                  try { gcCollectToastShow('Mengunduh & cek paket…'); } catch (_) {}
+                  try {
+                    if (typeof JSZip !== 'undefined') {
+                      var z = await JSZip.loadAsync(blob);
+                      var rep = await gcInspectZipCompleteness(z);
+                      gcUpdateCollectProgress(rep, 'sebelum unduh');
+                    }
+                  } catch (_) {}
+                  var savedName = 'game-resources.zip';
+                  try {
+                    savedName = (await gcDownloadBlobNamed(blob, 'game-resources.zip')) || 'game-resources.zip';
+                  } catch (_) {
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'game-resources.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                  }
                 } catch (_) {}
                 // 2) Coba load ke Workspace
                 var loadedWs = false;
@@ -8802,8 +8830,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
                 } catch (_) { loadedWs = false; }
                 if (loadedWs) {
                   statusEl.textContent = 'Status: Selesai — ZIP ' + sizeMb + ' MB diunduh & dimuat ke Workspace';
+                try { setTimeout(gcCollectToastHide, 2500); } catch (_) {}
                 } else {
                   statusEl.textContent = 'Status: Selesai — ZIP ' + sizeMb + ' MB diunduh ke Download. Buka Workspace → Load ZIP manual.';
+                try { setTimeout(gcCollectToastHide, 2500); } catch (_) {}
                 }
               } catch (dlErr) {
                 var msg = (dlErr && dlErr.name === 'AbortError')
@@ -8826,6 +8856,143 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         }
       }, 5000);
     }
+
+
+    /* ===== Collect completeness + toast + rename download ===== */
+    var GC_PACK_CHECKLIST = [
+      { id: 'index', label: 'index.html (entry)', test: function (names) { return names.some(function (n) { return /(^|\/)index\.html?$/i.test(n); }); } },
+      { id: 'js', label: 'File JS game', test: function (names) { return names.some(function (n) { return /\.(js|mjs|cjs)$/i.test(n); }); } },
+      { id: 'css', label: 'CSS (jika ada)', test: function (names) { return names.some(function (n) { return /\.css$/i.test(n); }); }, optional: true },
+      { id: 'assets', label: 'Asset (gambar/audio/font/atlas)', test: function (names) { return names.some(function (n) { return /\.(png|jpe?g|gif|webp|svg|mp3|ogg|wav|woff2?|ttf|atlas|json)$/i.test(n) && !/api-map|manifest|keterangan|analisis/i.test(n); }); } },
+      { id: 'apimap', label: 'api-map.json (endpoint + snapshot)', test: function (names, meta) { return !!(meta && meta.apiMapOk); } },
+      { id: 'apidata', label: 'Data API collect (balance/session/…)', test: function (names) { return names.some(function (n) { return /balance|session|verify|gameinfo|wallet|\/api\//i.test(n); }); }, optional: true },
+      { id: 'manifest', label: 'manifest.json', test: function (names) { return names.some(function (n) { return /(^|\/)manifest\.json$/i.test(n); }); } },
+      { id: 'ket', label: 'keterangan.json / KETERANGAN.md', test: function (names) { return names.some(function (n) { return /keterangan/i.test(n); }); }, optional: true },
+      { id: 'analisis', label: 'analisis.json', test: function (names) { return names.some(function (n) { return /(^|\/)analisis\.json$/i.test(n); }); }, optional: true }
+    ];
+
+    async function gcInspectZipCompleteness(zipOrNames) {
+      var names = [];
+      var meta = { apiMapOk: false, fileCount: 0 };
+      try {
+        if (Array.isArray(zipOrNames)) {
+          names = zipOrNames.slice();
+        } else if (zipOrNames && zipOrNames.files) {
+          names = Object.keys(zipOrNames.files).filter(function (k) {
+            return zipOrNames.files[k] && !zipOrNames.files[k].dir;
+          });
+        } else if (typeof zipFileMap !== 'undefined' && zipFileMap) {
+          names = Object.keys(zipFileMap);
+        }
+        meta.fileCount = names.length;
+        var ap = names.find(function (n) { return /(^|\/)api-map\.json$/i.test(n); });
+        if (ap && zipOrNames && zipOrNames.files && zipOrNames.files[ap]) {
+          try {
+            var raw = await zipOrNames.files[ap].async('string');
+            var j = JSON.parse(raw);
+            meta.apiMapOk = !!(j && j.endpoints && j.endpoints.length > 0);
+          } catch (_) { meta.apiMapOk = false; }
+        } else if (ap && typeof zipFileMap !== 'undefined' && zipFileMap[ap]) {
+          try {
+            var raw2 = await zipFileMap[ap].async('string');
+            var j2 = JSON.parse(raw2);
+            meta.apiMapOk = !!(j2 && j2.endpoints && j2.endpoints.length > 0);
+          } catch (_) {}
+        }
+      } catch (_) {}
+      var items = GC_PACK_CHECKLIST.map(function (c) {
+        var ok = false;
+        try { ok = !!c.test(names, meta); } catch (_) { ok = false; }
+        return { id: c.id, label: c.label, ok: ok, optional: !!c.optional };
+      });
+      var required = items.filter(function (x) { return !x.optional; });
+      var okReq = required.filter(function (x) { return x.ok; }).length;
+      var pct = required.length ? Math.round((okReq / required.length) * 100) : 0;
+      return { names: names, meta: meta, items: items, pct: pct, fileCount: meta.fileCount };
+    }
+
+    function gcCollectToastShow(title) {
+      var el = document.getElementById('gc-collect-toast');
+      if (!el) return;
+      el.hidden = false;
+      var t = document.getElementById('gc-ct-title');
+      if (t) t.textContent = title || 'Collect berjalan…';
+    }
+    function gcCollectToastHide() {
+      var el = document.getElementById('gc-collect-toast');
+      if (el) el.hidden = true;
+    }
+    function gcUpdateCollectProgress(report, statusLabel) {
+      if (!report) return;
+      var pct = report.pct || 0;
+      var meta = document.getElementById('gc-collect-meta');
+      if (meta) meta.classList.remove('hidden');
+      var p1 = document.getElementById('gc-cm-pct');
+      var b1 = document.getElementById('gc-cm-bar');
+      var f1 = document.getElementById('gc-cm-files');
+      var cl = document.getElementById('gc-cm-checklist');
+      if (p1) p1.textContent = pct + '%';
+      if (b1) b1.style.width = pct + '%';
+      if (f1) f1.textContent = (report.fileCount || 0) + ' file dalam paket' + (statusLabel ? ' · ' + statusLabel : '');
+      if (cl) {
+        cl.innerHTML = (report.items || []).map(function (it) {
+          return '<div class="' + (it.ok ? 'ok' : 'no') + '">' + (it.ok ? '✓' : '·') + ' ' + it.label + (it.optional && !it.ok ? ' (opsional)' : '') + '</div>';
+        }).join('');
+      }
+      var tp = document.getElementById('gc-ct-pct');
+      var tb = document.getElementById('gc-ct-bar');
+      var tl = document.getElementById('gc-ct-list');
+      var tn = document.getElementById('gc-ct-note');
+      if (tp) tp.textContent = pct + '%';
+      if (tb) tb.style.width = pct + '%';
+      if (tl) {
+        tl.innerHTML = (report.items || []).map(function (it) {
+          return '<li class="' + (it.ok ? 'ok' : 'no') + '">' + (it.ok ? '✓' : '○') + ' ' + it.label + '</li>';
+        }).join('');
+      }
+      if (tn) {
+        tn.textContent = pct >= 100
+          ? 'Paket inti lengkap — siap unduh / Workspace.'
+          : 'Masih ada item inti yang kurang (lihat list). Collect/resume atau cek api-map.';
+      }
+      var st = document.getElementById('status');
+      if (st && statusLabel) {
+        var tag = pct >= 100 ? 'OFFLINE READY' : 'OFFLINE PARTIAL';
+        st.textContent = 'Status: ' + tag + ' · ' + pct + '% · ' + (report.fileCount || 0) + ' file' + (statusLabel ? ' — ' + statusLabel : '');
+      }
+    }
+    function gcGetDownloadName() {
+      var inp = document.getElementById('gc-dl-name');
+      var n = (inp && inp.value || 'game-resources.zip').trim() || 'game-resources.zip';
+      if (!/\.zip$/i.test(n)) n += '.zip';
+      return n.replace(/[\\/:*?"<>|]+/g, '_');
+    }
+    async function gcDownloadBlobNamed(blob, fallbackName) {
+      var name = gcGetDownloadName() || fallbackName || 'game-resources.zip';
+      try {
+        var suggested = window.prompt('Nama file sebelum unduh:', name);
+        if (suggested === null) return null;
+        suggested = String(suggested || name).trim() || name;
+        if (!/\.zip$/i.test(suggested)) suggested += '.zip';
+        suggested = suggested.replace(/[\\/:*?"<>|]+/g, '_');
+        var inp = document.getElementById('gc-dl-name');
+        if (inp) inp.value = suggested;
+        name = suggested;
+      } catch (_) {}
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { try { URL.revokeObjectURL(a.href); } catch (_) {} }, 60000);
+      a.remove();
+      return name;
+    }
+    window.gcCollectToastHide = gcCollectToastHide;
+    window.gcUpdateCollectProgress = gcUpdateCollectProgress;
+    window.gcInspectZipCompleteness = gcInspectZipCompleteness;
+    window.gcDownloadBlobNamed = gcDownloadBlobNamed;
+
 
     function clearStatus() {
       if (_ghPollTimer) {
@@ -9082,11 +9249,56 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       .act-chat-actions .btn { font-size:11px !important; padding:6px 8px !important; }
     }
 
+
+    .gc-collect-meta { margin-top:10px; padding:12px; border-radius:10px; border:1px solid var(--border); background:rgba(15,23,42,.6); }
+    .gc-collect-meta.hidden { display:none !important; }
+    .gc-cm-row { display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--text-muted); margin-bottom:6px; }
+    .gc-cm-row strong { color:var(--accent); font-size:16px; }
+    .gc-cm-bar, .gc-ct-bar { height:6px; border-radius:99px; background:#1e293b; overflow:hidden; margin-bottom:8px; }
+    .gc-cm-bar i, .gc-ct-bar i { display:block; height:100%; background:linear-gradient(90deg,#2dd4bf,#5ee1c0); border-radius:99px; transition:width .25s ease; }
+    .gc-cm-files { font-size:12px; color:#e2e8f0; margin-bottom:8px; word-break:break-word; }
+    .gc-cm-name-row { display:flex; flex-direction:column; gap:4px; margin-bottom:8px; }
+    .gc-cm-name-row label { font-size:11px; color:var(--text-muted); }
+    .gc-cm-name-row input {
+      border-radius:8px; border:1px solid var(--border); background:#0f172a; color:var(--text);
+      padding:8px 10px; font-size:13px;
+    }
+    .gc-cm-checklist { display:grid; gap:4px; font-size:11px; color:#94a3b8; max-height:140px; overflow:auto; }
+    .gc-cm-checklist .ok { color:#4ade80; }
+    .gc-cm-checklist .no { color:#fbbf24; }
+    .gc-collect-toast {
+      position:fixed; top:12px; left:12px; z-index:12000; width:min(320px, calc(100vw - 24px));
+      background:#0f172a; border:1px solid rgba(94,225,192,.35); border-radius:12px;
+      box-shadow:0 12px 40px rgba(0,0,0,.45); padding:12px 14px; color:#e2e8f0;
+    }
+    .gc-collect-toast[hidden] { display:none !important; }
+    .gc-ct-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+    .gc-ct-head strong { font-size:13px; }
+    .gc-ct-x { border:0; background:transparent; color:#94a3b8; font-size:18px; cursor:pointer; line-height:1; }
+    .gc-ct-pct { font-size:20px; font-weight:700; color:var(--accent); margin-bottom:4px; }
+    .gc-ct-list { margin:8px 0 0; padding:0 0 0 16px; font-size:11px; line-height:1.45; color:#94a3b8; max-height:180px; overflow:auto; }
+    .gc-ct-list li.ok { color:#4ade80; }
+    .gc-ct-list li.no { color:#fbbf24; }
+    .gc-ct-note { margin:8px 0 0; font-size:11px; color:#64748b; }
+
 </style>
 <script>(function(){var a=[],s=null,o=window.appendLog;function add(v){var t=String(v||""),u=t.toLowerCase(),k=u.indexOf("python")>=0||u.indexOf("numpy")>=0?"PY3":u.indexOf(".css")>=0?"CSS":u.indexOf(".html")>=0||u.indexOf("tag")>=0?"HTML":u.indexOf("fetch")>=0||u.indexOf("404")>=0?"NET":"JS";var f="runtime output",m=t.match(/[A-Za-z0-9_./-]+\.(html?|css|m?js|py3?)/i);if(m)f=m[0];return{kind:k,file:f,title:t,detail:t}}function draw(){var box=document.getElementById("preview-diagnostics-list"),q=document.getElementById("preview-log-filter");if(!box)return;var n=q?q.value.toLowerCase():"",v=a.filter(function(x){return!n||(x.kind+" "+x.file+" "+x.title).toLowerCase().indexOf(n)>=0});box.innerHTML=v.length?v.map(function(x){return"<button type=\"button\" class=\"preview-diagnostic"+ (x===s?" active":"") +" data-i=\""+a.indexOf(x)+"\"><b class=\"preview-diagnostic-kind\">"+x.kind+"</b><span><strong class=\"preview-diagnostic-title\">"+x.title+"</strong><small class=\"preview-diagnostic-meta\">"+x.file+"</small></span></button>"}).join(""):"<div style=\"padding:18px;color:var(--text-muted)\">No diagnostics yet.</div>";Array.prototype.forEach.call(box.querySelectorAll("[data-i]"),function(b){b.onclick=function(){s=a[Number(b.getAttribute("data-i"))];var d=document.getElementById("preview-error-detail");if(d)d.textContent=s.detail+"\n\nFile: "+s.file;draw()}})}window.appendLog=function(v){if(typeof o==="function")o.apply(this,arguments);s=add(v);a.push(s);draw()};var sw=window.switchPreviewMode;window.switchPreviewMode=function(m){var r=sw?sw.apply(this,arguments):null,w=document.querySelector("#preview-mode .preview-workspace");if(w)w.classList.toggle("preview-web",m==="web");return r};var f=document.getElementById("preview-log-filter");if(f)f.oninput=draw;var c=document.getElementById("preview-log-clear");if(c)c.onclick=function(){a=[];s=null;draw()};draw()})();</script>
 
   <!-- ANALISA GAME popups -->
-  <div id="gc-oa-summary" class="gc-oa-overlay" role="dialog" aria-modal="true">
+  
+  <!-- Collect progress toast (kiri atas) -->
+  <div id="gc-collect-toast" class="gc-collect-toast" hidden>
+    <div class="gc-ct-head">
+      <strong id="gc-ct-title">Collect berjalan…</strong>
+      <button type="button" class="gc-ct-x" onclick="gcCollectToastHide()" aria-label="Tutup">×</button>
+    </div>
+    <div class="gc-ct-pct" id="gc-ct-pct">0%</div>
+    <div class="gc-ct-bar"><i id="gc-ct-bar" style="width:0%"></i></div>
+    <ul class="gc-ct-list" id="gc-ct-list"></ul>
+    <p class="gc-ct-note" id="gc-ct-note">Memastikan paket lengkap sebelum unduh…</p>
+  </div>
+
+<div id="gc-oa-summary" class="gc-oa-overlay" role="dialog" aria-modal="true">
     <div class="gc-oa-modal">
       <h3>ANALISA OFFLINE GAME</h3>
       <p style="margin:0;font-size:13px;color:#94a3b8;">Game dianalisa. Mode tujuan: <b style="color:#e2e8f0">OFFLINE SANDBOX</b></p>
