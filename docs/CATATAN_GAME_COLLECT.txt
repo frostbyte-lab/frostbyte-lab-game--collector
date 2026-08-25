@@ -1,0 +1,151 @@
+================================================================================
+CATATAN GAME COLLECT — Game Collector Pro
+================================================================================
+Repo: frostbyte-lab/frostbyte-lab-game--collector
+Update: 2026-08-26
+
+--------------------------------------------------------------------------------
+1. APA ITU GAME COLLECT
+--------------------------------------------------------------------------------
+Collect = mengambil resource CLIENT-SIDE yang dikirim ke browser saat membuka
+URL game:
+
+  - HTML / launcher (index.html)
+  - JavaScript (engine, UI, logic client)
+  - CSS
+  - Gambar, audio, font, atlas
+  - Sebagian response XHR/fetch (snapshot API)
+  - Bukan backend, database, atau DRM server
+
+Hasil akhir: paket ZIP yang bisa dianalisa, di-preview offline/hybrid, dan
+disiapkan untuk host ulang (self-host / sandbox).
+
+--------------------------------------------------------------------------------
+2. DUA JALUR COLLECT
+--------------------------------------------------------------------------------
+A) Cloudflare Worker (Capture)
+   - Cepat
+   - Ada limit browser free (~10 menit/hari)
+   - Auto-click Play, path rewrite, klasifikasi game/API
+
+B) GitHub Actions (Collect via GitHub)
+   - Lebih stabil, tanpa limit browser Cloudflare
+   - Trigger dari UI atau tab Actions
+   - Artifact ZIP diunduh otomatis / manual dari Actions
+   - Disarankan Auto-spin ≥ 3–5 agar api-map/snapshot lebih isi
+
+--------------------------------------------------------------------------------
+3. ALUR NORMAL
+--------------------------------------------------------------------------------
+  1. Tempel URL game
+  2. Capture (Cloudflare) ATAU Collect via GitHub
+  3. Tunggu selesai → ZIP terunduh
+  4. Workspace → Load ZIP
+  5. (Opsional) Pipeline Offline ATAU Analisa Game
+  6. Preview Sandbox / Hybrid / Isolated Window
+  7. Download ZIP final / Hosting untuk host ulang
+
+--------------------------------------------------------------------------------
+4. ISI PAKET ZIP (UMUM)
+--------------------------------------------------------------------------------
+  index.html              Launcher / entry
+  assets/                 Asset game (js, css, image, audio, …)
+  server/api/             Snapshot response API (bukan server live)
+  api-map.json            Peta endpoint + snapshot (penting untuk sandbox)
+  kelengkapan.json        Ringkasan auto-lengkapi / missing
+  keterangan.json / .md   Host, kategori, catatan
+  manifest.json           Metadata collect
+  pipeline/               Hasil Pipeline Offline (jika dijalankan)
+  sandbox/                Mock API lokal (jika konversi dijalankan)
+  analysis/               Laporan scanner + ERRORS.md
+  BACKUP/                 Backup sebelum konversi (jika ada)
+
+--------------------------------------------------------------------------------
+5. AUTO-LENGKAPI
+--------------------------------------------------------------------------------
+Setelah resource tertangkap, sistem scan HTML/JS/CSS mencari URL/file yang
+direferensikan tapi belum terunduh, lalu mencoba fetch tambahan (ada batas
+jumlah per pass).
+
+  - Yang butuh login/token sering tetap gagal
+  - Cek kelengkapan.json dan panel kelengkapan di Workspace
+
+--------------------------------------------------------------------------------
+6. KLASIFIKASI RESOURCE
+--------------------------------------------------------------------------------
+  game     → folder assets/     (UI, engine client, media)
+  api      → server/api/        (snapshot JSON/XHR)
+  server   → server/            (config / indikasi server)
+
+Angka “SERVER DEPENDENCY” di analisa = indikasi, BUKAN perintah hapus.
+
+--------------------------------------------------------------------------------
+7. ANALISA GAME & LABEL
+--------------------------------------------------------------------------------
+Prinsip: ANALYZE ≠ DELETE
+
+  SAFE     — aman dibawa offline / host ulang
+  WARN     — API, external, perlu REPLACE/mock
+  ERROR    — biasanya tracking / kandidat REMOVE (tetap dicek dulu)
+
+Label ERROR merah muncul di Explorer setelah Analisa / Pipeline Offline.
+File tidak dihapus otomatis.
+
+--------------------------------------------------------------------------------
+8. PIPELINE OFFLINE (6 LANGKAH)
+--------------------------------------------------------------------------------
+Tombol: Workspace → Pipeline Offline
+
+  1. Cek kelengkapan paket (hasil collect)
+  2. Analisa Game (SAFE / WARN / ERROR)
+  3. Network map (log runtime preview)
+  4. Dependency map internal (antar file di ZIP)
+  5. Change-plan + sandbox mock
+  6. Preview Sandbox → siap download / host ulang
+
+Output folder:
+  pipeline/analysis-report.json
+  pipeline/change-plan.json
+  pipeline/dependency-map.json
+  pipeline/network-map.json
+
+--------------------------------------------------------------------------------
+9. PREVIEW
+--------------------------------------------------------------------------------
+  Sandbox     — offline, request eksternal diblok (ideal uji offline)
+  Hybrid      — asset lokal dulu, server diizinkan
+  Protected   — iframe + proteksi frame-buster
+  Isolated    — window terpisah (paling kuat lawan anti-iframe)
+
+Offline 100% hanya realistis jika logic + asset client lengkap di ZIP.
+Game yang wajib server tiap aksi → perlu mock/backend sendiri (sandbox).
+
+--------------------------------------------------------------------------------
+10. BATASAN PENTING
+--------------------------------------------------------------------------------
+  - Tidak mengambil logic yang tidak pernah dikirim ke browser
+  - Tidak bypass DRM / anti-cheat / login orang lain
+  - Multiplayer real-time tanpa server resmi tidak bisa “di-offline-kan”
+  - ZIP sangat besar tanpa R2 rawan gagal unduh
+  - api-map kosong → sandbox mock generik (collect + auto-spin lagi)
+
+--------------------------------------------------------------------------------
+11. TIPS HASIL LEBIH BAIK
+--------------------------------------------------------------------------------
+  - Collect saat game sudah di menu / in-game sebentar
+  - Aktifkan auto-click Play / auto-spin jika ada
+  - GitHub Actions untuk sesi panjang
+  - Setelah Load ZIP: Analisa Game atau Pipeline Offline
+  - Preview sekali dulu, lalu Pipeline lagi agar network-map terisi
+  - Host ulang hanya untuk game yang kamu miliki / berizin
+
+--------------------------------------------------------------------------------
+12. FILE CATATAN TERKAIT DI REPO
+--------------------------------------------------------------------------------
+  README.md
+  PROGRESS.md
+  docs/CATATAN_GAME_COLLECT.txt     ← file ini
+  public/offline-analyze.js         ← mesin analisa
+  scripts/collect.js                ← collect GitHub Actions
+
+================================================================================
