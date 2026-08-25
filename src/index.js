@@ -1015,6 +1015,11 @@ export default {
       body.exclude || body.excludeCategories
     );
 
+    // Collect options (process 4)
+    const waitSeconds = Math.min(60, Math.max(3, Number(body.wait_seconds || body.waitSeconds || 12) || 12));
+    const autoSpins = Math.min(15, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 3) || 0));
+    const spinDelayMs = Math.min(8000, Math.max(500, Number(body.spin_delay_ms ?? body.spinDelayMs ?? 2200) || 2200));
+
     const id = crypto.randomUUID();
     const progressId = String(body.progressId || body.progress_id || id).slice(0, 80);
     await clearStop(env, progressId);
@@ -1258,9 +1263,10 @@ export default {
         await report(22, "loaded", "Halaman termuat, capture network...", { screenshot: shot, files: manifest.length });
       }
 
-      // Tunggu sebentar kecuali user sudah Stop
+      // Tunggu sesuai wait_seconds (UI) kecuali user Stop
       if (!(await shouldStop())) {
-        await page.waitForTimeout(3000);
+        await report(24, "wait", "Menunggu network settle (" + waitSeconds + "s)...", { files: manifest.length });
+        await page.waitForTimeout(Math.min(waitSeconds * 1000, 60000));
       } else {
         await report(50, "stopping", "Stop — lanjut packing...", { files: manifest.length, stopRequested: true });
       }
@@ -1329,6 +1335,43 @@ export default {
         }
       } catch {}
 
+      // Auto-spins (capture API spin/balance) — process 4
+      if (autoSpins > 0 && !(await shouldStop())) {
+        await report(36, "spins", "Auto-spin x" + autoSpins + " (delay " + spinDelayMs + "ms)...", {
+          files: manifest.length
+        });
+        for (let i = 0; i < autoSpins; i++) {
+          if (await shouldStop()) break;
+          try {
+            await page.evaluate(() => {
+              const kws = ["spin", "putar", "play", "bet", "max bet", "auto"];
+              const nodes = document.querySelectorAll("button, a, div, [role=button], .btn, [class*=spin], [id*=spin]");
+              for (const el of nodes) {
+                const t = ((el.textContent || "") + " " + (el.className || "") + " " + (el.id || "")).toLowerCase();
+                if (kws.some(k => t.includes(k))) {
+                  try { el.click(); return true; } catch (e) {}
+                }
+              }
+              return false;
+            });
+            // iframe spins
+            for (const frame of page.frames()) {
+              if (frame === page.mainFrame()) continue;
+              try {
+                await frame.evaluate(() => {
+                  const kws = ["spin", "putar", "play", "bet"];
+                  document.querySelectorAll("button, a, div, [role=button]").forEach(el => {
+                    const t = ((el.textContent || "") + " " + (el.className || "")).toLowerCase();
+                    if (kws.some(k => t.includes(k))) try { el.click(); } catch (e) {}
+                  });
+                });
+              } catch {}
+            }
+          } catch {}
+          await page.waitForTimeout(spinDelayMs);
+        }
+      }
+
       if (await shouldStop()) {
         await report(50, "stopping", "Stop — skip scroll, packing...", { files: manifest.length, stopRequested: true });
       } else {
@@ -1357,10 +1400,31 @@ export default {
       zipFiles["index.html"] = strToU8(html);
 
       // Pass 2: scan referensi yang belum ter-download → auto-fetch yang kurang
-      await report(62, "fill", "Auto-lengkapi file yang kurang...", { files: manifest.length });
-      let fillReport = { scanned: 0, missingFound: 0, fetched: 0, failed: 0, stillMissing: [] };
+      await report(62, "fill", "Auto-lengkapi (multi-pass)...", { files: manifest.length });
+      let fillReport = { scanned: 0, missingFound: 0, fetched: 0, failed: 0, stillMissing: [], passes: 0 };
       try {
-        fillReport = await fillMissingAssets(zipFiles, manifest, seen, target.href, id, env, selectAllowed);
+        fillReport = await fillMissingAssets(
+          zipFiles,
+          manifest,
+          seen,
+          target.href,
+          id,
+          env,
+          selectAllowed,
+          40,
+          2
+        );
+        await report(
+          68,
+          "fill",
+          "Fill selesai: +" +
+            (fillReport.fetched || 0) +
+            " file · pass " +
+            (fillReport.passes || 1) +
+            " · sisa " +
+            ((fillReport.stillMissing || []).length),
+          { files: manifest.length }
+        );
       } catch (e) {
         fillReport.error = String(e.message || e);
       }
