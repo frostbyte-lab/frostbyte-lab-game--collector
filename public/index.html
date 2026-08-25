@@ -6234,13 +6234,35 @@
         const previewBaseUrl = window.location.origin + '/';
         const sandboxMode = activePreviewMode !== 'web';
 
-        // Coba baca api-map / keterangan dari ZIP untuk mock
+        // Baca api-map.json (prioritas) atau bangun ringkas dari keterangan.json
         let apiMapPayload = null;
         try {
-          const mapPath = names.find(n => /(^|\/)api-map\.json$/i.test(n) || /(^|\/)keterangan\.json$/i.test(n));
-          if (mapPath && zipFileMap[mapPath]) {
-            const raw = openFiles.has(mapPath) ? openFiles.get(mapPath) : await zipFileMap[mapPath].async('string');
+          const apiMapPath = names.find(n => /(^|\/)api-map\.json$/i.test(n));
+          const ketPath = names.find(n => /(^|\/)keterangan\.json$/i.test(n));
+          if (apiMapPath && zipFileMap[apiMapPath]) {
+            const raw = openFiles.has(apiMapPath) ? openFiles.get(apiMapPath) : await zipFileMap[apiMapPath].async('string');
             apiMapPayload = JSON.parse(raw);
+          } else if (ketPath && zipFileMap[ketPath]) {
+            const raw = openFiles.has(ketPath) ? openFiles.get(ketPath) : await zipFileMap[ketPath].async('string');
+            const ket = JSON.parse(raw);
+            const eps = Array.isArray(ket.apiEndpoints) ? ket.apiEndpoints : [];
+            apiMapPayload = {
+              version: 1,
+              from: 'keterangan.json',
+              endpoints: eps.map(function (e) {
+                var path = '/';
+                try { path = new URL(e.url).pathname; } catch (err) {}
+                return {
+                  url: e.url,
+                  path: path,
+                  pathLower: path.toLowerCase(),
+                  kind: 'api',
+                  localPath: e.localPath || null,
+                  mockTemplate: { ok: true, mock: true, balance: 100000 },
+                  snapshot: null
+                };
+              })
+            };
           }
         } catch (_) { apiMapPayload = null; }
 
@@ -6300,31 +6322,77 @@
   }
   var balance = 100000;
   var session = { id: 'sandbox-' + Date.now(), ok: true };
+  function pathOf(u){
+    try { return new URL(u, GC_BASE_URL).pathname.toLowerCase(); } catch (e) { return String(u || '').toLowerCase(); }
+  }
+  /** Cocokkan URL request ke api-map endpoints (snapshot > template > pattern) */
+  function resolveFromApiMap(url){
+    if (!GC_API_MAP || !GC_API_MAP.endpoints || !GC_API_MAP.endpoints.length) return null;
+    var path = pathOf(url);
+    var best = null, bestScore = 0;
+    for (var i = 0; i < GC_API_MAP.endpoints.length; i++) {
+      var ep = GC_API_MAP.endpoints[i];
+      var p = (ep.pathLower || ep.path || '').toLowerCase();
+      if (!p) continue;
+      if (path === p) { best = ep; bestScore = 1000; break; }
+      if (p.length > 3 && path.indexOf(p) >= 0 && p.length > bestScore) { best = ep; bestScore = p.length; }
+      else {
+        var segs = p.split('/').filter(Boolean);
+        var seg = segs.length ? segs[segs.length - 1] : '';
+        if (seg && seg.length > 2 && path.indexOf(seg) >= 0 && seg.length > bestScore) {
+          best = ep; bestScore = seg.length;
+        }
+      }
+    }
+    return best;
+  }
   function mockPayload(url){
+    var ep = resolveFromApiMap(url);
+    if (ep) {
+      if (ep.snapshot && typeof ep.snapshot === 'object') {
+        var snap = JSON.parse(JSON.stringify(ep.snapshot));
+        try {
+          if (snap.balance != null) snap.balance = balance;
+          if (snap.data && snap.data.balance != null) snap.data.balance = balance;
+        } catch (e) {}
+        snap.__gcMock = true;
+        snap.__gcFrom = 'api-map-snapshot';
+        snap.__gcKind = ep.kind || 'api';
+        return snap;
+      }
+      if (ep.mockTemplate && typeof ep.mockTemplate === 'object') {
+        var tpl = JSON.parse(JSON.stringify(ep.mockTemplate));
+        tpl.balance = balance;
+        tpl.session = session;
+        tpl.__gcMock = true;
+        tpl.__gcFrom = 'api-map-template';
+        tpl.__gcKind = ep.kind || 'api';
+        if (/spin|bet/i.test(ep.kind || '') || /spin|bet/i.test(url)) {
+          var win2 = Math.random() > 0.7 ? Math.floor(Math.random() * 500) : 0;
+          balance += win2;
+          tpl.win = win2;
+          tpl.balance = balance;
+        }
+        return tpl;
+      }
+    }
     var s = String(url || '').toLowerCase();
     if (/spin|bet|play/.test(s)) {
       var win = Math.random() > 0.7 ? Math.floor(Math.random() * 500) : 0;
       balance += win;
-      return { ok: true, win: win, balance: balance, symbols: [[1,2,3],[4,5,6],[7,8,9]], mock: true };
+      return { ok: true, win: win, balance: balance, symbols: [[1,2,3],[4,5,6],[7,8,9]], mock: true, __gcFrom: 'pattern' };
     }
-    if (/balance|wallet|credit/.test(s)) return { ok: true, balance: balance, mock: true };
-    if (/session|auth|token|login|init/.test(s)) return { ok: true, session: session, balance: balance, mock: true };
-    if (/history|result/.test(s)) return { ok: true, items: [], balance: balance, mock: true };
-    return { ok: true, mock: true, balance: balance, session: session, url: String(url||'').slice(0,120) };
+    if (/balance|wallet|credit/.test(s)) return { ok: true, balance: balance, mock: true, __gcFrom: 'pattern' };
+    if (/session|auth|token|login|init/.test(s)) return { ok: true, session: session, balance: balance, mock: true, __gcFrom: 'pattern' };
+    if (/history|result/.test(s)) return { ok: true, items: [], balance: balance, mock: true, __gcFrom: 'pattern' };
+    return { ok: true, mock: true, balance: balance, session: session, url: String(url||'').slice(0,120), __gcFrom: 'fallback' };
   }
   function mockResponse(url){
     var data = mockPayload(url);
-    if (window.__GC_SANDBOX_API__) {
-      try {
-        if (/spin/.test(url) && window.__GC_SANDBOX_API__.spin) return window.__GC_SANDBOX_API__.spin();
-        if (/balance/.test(url) && window.__GC_SANDBOX_API__.balance) return window.__GC_SANDBOX_API__.balance();
-        if (/session|init/.test(url) && window.__GC_SANDBOX_API__.session) return window.__GC_SANDBOX_API__.session();
-      } catch (e) {}
-    }
     var body = JSON.stringify(data);
     return Promise.resolve(new Response(body, {
       status: 200,
-      headers: { 'Content-Type': 'application/json', 'X-GC-Mock': '1' }
+      headers: { 'Content-Type': 'application/json', 'X-GC-Mock': '1', 'X-GC-Mock-From': data.__gcFrom || 'unknown' }
     }));
   }
   window.__GC_OFFLINE__ = GC_SANDBOX;
@@ -6479,6 +6547,17 @@
         const title = document.getElementById('preview-title');
         if (title) title.textContent = (activePreviewMode === 'web' ? 'Web Preview' : 'Sandbox Preview') + ' · ' + entryPath;
         appendLog('Preview dimuat: ' + entryPath, 'ok');
+        if (apiMapPayload && apiMapPayload.endpoints) {
+          appendLog(
+            'API map: ' + apiMapPayload.endpoints.length + ' endpoint' +
+            (apiMapPayload.totals && apiMapPayload.totals.withSnapshot != null
+              ? ' · snapshot ' + apiMapPayload.totals.withSnapshot
+              : ''),
+            'ok'
+          );
+        } else {
+          appendLog('API map: tidak ada api-map.json — mock pakai pattern generik.', 'warn');
+        }
 
         // Terima pesan error + laporan network dari bridge iframe
         if (!window.__gcPreviewMsgBound) {

@@ -462,6 +462,36 @@
     zip.file("sandbox/mock-api.js", sandboxMockApiSource());
     backup.filesChanged.push("sandbox/mock-api.js");
 
+    // api-map.json dari file API/EXTERNAL (process 2 — map API → mock)
+    try {
+      var apiEps = [];
+      (report.files || []).forEach(function (f) {
+        if (!f || (f.category !== "API" && f.category !== "EXTERNAL" && !f.serverDep)) return;
+        var path = "/" + String(f.path || "").replace(/^\/+/, "");
+        apiEps.push({
+          url: (f.refs && f.refs[0]) || path,
+          path: path,
+          pathLower: path.toLowerCase(),
+          kind: (f.serverKinds && f.serverKinds[0]) || "api",
+          localPath: f.path,
+          hasSnapshot: false,
+          snapshot: null,
+          mockTemplate: { ok: true, mock: true, balance: 100000 }
+        });
+      });
+      zip.file("api-map.json", JSON.stringify({
+        version: 1,
+        generatedAt: new Date().toISOString(),
+        from: "offline-analyze",
+        totals: { endpoints: apiEps.length, withSnapshot: 0 },
+        endpoints: apiEps.slice(0, 120),
+        routes: apiEps.slice(0, 120).map(function (e, i) {
+          return { i: i, path: e.pathLower, kind: e.kind, hasSnapshot: false };
+        })
+      }, null, 2));
+      backup.filesChanged.push("api-map.json");
+    } catch (eMap) { /* ignore */ }
+
     var indexPath = Object.keys(zip.files).find(function (p) {
       return !zip.files[p].dir && /(^|\/)index\.html?$/i.test(p);
     });

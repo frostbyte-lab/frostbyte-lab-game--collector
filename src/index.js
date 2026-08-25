@@ -12,6 +12,7 @@ import { classifySlotSubfolder, folderOf } from "./classify/slot-folder.js";
 import { buildAllowedSet, shouldIncludeResource } from "./classify/select-filter.js";
 import { classifyApiSemantics } from "./classify/api-semantics.js";
 import { buildKeterangan } from "./package/keterangan.js";
+import { buildApiMap } from "./package/api-map.js";
 import { smartPackage } from "./package/smart-rewrite.js";
 import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
@@ -1503,6 +1504,17 @@ export default {
       };
       zipFiles["manifest.json"] = strToU8(JSON.stringify(manifestData, null, 2));
       zipFiles["keterangan.json"] = strToU8(JSON.stringify(ket.json, null, 2));
+      // api-map.json — peta endpoint + snapshot untuk Sandbox mock (Sprint process 2)
+      try {
+        const apiMap = buildApiMap(manifest, zipFiles);
+        zipFiles["api-map.json"] = strToU8(JSON.stringify(apiMap, null, 2));
+      } catch (e) {
+        zipFiles["api-map.json"] = strToU8(JSON.stringify({
+          version: 1,
+          error: String(e && e.message || e),
+          endpoints: []
+        }, null, 2));
+      }
       zipFiles["KETERANGAN.md"] = strToU8(ket.md);
       zipFiles["analisis.json"] = strToU8(JSON.stringify(analysis, null, 2));
       if (deps) zipFiles["dependency.json"] = strToU8(JSON.stringify(deps, null, 2));
