@@ -3006,7 +3006,7 @@
           <button type="button" class="btn btn-secondary btn-sm" id="btn-analisa-game" onclick="runAnalisaGame()" title="Analisa dependency → offline sandbox">Analisa Game</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-restore-backup" onclick="gcRestoreBackupMenu()" title="Pulihkan dari BACKUP/offline-conversion/original/">Restore Backup</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-hosting-top" onclick="openHostingPage()" title="Hosting paket game">Hosting</button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Login AI — sesi Groq + GPT">Login AI</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Login AI — sesi Groq + Gemini">Login AI</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -3281,10 +3281,10 @@
 
           <!-- AI Panel -->
           <div class="ai-panel hidden" id="ai-panel">
-            <div class="ai-label"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-bot"></use></svg> AI Assistant <span id="ai-panel-badge" style="font-weight:400;text-transform:none;color:var(--text-muted);">· Login AI (Groq/GPT) atau Workers AI</span></div>
+            <div class="ai-label"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-bot"></use></svg> AI Assistant <span id="ai-panel-badge" style="font-weight:400;text-transform:none;color:var(--text-muted);">· Login AI (Groq/Gemini) atau Workers AI</span></div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
               <label for="ai-model" style="font-size:11px;color:var(--text-muted);white-space:nowrap;">Model AI</label>
-              <select id="ai-model" style="flex:1;padding:7px 9px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;" title="Hanya untuk Workers AI. Jika sudah Login AI, model dari sesi Groq/GPT yang dipakai.">
+              <select id="ai-model" style="flex:1;padding:7px 9px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;" title="Hanya untuk Workers AI. Jika sudah Login AI, model dari sesi Groq/Gemini yang dipakai.">
                 <option value="llama">Workers · Llama 3.1</option>
                 <option value="qwen3-coder">Workers · Qwen3-Coder</option>
               </select>
@@ -3377,25 +3377,25 @@
         <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13px;">
           <input type="checkbox" id="custom-show-binary"> Tampilkan file binary di tree
         </label>
-        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">API key AI (opsional, Groq/OpenAI-compatible)</label>
+        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">API key AI (opsional, Groq/Gemini OpenAI-compatible)</label>
         <input id="custom-ai-key" type="password" placeholder="sk-... atau gsk_..." style="width:100%; padding:8px; margin-bottom:12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
         <button class="btn btn-primary btn-sm" style="width:100%;" onclick="saveCustomSettings()">Simpan Custom</button>
       </div>
     </div>
 
-    <!-- Login AI: Groq / GPT → Email 1-5 (email + API key) -->
+    <!-- Login AI: Groq / Gemini → Email 1-5 (email + API key) -->
     <div id="custom-ai-manager" class="cai-overlay" style="display:none;">
       <div class="cai-box">
         <div class="cai-head">
           <div>
             <strong id="cai-title">Login AI</strong>
-            <span class="cai-sub" id="cai-sub">Groq · GPT · Email 1–5</span>
+            <span class="cai-sub" id="cai-sub">Groq · Gemini · Email 1–5</span>
           </div>
           <button type="button" class="cai-close" onclick="closeCustomAIManager()" aria-label="Tutup">✕</button>
         </div>
 
         <div id="cai-session-status" class="cai-hint" style="margin:0 0 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,.2);font-size:12px;">
-          Belum login. Pilih Groq atau GPT → Email 1–5 → isi email + API key → Login.
+          Belum login. Pilih Groq atau Gemini → Email 1–5 → isi email + API key → Login.
         </div>
 
         <!-- Menu utama -->
@@ -3411,15 +3411,15 @@
               <button type="button" class="cai-switch on" id="cai-sw-groq" role="switch" aria-checked="true" title="Aktifkan/nonaktifkan Groq" onclick="event.stopPropagation(); caiToggleProvider('groq')"></button>
             </span>
           </button>
-          <button type="button" class="cai-opt" id="cai-opt-gpt" onclick="caiShowPanel('gpt')">
+          <button type="button" class="cai-opt" id="cai-opt-gemini" onclick="caiShowPanel('gemini')">
             <span class="cai-opt-num">2</span>
             <span class="cai-opt-body">
-              <strong>GPT</strong>
+              <strong>Gemini</strong>
               <small>Email 1–5 · login · terapkan ke semua tombol AI</small>
             </span>
             <span class="cai-opt-toggle" onclick="event.stopPropagation()">
-              <span id="cai-lbl-gpt">ON</span>
-              <button type="button" class="cai-switch on" id="cai-sw-gpt" role="switch" aria-checked="true" title="Aktifkan/nonaktifkan GPT" onclick="event.stopPropagation(); caiToggleProvider('gpt')"></button>
+              <span id="cai-lbl-gemini">ON</span>
+              <button type="button" class="cai-switch on" id="cai-sw-gemini" role="switch" aria-checked="true" title="Aktifkan/nonaktifkan Gemini" onclick="event.stopPropagation(); caiToggleProvider('gemini')"></button>
             </span>
           </button>
           <button type="button" class="cai-opt" onclick="caiShowPanel('chat')">
@@ -3438,7 +3438,7 @@
           </button>
         </div>
 
-        <!-- Panel Groq / GPT email slots -->
+        <!-- Panel Groq / Gemini email slots -->
         <div id="cai-panel-apply" class="cai-panel" style="display:none;">
           <p class="cai-hint" id="cai-provider-hint">Pilih Email 1–5, isi email + API key, lalu Login.</p>
           <div id="cai-email-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
@@ -4711,7 +4711,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
 
     async function requestAI(action, question) {
-      // Semua tombol Analyze / Suggest Fix / Kirim: prioritas Login AI (Groq/GPT), fallback Workers AI
+      // Semua tombol Analyze / Suggest Fix / Kirim: prioritas Login AI (Groq/Gemini), fallback Workers AI
       if (hasCustomAIKeys() && typeof requestCustomAI === 'function') {
         window.__useCustomAI = true;
         return requestCustomAI(action, question);
@@ -4729,7 +4729,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         body: JSON.stringify({ ...context, action, question: question || '', model: document.getElementById('ai-model')?.value || 'llama' })
       });
       const result = await res.json().catch(() => ({}));
-      if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi. Login AI dulu (Groq/GPT) jika Workers AI tidak tersedia.');
+      if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi. Login AI dulu (Groq/Gemini) jika Workers AI tidak tersedia.');
       aiSuggestedCode = result.repairedCode || null;
       const applyButton = document.getElementById('ai-apply-fix');
       if (applyButton) applyButton.hidden = !aiSuggestedCode;
@@ -4818,21 +4818,20 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
 
 
-    // ===== Login AI: Groq / GPT → Email 1-5 (email + API key) =====
+    // ===== Login AI: Groq / Gemini → Email 1-5 (email + API key) =====
     const CAI_STORAGE = 'gc_custom_ai_apis';
     const CAI_SESSION = 'gc_ai_session';
     const CAI_ACCOUNTS = 'gc_ai_accounts_v2';
     const CAI_GROQ_BASE = 'https://api.groq.com/openai/v1';
-    const CAI_OPENAI_BASE = 'https://api.openai.com/v1';
-    const CAI_GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
+        const CAI_GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
     const CAI_PROVIDERS = {
       groq: { id: 'groq', label: 'Groq', baseUrl: CAI_GROQ_BASE, model: 'openai/gpt-oss-20b', keyHint: 'gsk_...' },
-      gpt: { id: 'gpt', label: 'GPT', baseUrl: CAI_OPENAI_BASE, model: 'gpt-4o-mini', keyHint: 'sk-...' }
+      gemini: { id: 'gemini', label: 'Gemini', baseUrl: CAI_GEMINI_BASE, model: 'gemini-2.0-flash', keyHint: 'AIza...' }
     };
     // Compat defaults for old callers
     const CAI_DEFAULTS = [
       { name: 'Groq', baseUrl: CAI_GROQ_BASE, apiKey: '', model: 'openai/gpt-oss-20b', enabled: true },
-      { name: 'GPT', baseUrl: CAI_OPENAI_BASE, apiKey: '', model: 'gpt-4o-mini', enabled: true }
+      { name: 'Gemini', baseUrl: CAI_GEMINI_BASE, apiKey: '', model: 'gemini-2.0-flash', enabled: true }
     ];
     // Groq: Llama 3 (enterprise) + model gratis/developer yang direkomendasikan Groq pasca deprecation Aug 2026
     const CAI_GROQ_MODELS = [
@@ -4842,12 +4841,13 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant · enterprise' },
       { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B · enterprise' }
     ];
-    const CAI_GPT_MODELS = [
-      { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini' }
+    const CAI_GEMINI_MODELS = [
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' }
     ];
-    const CAI_MODEL_OPTIONS = CAI_GROQ_MODELS.map(function (m) { return m.id; }).concat(CAI_GPT_MODELS.map(function (m) { return m.id; }));
+    const CAI_MODEL_OPTIONS = CAI_GROQ_MODELS.map(function (m) { return m.id; }).concat(CAI_GEMINI_MODELS.map(function (m) { return m.id; }));
 
     let caiCurrentProvider = 'groq';
     let caiCurrentEmailIdx = 0; // 0..4
@@ -4856,17 +4856,17 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       const mk = () => Array.from({ length: 5 }, (_, i) => ({ email: '', apiKey: '', enabled: false }));
       return {
         groq: mk(),
-        gpt: mk(),
+        gemini: mk(),
         active: null,
-        providerEnabled: { groq: true, gpt: true },
-        providerModels: { groq: 'openai/gpt-oss-20b', gpt: 'gpt-4o-mini' }
+        providerEnabled: { groq: true, gemini: true },
+        providerModels: { groq: 'openai/gpt-oss-20b', gemini: 'gemini-2.0-flash' }
       };
     }
 
     function loadAIAccounts() {
       try {
         const raw = JSON.parse(localStorage.getItem(CAI_ACCOUNTS) || 'null');
-        if (raw && Array.isArray(raw.groq) && Array.isArray(raw.gpt)) {
+        if (raw && Array.isArray(raw.groq) && Array.isArray(raw.gemini || raw.gpt)) {
           const norm = (arr) => {
             const out = [];
             for (let i = 0; i < 5; i++) {
@@ -4883,15 +4883,20 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           const pm = raw.providerModels && typeof raw.providerModels === 'object' ? raw.providerModels : {};
           return {
             groq: norm(raw.groq),
-            gpt: norm(raw.gpt),
-            active: raw.active && typeof raw.active === 'object' ? raw.active : null,
+            gemini: norm(raw.gemini || raw.gpt || []),
+            active: (function () {
+              if (!raw.active || typeof raw.active !== 'object') return null;
+              var a = { provider: raw.active.provider, index: raw.active.index|0 };
+              if (a.provider === 'gpt') a.provider = 'gemini';
+              return a;
+            })(),
             providerEnabled: {
               groq: pe.groq !== false,
-              gpt: pe.gpt !== false
+              gemini: (pe.gemini !== false) && (pe.gpt !== false)
             },
             providerModels: {
               groq: String(pm.groq || 'openai/gpt-oss-20b'),
-              gpt: String(pm.gpt || 'gpt-4o-mini')
+              gemini: String(pm.gemini || pm.gpt || 'gemini-2.0-flash')
             }
           };
         }
@@ -4910,11 +4915,11 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             if (/groq/i.test(base) || /^gsk_/.test(key)) {
               if (gi < 5) { acc.groq[gi] = { email: email || ('akun' + (gi + 1) + '@groq.local'), apiKey: key, enabled: s.enabled !== false }; gi++; }
             } else {
-              if (pi < 5) { acc.gpt[pi] = { email: email || ('akun' + (pi + 1) + '@openai.local'), apiKey: key, enabled: s.enabled !== false }; pi++; }
+              if (pi < 5) { acc.gemini[pi] = { email: email || ('akun' + (pi + 1) + '@gemini.local'), apiKey: key, enabled: s.enabled !== false }; pi++; }
             }
           });
           const first = acc.groq.find((x) => x.apiKey) ? { provider: 'groq', index: acc.groq.findIndex((x) => x.apiKey) }
-            : acc.gpt.find((x) => x.apiKey) ? { provider: 'gpt', index: acc.gpt.findIndex((x) => x.apiKey) } : null;
+            : acc.gemini.find((x) => x.apiKey) ? { provider: 'gemini', index: acc.gemini.findIndex((x) => x.apiKey) } : null;
           acc.active = first;
           localStorage.setItem(CAI_ACCOUNTS, JSON.stringify(acc));
           return acc;
@@ -4949,12 +4954,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     function accountsToSlots(acc) {
       const slots = [];
       const order = [];
-      const pe = (acc && acc.providerEnabled) || { groq: true, gpt: true };
+      const pe = (acc && acc.providerEnabled) || { groq: true, gemini: true };
       // active first, then other filled slots as failover (only enabled providers)
       if (acc.active && pe[acc.active.provider] !== false && acc[acc.active.provider] && acc[acc.active.provider][acc.active.index]) {
         order.push({ provider: acc.active.provider, index: acc.active.index });
       }
-      ['groq', 'gpt'].forEach((p) => {
+      ['groq', 'gemini'].forEach((p) => {
         if (pe[p] === false) return;
         (acc[p] || []).forEach((slot, i) => {
           if (!slot.apiKey) return;
@@ -5037,7 +5042,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       const slot = (acc[caiCurrentProvider] || [])[caiCurrentEmailIdx] || { email: '', apiKey: '' };
       const pm = acc.providerModels || {};
       const currentModel = pm[caiCurrentProvider] || meta.model;
-      const modelList = caiCurrentProvider === 'groq' ? CAI_GROQ_MODELS : CAI_GPT_MODELS;
+      const modelList = caiCurrentProvider === 'groq' ? CAI_GROQ_MODELS : CAI_GEMINI_MODELS;
       const modelOpts = modelList.map(function (m) {
         const sel = m.id === currentModel ? ' selected' : '';
         return '<option value="' + m.id.replace(/"/g, '&quot;') + '"' + sel + '>' + m.label + '</option>';
@@ -5084,7 +5089,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         apiKey,
         enabled: true
       };
-      if (!acc.providerModels) acc.providerModels = { groq: 'openai/gpt-oss-20b', gpt: 'gpt-4o-mini' };
+      if (!acc.providerModels) acc.providerModels = { groq: 'openai/gpt-oss-20b', gemini: 'gemini-2.0-flash' };
       if (modelSel) acc.providerModels[caiCurrentProvider] = modelSel;
       else if (!acc.providerModels[caiCurrentProvider]) {
         acc.providerModels[caiCurrentProvider] = (CAI_PROVIDERS[caiCurrentProvider] || {}).model;
@@ -5103,14 +5108,14 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       acc.active = null;
       saveAIAccounts(acc);
       if (typeof appendLog === 'function') appendLog('Login AI: logout sesi aktif', 'warn');
-      alert('Sesi AI dinonaktifkan. Login lagi lewat Groq/GPT → Email bila perlu.');
+      alert('Sesi AI dinonaktifkan. Login lagi lewat Groq/Gemini → Email bila perlu.');
       caiShowPanel('menu');
     }
 
     function caiToggleProvider(provider) {
-      if (provider !== 'groq' && provider !== 'gpt') return;
+      if (provider !== 'groq' && provider !== 'gemini') return;
       const acc = loadAIAccounts();
-      if (!acc.providerEnabled) acc.providerEnabled = { groq: true, gpt: true };
+      if (!acc.providerEnabled) acc.providerEnabled = { groq: true, gemini: true };
       const next = acc.providerEnabled[provider] === false;
       acc.providerEnabled[provider] = next;
       // If turning off the active provider, clear active session
@@ -5118,7 +5123,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         acc.active = null;
       }
       // If both off, force at least one on (prefer the one just toggled)
-      if (acc.providerEnabled.groq === false && acc.providerEnabled.gpt === false) {
+      if (acc.providerEnabled.groq === false && acc.providerEnabled.gemini === false) {
         acc.providerEnabled[provider] = true;
         if (typeof appendLog === 'function') appendLog('Login AI: minimal satu provider harus ON', 'warn');
       }
@@ -5131,7 +5136,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
     function updateAILoginUI() {
       const acc = loadAIAccounts();
-      const pe = acc.providerEnabled || { groq: true, gpt: true };
+      const pe = acc.providerEnabled || { groq: true, gemini: true };
       let loggedIn = false;
       let label = '';
       const activeOn = !!(acc.active && pe[acc.active.provider] !== false && acc[acc.active.provider] && acc[acc.active.provider][acc.active.index] && acc[acc.active.provider][acc.active.index].apiKey);
@@ -5153,7 +5158,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           status.style.borderColor = 'rgba(34,197,94,.45)';
           status.style.color = '#86efac';
         } else {
-          status.textContent = 'Belum login. Pilih Groq atau GPT → Email 1–5 → isi email + API key → Login.';
+          status.textContent = 'Belum login. Pilih Groq atau Gemini → Email 1–5 → isi email + API key → Login.';
           status.style.borderColor = 'var(--border)';
           status.style.color = 'var(--text-muted)';
         }
@@ -5163,7 +5168,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       const pvBtn = document.getElementById('btn-pv-custom');
       if (pvBtn) pvBtn.textContent = loggedIn ? ('AI: ' + label) : 'Login AI';
       // Sync provider on/off switches in menu
-      ['groq', 'gpt'].forEach(function (p) {
+      ['groq', 'gemini'].forEach(function (p) {
         const on = pe[p] !== false;
         const sw = document.getElementById('cai-sw-' + p);
         const lbl = document.getElementById('cai-lbl-' + p);
@@ -5188,7 +5193,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (badge) {
           badge.textContent = loggedIn
             ? ('· sesi ' + label + (modelName ? ' · ' + modelName : ''))
-            : '· Login AI (Groq/GPT) atau Workers AI';
+            : '· Login AI (Groq/Gemini) atau Workers AI';
           badge.style.color = loggedIn ? 'var(--accent)' : 'var(--text-muted)';
         }
         if (hint) {
@@ -5203,7 +5208,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (modelSel) {
           modelSel.disabled = !!loggedIn;
           modelSel.title = loggedIn
-            ? 'Sesi Login AI aktif — model dari Groq/GPT dipakai'
+            ? 'Sesi Login AI aktif — model dari Groq/Gemini dipakai'
             : 'Hanya untuk Workers AI bila belum Login AI';
         }
       } catch (_) {}
@@ -5232,7 +5237,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       const title = document.getElementById('cai-title');
       const sub = document.getElementById('cai-sub');
       const box = document.querySelector('#custom-ai-manager .cai-box');
-      if (which === 'groq' || which === 'gpt') {
+      if (which === 'groq' || which === 'gemini') {
         caiCurrentProvider = which;
         which = 'apply';
       }
@@ -5246,7 +5251,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (box) box.classList.toggle('cai-mode-chat', which === 'chat');
       if (which === 'menu') {
         if (title) title.textContent = 'Login AI';
-        if (sub) sub.textContent = 'Groq · GPT · Email 1–5';
+        if (sub) sub.textContent = 'Groq · Gemini · Email 1–5';
         if (typeof updateAILoginUI === 'function') updateAILoginUI();
       } else if (which === 'apply') {
         const meta = CAI_PROVIDERS[caiCurrentProvider] || CAI_PROVIDERS.groq;
@@ -5258,7 +5263,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (title) title.textContent = 'Chat AI';
         if (sub) sub.textContent = 'Pakai sesi yang sudah login';
         if (!hasCustomAIKeys()) {
-          alert('Belum login AI. Pilih Groq atau GPT → Email 1–5 dulu.');
+          alert('Belum login AI. Pilih Groq atau Gemini → Email 1–5 dulu.');
           caiShowPanel('menu');
           return;
         }
@@ -5313,11 +5318,11 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         return;
       }
       if (typeof callCustomAIWithFailover !== 'function') {
-        caiAppendChat('ai', 'Belum login AI. Pilih Groq/GPT → isi API key → Login.');
+        caiAppendChat('ai', 'Belum login AI. Pilih Groq/Gemini → isi API key → Login.');
         return;
       }
       if (typeof hasCustomAIKeys === 'function' && !hasCustomAIKeys()) {
-        caiAppendChat('ai', 'Belum login AI. Pilih Groq/GPT → Email 1–5 → isi key → Login.');
+        caiAppendChat('ai', 'Belum login AI. Pilih Groq/Gemini → Email 1–5 → isi key → Login.');
         return;
       }
 
@@ -5693,7 +5698,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (sendBtn) sendBtn.disabled = true;
       try {
         if (typeof callCustomAIWithFailover !== 'function') {
-          throw new Error('Belum login AI. Buka Login AI (Groq/GPT) (Workspace).');
+          throw new Error('Belum login AI. Buka Login AI (Groq/Gemini) (Workspace).');
         }
         var file = (typeof currentFile !== 'undefined' && currentFile) ? currentFile : null;
         var code = '';
@@ -5900,7 +5905,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           'Authorization': 'Bearer ' + slot.apiKey
         },
         body: JSON.stringify({
-          model: slot.model || (slot.provider === 'gpt' ? 'gpt-4o-mini' : 'openai/gpt-oss-20b'),
+          model: slot.model || (slot.provider === 'gemini' ? 'gemini-2.0-flash' : 'openai/gpt-oss-20b'),
           messages,
           temperature: options.temperature ?? 0.2,
           max_tokens: Math.min(Number(options.max_tokens || 2000), 8000)
@@ -5932,7 +5937,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     async function callCustomAIWithFailover(messages, options = {}) {
       const slots = loadCustomAISlots().filter(s => s.enabled && s.apiKey);
       if (!slots.length) {
-        throw new Error('Belum login AI. Buka Login AI → isi key Groq dan/atau GPT → tekan Login.');
+        throw new Error('Belum login AI. Buka Login AI → isi key Groq dan/atau Gemini → tekan Login.');
       }
       const errors = [];
       for (let i = 0; i < slots.length; i++) {
@@ -9026,7 +9031,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (!value) { status.textContent = action === 'chat' ? 'Tulis pertanyaan Anda di kolom input terlebih dahulu.' : 'Masukkan data terlebih dahulu.'; if (input) input.focus(); return; }
         status.textContent = 'AI sedang memproses...'; output.textContent = '';
         try {
-          // Prioritas: Login AI (Groq/GPT) → fallback Workers AI
+          // Prioritas: Login AI (Groq/Gemini) → fallback Workers AI
           if (typeof hasCustomAIKeys === 'function' && hasCustomAIKeys() && typeof callCustomAIWithFailover === 'function') {
             const tasks = {
               analyze: 'Analisis data game/manifest berikut. Ringkas temuan, risiko, dan saran perbaikan. Bahasa Indonesia.',
@@ -9050,7 +9055,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           if (action !== 'chat') { try { data = JSON.parse(value); } catch {} }
           const res = await fetch('/api/ai', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action, data, question: action === 'chat' ? value : undefined, context: window.currentManifest || window.currentAnalysis || '' }) });
           const body = await res.json().catch(() => ({}));
-          if (!res.ok || !body.ok) throw new Error(body.error || 'AI tidak tersedia. Login AI (Groq/GPT) atau aktifkan Workers AI.');
+          if (!res.ok || !body.ok) throw new Error(body.error || 'AI tidak tersedia. Login AI (Groq/Gemini) atau aktifkan Workers AI.');
           status.textContent = 'Selesai · Workers AI';
           output.textContent = typeof body.result === 'string' ? body.result : JSON.stringify(body.result, null, 2);
         } catch (error) { status.textContent = 'Gagal: ' + error.message; }
