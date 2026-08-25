@@ -3408,7 +3408,14 @@
           <div class="file-search">
             <input type="search" id="file-search" placeholder="Cari file…" oninput="filterFiles()">
           </div>
-          <div class="file-tree" id="file-tree" role="tree"></div>
+          <div class="file-tree" id="file-tree" role="tree">
+            <div class="file-tree-empty">
+              <div class="file-tree-empty-icon" aria-hidden="true">📁</div>
+              <h3>Belum ada paket</h3>
+              <p>Load ZIP hasil Collect untuk melihat file, edit, dan preview offline.</p>
+              <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('zip-input').click()">Load File</button>
+            </div>
+          </div>
           <div class="file-panel-footer" id="file-panel-footer">
             <div class="file-panel-footer-row footer-primary">
               <button type="button" class="btn btn-secondary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="Load File">Load</button>
