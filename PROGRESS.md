@@ -181,3 +181,13 @@ Live: https://game-resource-collector.technologiesfrostbyte.workers.dev
 - Quality gate tetap: exit 2 jika blocked/empty
 - UI: wait_seconds 12, pesan gagal Actions lebih jelas
 - Bukan bypass WAF; menyamakan kemampuan capture dengan Worker
+
+## Strict Offline Collector (2026-08-26)
+
+- Modul: `src/offline/strict-collector.js`
+- Klasifikasi ketat: ASSET / TRACKING / API / SOCKET / SVG_NAMESPACE / LOCAL
+- Verifikasi download: HTTP + content-type + magic-bytes + sha256
+- fill-missing.js memakai verifyDownload
+- offline-analyze.js: score ketat + reportText format §57
+- Docs: docs/STRICT_OFFLINE_COLLECTOR.md
+

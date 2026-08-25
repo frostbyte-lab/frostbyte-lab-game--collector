@@ -575,18 +575,56 @@
       }
     }
 
-    var hardFail = !checks.launcher || !checks.scripts || remaining.length > 12;
-    var partial = remaining.length > 0 || !checks.sandboxService;
+    // Strict scoring (spec Rule 48–51)
+    var missing = remaining.filter(function (r) { return r.issue === "external URL"; }).length;
+    var apiHits = remaining.filter(function (r) { return r.issue === "API fetch" || r.issue === "WebSocket"; }).length;
+    var score = 100;
+    if (!checks.launcher) score -= 30;
+    if (!checks.scripts) score -= 20;
+    score -= Math.min(missing * 6, 40);
+    score -= Math.min(apiHits * 5, 25);
+    if (!checks.assets) score -= 10;
+    score = Math.max(0, Math.min(100, score));
+
     var status = "OFFLINE READY";
-    if (hardFail) status = "OFFLINE NOT READY";
-    else if (partial) status = "OFFLINE PARTIAL";
+    if (!checks.launcher || !checks.scripts || missing > 5) {
+      status = "OFFLINE FAILED";
+    } else if (missing > 0 || apiHits > 0 || remaining.length > 0) {
+      status = "OFFLINE PARTIAL";
+    }
+
+    var reportText = [
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      " OFFLINE COLLECTION REPORT",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "",
+      "Files scanned       : " + paths.length,
+      "",
+      "External assets     : " + missing,
+      "API/Backend         : " + apiHits,
+      "Broken references   : " + remaining.length,
+      "",
+      "Entry (index.html)  : " + (checks.launcher ? "OK" : "MISSING"),
+      "Scripts             : " + (checks.scripts ? "OK" : "MISSING"),
+      "Assets present      : " + (checks.assets ? "OK" : "NO"),
+      "Sandbox mock        : " + (checks.sandboxService ? "OK" : "NO"),
+      "",
+      "Validation          : " + (status === "OFFLINE READY" ? "PASS" : "REVIEW"),
+      "",
+      "Offline Score       : " + score,
+      "Status              : " + status,
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ].join("\n");
 
     return {
       ready: status === "OFFLINE READY",
       status: status,
+      offlineScore: score,
       checks: checks,
       remaining: remaining.slice(0, 40),
-      remainingCount: remaining.length
+      remainingCount: remaining.length,
+      reportText: reportText,
+      totalFiles: paths.length
     };
   }
 
@@ -650,12 +688,46 @@
     };
   }
 
+  /** Format exact FINAL REPORT (spec §57) from any counts object */
+  function formatStrictReport(data) {
+    data = data || {};
+    return [
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      " OFFLINE COLLECTION REPORT",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "",
+      "Files scanned       : " + (data.totalFiles != null ? data.totalFiles : "—"),
+      "",
+      "External URLs       : " + (data.externalUrls != null ? data.externalUrls : 0),
+      "External assets     : " + (data.externalAssets != null ? data.externalAssets : 0),
+      "",
+      "Downloaded          : " + (data.downloaded != null ? data.downloaded : 0),
+      "Failed              : " + (data.failed != null ? data.failed : 0),
+      "Missing             : " + (data.missing != null ? data.missing : 0),
+      "",
+      "Tracking            : " + (data.tracking != null ? data.tracking : 0),
+      "SVG namespace       : " + (data.svgNamespace != null ? data.svgNamespace : 0),
+      "API/Backend         : " + (data.api != null ? data.api : 0),
+      "",
+      "Broken references   : " + (data.brokenReferences != null ? data.brokenReferences : 0),
+      "",
+      "Service Worker      : " + (data.serviceWorker || "—"),
+      "",
+      "Validation          : " + (data.validation || "—"),
+      "",
+      "Offline Score       : " + (data.offlineScore != null ? data.offlineScore : "—"),
+      "Status              : " + (data.status || "—"),
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ].join("\n");
+  }
+
   global.GCOfflineAnalyze = {
     analyzeZip: analyzeZip,
     applyConversion: applyConversion,
     quickOfflineCheck: quickOfflineCheck,
     classifyPath: classifyPath,
     buildChangePlan: buildChangePlan,
-    buildInternalDepMap: buildInternalDepMap
+    buildInternalDepMap: buildInternalDepMap,
+    formatStrictReport: formatStrictReport
   };
 })(typeof window !== "undefined" ? window : globalThis);

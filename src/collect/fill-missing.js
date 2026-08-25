@@ -4,6 +4,7 @@ import { classifySlotSubfolder, folderOf } from "../classify/slot-folder.js";
 import { shouldIncludeResource } from "../classify/select-filter.js";
 import { extractReferencedUrls, guessTypeFromUrl } from "./urls.js";
 import { MAX_SINGLE_FILE, MAX_RAW_TOTAL, sumZipFilesBytes } from "./limits.js";
+import { verifyDownload, normalizeUrl } from "../offline/strict-collector.js";
 
 /**
  * Multi-pass auto-fill: scan HTML/JS/CSS → fetch missing → scan newly fetched → pass 2.
@@ -91,7 +92,23 @@ export async function fillMissingAssets(
         }
         const ct = res.headers.get("content-type") || "";
         const type = guessTypeFromUrl(u, ct);
+        // Strict verification (HTTP + content + signature + hash)
+        const expectedExt = (normalizeUrl(u)?.localName || "").split(".").pop() || "";
+        const verified = verifyDownload(res, buffer, expectedExt);
+        if (!verified.ok) {
+          report.failed++;
+          passReport.failed++;
+          report.stillMissing.push({
+            url: u,
+            error: verified.error || verified.status,
+            pass,
+            strict: true
+          });
+          continue;
+        }
         let name = safe(new URL(u).pathname.split("/").pop() || "file");
+        // Strip query from local filename (Rule 7)
+        name = name.split("?")[0].split("#")[0];
         if (!/\.[a-z0-9]{1,8}$/i.test(name)) {
           if (type === "script") name += ".js";
           else if (type === "stylesheet") name += ".css";
@@ -99,6 +116,11 @@ export async function fillMissingAssets(
           else if (ct.includes("json")) name += ".json";
         }
         const classified = classifyResource(u, type, ct, "");
+        // Skip tracking / SVG namespace even if somehow reached here
+        if (classified.status === "TRACKING" || classified.status === "SVG_NAMESPACE") {
+          passReport.skipped++;
+          continue;
+        }
         const slot =
           classified.category === "game"
             ? classifySlotSubfolder(u, type, ct)
@@ -132,7 +154,12 @@ export async function fillMissingAssets(
           classifyReason:
             classified.reason + (slot.reason ? "+" + slot.reason : "") + "+auto-fill-p" + pass,
           autoFilled: true,
-          fillPass: pass
+          fillPass: pass,
+          // Strict collector fields
+          strictStatus: classified.status || "ASSET",
+          hash: verified.hash || null,
+          signature: verified.signature?.type || null,
+          signatureMatch: verified.signatureMatch
         });
         report.fetched++;
         passReport.fetched++;
