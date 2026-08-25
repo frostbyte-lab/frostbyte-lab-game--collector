@@ -1819,14 +1819,34 @@
       font-weight: 600;
     }
     .file-tree-item.scan-error::after {
-      content: 'ERR';
+      content: 'ERROR';
       margin-left: auto;
       font-size: 9px;
       font-weight: 800;
       letter-spacing: 0.04em;
       color: #fff;
-      background: #ef4444;
-      padding: 2px 5px;
+      background: #dc2626;
+      border: 1px solid #f87171;
+      padding: 2px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .file-tree-item.scan-warn {
+      border-left: 3px solid #f59e0b !important;
+      background: rgba(245, 158, 11, 0.12) !important;
+    }
+    .file-tree-item.scan-warn .file-tree-name {
+      color: #fde68a !important;
+    }
+    .file-tree-item.scan-warn::after {
+      content: 'WARN';
+      margin-left: auto;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: #1c1917;
+      background: #f59e0b;
+      padding: 2px 6px;
       border-radius: 4px;
       flex-shrink: 0;
     }
@@ -4249,6 +4269,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           try {
             if (window.__gcScanErrorPaths && window.__gcScanErrorPaths.has(entry.__path)) {
               fileEl.classList.add('scan-error');
+            } else if (window.__gcScanWarnPaths && window.__gcScanWarnPaths.has(entry.__path)) {
+              fileEl.classList.add('scan-warn');
             }
           } catch (_) {}
           fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span><button type="button" class="file-tree-delete" title="Delete file permanently" aria-label="Delete file permanently">${deleteIconHTML()}</button>`;
@@ -7037,10 +7059,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
     function applyScanErrorTags() {
       const set = window.__gcScanErrorPaths;
+      const warnSet = window.__gcScanWarnPaths;
       document.querySelectorAll('#file-tree .file-tree-item[data-path]').forEach(function (el) {
         const p = el.dataset.path;
+        el.classList.remove('scan-error', 'scan-warn');
         if (set && set.has(p)) el.classList.add('scan-error');
-        else el.classList.remove('scan-error');
+        else if (warnSet && warnSet.has(p)) el.classList.add('scan-warn');
       });
       // folder yang mengandung path error
       document.querySelectorAll('#file-tree .file-tree-item[data-folder-name]').forEach(function (el) {
@@ -10994,7 +11018,38 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         (sbLine ? '<br><span style="font-size:12px;color:#94a3b8">Breakdown: ' + sbLine + '</span>' : '') +
         '<br><span style="font-size:11px;color:#64748b">ANALYZE ≠ DELETE — file belum diubah.</span>';
       document.getElementById('gc-oa-summary').classList.add('show');
-      oaStatus('Analisa selesai');
+      // Label ERROR merah / WARN di Explorer
+      try {
+        var errSet = new Set();
+        var warnSet = new Set();
+        (__oaReport.files || []).forEach(function (f) {
+          var cat = String(f.category || f.status || '').toUpperCase();
+          var act = String(f.action || f.recommendedAction || '').toUpperCase();
+          var p = f.path || f.file || f.name;
+          if (!p) return;
+          if (cat === 'TRACKING' || act === 'REMOVE' || cat === 'ERROR') errSet.add(p);
+          else if (cat === 'BACKEND_API' || cat === 'API' || cat === 'SERVER' || act === 'REPLACE' || cat === 'EXTERNAL') warnSet.add(p);
+          else if (act === 'REVIEW' || cat === 'REVIEW' || cat === 'DOMAIN_REDIRECT') warnSet.add(p);
+        });
+        window.__gcScanErrorPaths = errSet;
+        window.__gcScanWarnPaths = warnSet;
+        if (typeof applyScanErrorTags === 'function') applyScanErrorTags();
+        if (typeof currentZip !== 'undefined' && currentZip) {
+          currentZip.file('analysis/analysis-report.json', JSON.stringify(__oaReport, null, 2));
+          var errLines = ['# ERROR (merah)', ''];
+          errSet.forEach(function (p) { errLines.push('- ERROR `' + p + '`'); });
+          if (!errSet.size) errLines.push('_Tidak ada ERROR_');
+          currentZip.file('analysis/ERRORS.md', errLines.join('\n'));
+          var allLines = ['# Label scanner', '', '| File | Tag |', '|------|-----|'];
+          errSet.forEach(function (p) { allLines.push('| `' + p + '` | ERROR |'); });
+          warnSet.forEach(function (p) { if (!errSet.has(p)) allLines.push('| `' + p + '` | WARN |'); });
+          currentZip.file('analysis/LABELED-FILES.md', allLines.join('\n'));
+        }
+        if (typeof appendLog === 'function') {
+          appendLog('Scanner: ERROR ' + errSet.size + ' · WARN ' + warnSet.size + ' (label di Explorer)', errSet.size ? 'err' : 'ok');
+        }
+      } catch (tagErr) { console.warn(tagErr); }
+      oaStatus('Analisa selesai · ERROR di Explorer (merah)');
     } catch (e) {
       oaStatus('Analisa gagal: ' + (e.message || e));
       alert('Analisa gagal: ' + (e.message || e));
