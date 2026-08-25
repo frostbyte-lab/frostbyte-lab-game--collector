@@ -3193,6 +3193,7 @@
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
           <button type="button" class="btn btn-secondary btn-sm" id="btn-analisa-game" onclick="runAnalisaGame()" title="Analisa dependency → offline sandbox">Analisa Game</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-offline-pipeline" onclick="runFullOfflinePipeline()" title="Collect→Analisa→Dep map→Sandbox→Preview">Pipeline Offline</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Login AI — sesi API">Login AI</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
@@ -8630,50 +8631,196 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
      * 3) Siap Sandbox mock dari api-map
      */
     async function prepareOfflinePipeline() {
+      return runFullOfflinePipeline();
+    }
+    window.prepareOfflinePipeline = prepareOfflinePipeline;
+
+    /**
+     * Pipeline Offline lengkap (otomatis di dalam GC):
+     * 1 Collect/kelengkapan ZIP + auto-lengkapi info
+     * 2 Analisa Game (SAFE/WARN/ERROR)
+     * 3 Network runtime (dari log preview jika ada)
+     * 4 Peta dependency internal (madge-like)
+     * 5 Change-plan + sandbox mock
+     * 6 Preview offline → siap host ulang
+     */
+    async function runFullOfflinePipeline() {
       try {
         if (!currentZip) {
-          alert('Belum ada ZIP.\n\n1) Collect via GitHub (Auto-spins ≥ 3–5)\n2) Tunggu unduhan selesai / Load File\n3) Klik Siapkan Offline lagi.');
+          alert('Belum ada ZIP.\n\n1) Collect (GitHub/Cloudflare) + auto-lengkapi\n2) Load ZIP di Workspace\n3) Pipeline Offline lagi.');
           try {
             var b = document.querySelector('.nav-btn[data-panel="collect"]');
             if (b) b.click();
           } catch (_) {}
           return;
         }
-        setLoading(true, 'Offline', 'Memeriksa api-map & paket…');
+
+        var steps = [];
+        function step(n, msg, ok) {
+          steps.push((ok === false ? '✗' : '✓') + ' ' + n + '. ' + msg);
+          if (typeof appendLog === 'function') appendLog('Pipeline ' + n + ': ' + msg, ok === false ? 'err' : 'ok');
+        }
+
+        setLoading(true, 'Pipeline Offline', '1/6 Kelengkapan paket…');
+
+        // —— 1. Kelengkapan (hasil collect + auto-lengkapi) ——
         var rep = null;
         try {
           if (typeof gcInspectZipCompleteness === 'function') {
             rep = await gcInspectZipCompleteness(currentZip);
-            if (typeof gcUpdateCollectProgress === 'function') gcUpdateCollectProgress(rep, 'offline check');
+            if (typeof gcUpdateCollectProgress === 'function') gcUpdateCollectProgress(rep, 'pipeline');
           }
         } catch (_) {}
-        setLoading(false);
-
-        var apiOk = rep && rep.items && rep.items.some(function (it) { return it.id === 'apimap' && it.ok; });
         var fileN = (rep && rep.fileCount) || Object.keys(zipFileMap || {}).length;
-        var lines = [
-          'Paket: ~' + fileN + ' file · kelengkapan ' + ((rep && rep.pct) || 0) + '%',
-          apiOk ? '✓ api-map.json berisi endpoint/snapshot' : '○ api-map lemah/kosong — mock Sandbox generik (Collect auto-spin disarankan)',
-          '',
-          'Lanjut Custom API (base URL domain baru) + patch path?'
-        ];
-        appendLog(lines.join(' · '), 'ok');
+        var apiOk = rep && rep.items && rep.items.some(function (it) { return it.id === 'apimap' && it.ok; });
+        step(1, 'Kelengkapan ~' + ((rep && rep.pct) || 0) + '% · ' + fileN + ' file' + (apiOk ? ' · api-map OK' : ' · api-map lemah'), true);
 
-        await autoCustomApiSdk();
-
-        if (typeof startPreview === 'function') {
-          try {
-            var ws = document.querySelector('.nav-btn[data-panel="workspace"]');
-            if (ws) ws.click();
-          } catch (_) {}
-          setTimeout(function () { startPreview('sandbox'); }, 200);
+        // —— 2. Analisa Game ——
+        setLoading(true, 'Pipeline Offline', '2/6 Analisa Game…');
+        if (!window.GCOfflineAnalyze || !GCOfflineAnalyze.analyzeZip) {
+          step(2, 'Modul analisa tidak ada', false);
+          setLoading(false);
+          alert('Modul offline-analyze.js belum termuat. Hard-refresh.');
+          return;
         }
+        var report = await GCOfflineAnalyze.analyzeZip(currentZip, {
+          onProgress: function (pct, label) {
+            setLoading(true, 'Pipeline Offline', '2/6 Analisa ' + pct + '% ' + (label || ''));
+          }
+        });
+        window.__oaReport = report;
+        var s = report.summary || {};
+        // ERROR/WARN labels di Explorer
+        try {
+          var errSet = new Set();
+          var warnSet = new Set();
+          (report.files || []).forEach(function (f) {
+            var cat = String(f.category || f.status || '').toUpperCase();
+            var act = String(f.action || '').toUpperCase();
+            var p = f.path || f.file;
+            if (!p) return;
+            if (cat === 'TRACKING' || act === 'REMOVE') errSet.add(p);
+            else if (cat === 'BACKEND_API' || cat === 'API' || act === 'REPLACE' || cat === 'EXTERNAL' || act === 'REVIEW') warnSet.add(p);
+          });
+          window.__gcScanErrorPaths = errSet;
+          window.__gcScanWarnPaths = warnSet;
+          if (typeof applyScanErrorTags === 'function') applyScanErrorTags();
+        } catch (_) {}
+        step(2, 'SAFE ' + (s.safe|0) + ' · ERROR/track ' + (s.tracking|0) + ' · API ' + (s.api|0) + ' · REPLACE ' + (s.replaceCandidates|0), true);
+
+        // —— 3. Network runtime map (dari preview log jika ada) ——
+        setLoading(true, 'Pipeline Offline', '3/6 Network runtime…');
+        var net = [];
+        try {
+          (window.__pvLastErrors || []).forEach(function (e) {
+            net.push({ kind: e.kind || 'log', text: e.text || String(e), file: e.file || '' });
+          });
+          if (window.__gcRuntimeNetwork && window.__gcRuntimeNetwork.length) {
+            window.__gcRuntimeNetwork.forEach(function (x) { net.push(x); });
+          }
+        } catch (_) {}
+        var networkMap = {
+          generatedAt: new Date().toISOString(),
+          note: 'Isi bertambah setelah Preview (runtime). DevTools Network tetap bisa dipakai manual.',
+          entries: net.slice(0, 200)
+        };
+        currentZip.file('pipeline/network-map.json', JSON.stringify(networkMap, null, 2));
+        step(3, net.length ? ('Network log ' + net.length + ' entri') : 'Belum ada log runtime — jalankan Preview lalu pipeline lagi untuk isi penuh', true);
+
+        // —— 4. Dependency map internal ——
+        setLoading(true, 'Pipeline Offline', '4/6 Peta dependency file…');
+        var pathToText = {};
+        var names = Object.keys(zipFileMap || {});
+        for (var i = 0; i < names.length; i++) {
+          var np = names[i];
+          if (!/\.(js|mjs|cjs|ts|jsx|tsx|html?|css|json)$/i.test(np)) continue;
+          try {
+            var entry = zipFileMap[np];
+            if (entry && entry.async) pathToText[np] = await entry.async('string');
+          } catch (_) {}
+        }
+        var depMap = GCOfflineAnalyze.buildInternalDepMap
+          ? GCOfflineAnalyze.buildInternalDepMap(pathToText)
+          : { edges: [], nodeCount: 0, edgeCount: 0 };
+        currentZip.file('pipeline/dependency-map.json', JSON.stringify(depMap, null, 2));
+        step(4, 'Dependency ' + (depMap.edgeCount || 0) + ' edge · ' + (depMap.nodeCount || 0) + ' node', true);
+
+        // —— 5. Change-plan + sandbox mock ——
+        setLoading(true, 'Pipeline Offline', '5/6 Change-plan & sandbox…');
+        var plan = GCOfflineAnalyze.buildChangePlan
+          ? GCOfflineAnalyze.buildChangePlan(report)
+          : (report.changePlan || {});
+        currentZip.file('pipeline/change-plan.json', JSON.stringify(plan, null, 2));
+        currentZip.file('pipeline/analysis-report.json', JSON.stringify(report, null, 2));
+        var conv = null;
+        try {
+          if (GCOfflineAnalyze.applyConversion) {
+            conv = await GCOfflineAnalyze.applyConversion(currentZip, report);
+          }
+        } catch (ce) {
+          step(5, 'Konversi parsial: ' + (ce.message || ce), false);
+        }
+        if (conv && conv.zip) {
+          // applyConversion may mutate currentZip in place
+        }
+        // Pastikan api-map template jika kosong
+        try {
+          var hasMap = names.some(function (n) { return /(^|\/)api-map\.json$/i.test(n); });
+          if (!hasMap && typeof generateSecretApiMap === 'function') {
+            /* optional */
+          }
+        } catch (_) {}
+        step(5, 'change-plan + sandbox mock ditulis ke pipeline/ & sandbox/', true);
+
+        // Refresh explorer
+        try {
+          if (typeof renderFileTree === 'function') {
+            var allPaths = [];
+            currentZip.forEach(function (rel) { if (rel && !rel.endsWith('/')) allPaths.push(rel); });
+            // rebuild zipFileMap entries for new files
+            for (var j = 0; j < allPaths.length; j++) {
+              if (!zipFileMap[allPaths[j]]) {
+                var fe = currentZip.file(allPaths[j]);
+                if (fe) zipFileMap[allPaths[j]] = fe;
+              }
+            }
+            renderFileTree(Object.keys(zipFileMap));
+            if (typeof applyScanErrorTags === 'function') applyScanErrorTags();
+          }
+        } catch (_) {}
+
+        // —— 6. Preview offline ——
+        setLoading(true, 'Pipeline Offline', '6/6 Preview Sandbox…');
+        try {
+          var ws = document.querySelector('.nav-btn[data-panel="workspace"]');
+          if (ws) ws.click();
+        } catch (_) {}
+        if (typeof startPreview === 'function') {
+          setTimeout(function () { startPreview('sandbox'); }, 250);
+        }
+        step(6, 'Preview Sandbox dijalankan — host ulang: Download ZIP / Hosting', true);
+
+        setLoading(false);
+        var summary =
+          'PIPELINE OFFLINE SELESAI\n\n' +
+          steps.join('\n') +
+          '\n\nFile ditulis:\n' +
+          '· pipeline/analysis-report.json\n' +
+          '· pipeline/change-plan.json\n' +
+          '· pipeline/dependency-map.json\n' +
+          '· pipeline/network-map.json\n' +
+          '· sandbox/* (jika konversi OK)\n\n' +
+          'Lanjut host ulang: Download ZIP atau menu Hosting.';
+        appendLog(summary.replace(/\n/g, ' · '), 'ok');
+        alert(summary);
       } catch (e) {
         try { setLoading(false); } catch (_) {}
-        alert('Siapkan Offline gagal: ' + (e && e.message ? e.message : e));
+        alert('Pipeline Offline gagal: ' + (e && e.message ? e.message : e));
+        if (typeof appendLog === 'function') appendLog('Pipeline gagal: ' + (e && e.message ? e.message : e), 'err');
       }
     }
-    window.prepareOfflinePipeline = prepareOfflinePipeline;
+    window.runFullOfflinePipeline = runFullOfflinePipeline;
+
 
     async function autoCustomApiSdk() {
       if (!currentZip) {

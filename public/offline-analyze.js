@@ -588,11 +588,72 @@
     };
   }
 
+
+  /** Peta dependency internal file (mirip madge, tanpa CLI) */
+  function buildInternalDepMap(pathToText) {
+    var edges = [];
+    var nodes = Object.keys(pathToText || {});
+    var byBase = {};
+    nodes.forEach(function (p) {
+      var b = baseName(p);
+      if (!byBase[b]) byBase[b] = [];
+      byBase[b].push(p);
+    });
+    var importRe = /(?:import\s*(?:\([^)]*\)|[^'"\n]+from\s*)|require\s*\(|importScripts\s*\()\s*['"]([^'"]+)['"]/gi;
+    var srcRe = /(?:src|href)=["']([^"']+)["']/gi;
+    nodes.forEach(function (from) {
+      var text = pathToText[from];
+      if (!text || typeof text !== 'string') return;
+      var seen = {};
+      function addRef(raw) {
+        if (!raw || raw.length > 240) return;
+        if (/^(data:|blob:|https?:|\/\/|#|javascript:)/i.test(raw)) return;
+        var clean = raw.split('?')[0].split('#')[0];
+        var bare = baseName(clean);
+        var targets = [];
+        if (pathToText[clean]) targets.push(clean);
+        if (pathToText['./' + clean]) targets.push('./' + clean);
+        // resolve relative to from dir
+        var dir = from.includes('/') ? from.replace(/\/[^/]+$/, '/') : '';
+        var joined = (dir + clean).replace(/\/\.\//g, '/');
+        if (pathToText[joined]) targets.push(joined);
+        if (byBase[bare]) targets = targets.concat(byBase[bare]);
+        targets.forEach(function (to) {
+          if (to === from) return;
+          var key = from + '->' + to;
+          if (seen[key]) return;
+          seen[key] = 1;
+          edges.push({ from: from, to: to, via: raw.slice(0, 120) });
+        });
+      }
+      var m;
+      importRe.lastIndex = 0;
+      while ((m = importRe.exec(text))) addRef(m[1]);
+      srcRe.lastIndex = 0;
+      while ((m = srcRe.exec(text))) addRef(m[1]);
+    });
+    var inbound = {};
+    edges.forEach(function (e) {
+      inbound[e.to] = (inbound[e.to] || 0) + 1;
+    });
+    return {
+      generatedAt: new Date().toISOString(),
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      edges: edges.slice(0, 2000),
+      mostReferenced: Object.keys(inbound)
+        .map(function (p) { return { path: p, count: inbound[p] }; })
+        .sort(function (a, b) { return b.count - a.count; })
+        .slice(0, 40)
+    };
+  }
+
   global.GCOfflineAnalyze = {
     analyzeZip: analyzeZip,
     applyConversion: applyConversion,
     quickOfflineCheck: quickOfflineCheck,
     classifyPath: classifyPath,
-    buildChangePlan: buildChangePlan
+    buildChangePlan: buildChangePlan,
+    buildInternalDepMap: buildInternalDepMap
   };
 })(typeof window !== "undefined" ? window : globalThis);
