@@ -3426,19 +3426,64 @@
       <div class="activity-wrap">
         <div class="activity-hub" id="activity-hub">
           <h2 class="activity-title">Activity</h2>
-          <p class="activity-sub">Pilih area kerja</p>
+          <p class="activity-sub">Pilih area kerja · Frostbyte Technologies</p>
           <div class="activity-cards">
-            <button type="button" class="activity-card" id="btn-activity-chat" onclick="openActivityChat()">
-              <span class="activity-card-icon">💬</span>
+            <button type="button" class="activity-card activity-card-chat" id="btn-activity-chat" onclick="openActivityChat()">
+              <span class="activity-card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/></svg>
+              </span>
               <span class="activity-card-title">Chat AI</span>
-              <span class="activity-card-desc">Chat lengkap · gambar · perbaikan kode · proses berpikir · push GitHub / Cloudflare</span>
+              <span class="activity-card-desc">Asisten kode · unggah gambar · perbaiki file · push GitHub / Cloudflare</span>
             </button>
-            <button type="button" class="activity-card" id="btn-activity-log" onclick="openActivityLog()">
-              <span class="activity-card-icon">📋</span>
+            <button type="button" class="activity-card activity-card-hist" id="btn-activity-log" onclick="openActivityLog()">
+              <span class="activity-card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><path d="M5 12h2M17 12h2M12 5v2"/></svg>
+              </span>
               <span class="activity-card-title">Histories</span>
-              <span class="activity-card-desc">Semua aktivitas (teks) · klik untuk detail error / riwayat AI</span>
+              <span class="activity-card-desc">Riwayat aktivitas &amp; error · ketuk item untuk detail</span>
+            </button>
+            <button type="button" class="activity-card activity-card-term" id="btn-activity-term" onclick="openActivityTerminal()">
+              <span class="activity-card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg>
+              </span>
+              <span class="activity-card-title">Console</span>
+              <span class="activity-card-desc">Log gaya terminal (status collect / AI). Bukan instal paket sistem — app ini berjalan di browser/Worker.</span>
             </button>
           </div>
+
+          <details class="fb-portfolio">
+            <summary>
+              <span class="fb-portfolio-logo"><img src="/frostbyte-logo.png" alt="" width="28" height="28"></span>
+              <span>
+                <strong>Frostbyte Technologies</strong>
+                <small>Portofolio &amp; kontak</small>
+              </span>
+            </summary>
+            <div class="fb-portfolio-body">
+              <p class="fb-portfolio-tag">Software · Web game tools · Cloud automation</p>
+              <p>
+                <b>Frostbyte Technologies</b> mengembangkan perangkat bantu untuk collect, perbaikan, dan preview resource game web
+                (Game Collector Pro), integrasi Cloudflare Workers, GitHub Actions, serta alur offline/hybrid.
+              </p>
+              <ul class="fb-portfolio-list">
+                <li>Game Collector Pro — capture, sandbox, AI assist, hosting EDU</li>
+                <li>Cloud deploy (Workers / Pages) &amp; otomasi collect</li>
+                <li>Workspace editor + offline conversion</li>
+              </ul>
+              <div class="fb-portfolio-contact">
+                <div class="fb-contact-row">
+                  <span>WhatsApp / HP (ID)</span>
+                  <a href="https://wa.me/6282328597909" target="_blank" rel="noopener">0823-2859-7909</a>
+                </div>
+                <div class="fb-contact-row">
+                  <span>International</span>
+                  <a href="tel:+66975842024">+66 97 584 2024</a>
+                </div>
+              </div>
+              <p class="fb-portfolio-note">Hubungi untuk kerja sama, custom tools, atau dukungan teknis.</p>
+            </div>
+          </details>
+
           <div id="history-list" style="display:none;"></div>
         </div>
 
@@ -3482,6 +3527,21 @@
             </div>
             <pre id="act-detail-body" class="act-detail-pre"></pre>
           </div>
+        </div>
+
+        <div class="activity-view" id="activity-term-view" hidden>
+          <div class="activity-view-bar">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeActivitySub()">← Kembali</button>
+            <strong>Console</strong>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="actClearLog(); renderActivityTerminal();" title="Clear">Clear</button>
+          </div>
+          <div class="act-term" id="act-term">
+            <div class="act-term-head">frostbyte@collector — log session</div>
+            <pre class="act-term-body" id="act-term-body">$ # Console menampilkan log aktivitas app
+$ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
+</pre>
+          </div>
+          <p class="act-term-footnote">Butuh dependency baru? Install di mesin dev lalu <code>wrangler deploy</code> — bukan dari HP.</p>
         </div>
       </div>
     </section>
@@ -5021,6 +5081,49 @@
       if (chat) chat.hidden = false;
       actRecord('nav', 'Buka Chat AI', 'User membuka Chat AI dari Activity');
     }
+    function openActivityTerminal() {
+      var hub = document.getElementById('activity-hub');
+      var chat = document.getElementById('activity-chat-view');
+      var log = document.getElementById('activity-log-view');
+      var term = document.getElementById('activity-term-view');
+      if (hub) hub.hidden = true;
+      if (chat) chat.hidden = true;
+      if (log) log.hidden = true;
+      if (term) term.hidden = false;
+      renderActivityTerminal();
+      try { actRecord('nav', 'Buka Console', 'User membuka console log Activity'); } catch (_) {}
+    }
+
+    function renderActivityTerminal() {
+      var body = document.getElementById('act-term-body');
+      if (!body) return;
+      var lines = [
+        '$ frostbyte collector console',
+        '$ # Browser/Worker — bukan shell untuk apt/npm install',
+        '$ session ' + new Date().toISOString(),
+        ''
+      ];
+      try {
+        var arr = typeof actLoadLog === 'function' ? actLoadLog() : [];
+        if (Array.isArray(arr) && arr.length) {
+          arr.slice(-40).forEach(function (it) {
+            var t = (it.ts || it.time || '').toString().replace('T', ' ').slice(0, 19);
+            var k = it.kind || it.type || 'log';
+            var title = it.title || it.msg || it.message || '';
+            lines.push('[' + k + '] ' + (t ? t + ' · ' : '') + title);
+          });
+        } else {
+          lines.push('# Belum ada log. Jalankan Collect / AI untuk mengisi riwayat.');
+        }
+      } catch (e) {
+        lines.push('# Gagal baca log: ' + (e.message || e));
+      }
+      lines.push('');
+      lines.push('$ _');
+      body.textContent = lines.join('\n');
+      try { body.scrollTop = body.scrollHeight; } catch (_) {}
+    }
+
     function openActivityLog() {
       var hub = document.getElementById('activity-hub');
       var chat = document.getElementById('activity-chat-view');
@@ -5038,8 +5141,10 @@
       var hub = document.getElementById('activity-hub');
       var chat = document.getElementById('activity-chat-view');
       var logv = document.getElementById('activity-log-view');
+      var term = document.getElementById('activity-term-view');
       if (chat) chat.hidden = true;
       if (logv) logv.hidden = true;
+      if (term) term.hidden = true;
       if (hub) hub.hidden = false;
     }
     function actRenderLogList() {
@@ -8610,15 +8715,112 @@
     .activity-sub { margin:0 0 16px; font-size:13px; color:var(--text-muted); }
     .activity-cards { display:grid; gap:12px; }
     .activity-card {
-      display:flex; flex-direction:column; align-items:flex-start; gap:6px;
-      text-align:left; padding:16px 14px; border-radius:12px; cursor:pointer;
-      background:var(--surface); border:1px solid var(--border); color:var(--text);
+      display:grid;
+      grid-template-columns:48px minmax(0,1fr);
+      grid-template-rows:auto auto;
+      column-gap:12px;
+      row-gap:4px;
+      text-align:left; padding:16px 14px; border-radius:14px; cursor:pointer;
+      background:linear-gradient(145deg, rgba(30,41,59,0.95), rgba(15,23,42,0.9));
+      border:1px solid var(--border); color:var(--text);
       transition:var(--transition);
+      box-shadow:0 8px 24px rgba(0,0,0,0.18);
     }
-    .activity-card:hover { border-color:var(--accent); background:rgba(94,225,192,0.06); }
-    .activity-card-icon { font-size:22px; line-height:1; }
-    .activity-card-title { font-weight:700; font-size:15px; }
-    .activity-card-desc { font-size:12px; color:var(--text-muted); line-height:1.4; }
+    .activity-card:hover {
+      border-color:rgba(94,225,192,0.45);
+      background:linear-gradient(145deg, rgba(30,52,64,0.98), rgba(15,23,42,0.95));
+      transform:translateY(-1px);
+    }
+    .activity-card-icon {
+      grid-row:1 / span 2;
+      align-self:center;
+      width:48px; height:48px;
+      display:flex; align-items:center; justify-content:center;
+      border-radius:12px;
+      background:rgba(94,225,192,0.1);
+      color:var(--accent);
+      border:1px solid rgba(94,225,192,0.22);
+    }
+    .activity-card-chat .activity-card-icon {
+      background:rgba(56,189,248,0.12);
+      border-color:rgba(56,189,248,0.3);
+      color:#38bdf8;
+    }
+    .activity-card-hist .activity-card-icon {
+      background:rgba(167,139,250,0.12);
+      border-color:rgba(167,139,250,0.3);
+      color:#a78bfa;
+    }
+    .activity-card-term .activity-card-icon {
+      background:rgba(52,211,153,0.1);
+      border-color:rgba(52,211,153,0.28);
+      color:#34d399;
+    }
+    .activity-card-title { font-weight:700; font-size:15px; grid-column:2; }
+    .activity-card-desc { font-size:12px; color:var(--text-muted); line-height:1.45; grid-column:2; }
+
+    .fb-portfolio {
+      margin-top:18px;
+      border-radius:14px;
+      border:1px solid rgba(94,225,192,0.25);
+      background:linear-gradient(160deg, rgba(15,23,42,0.95), rgba(6,78,59,0.15));
+      overflow:hidden;
+    }
+    .fb-portfolio > summary {
+      list-style:none;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:14px 14px;
+    }
+    .fb-portfolio > summary::-webkit-details-marker { display:none; }
+    .fb-portfolio-logo {
+      width:40px; height:40px; border-radius:10px;
+      overflow:hidden; flex-shrink:0;
+      border:1px solid rgba(94,225,192,0.3);
+      background:#0f172a;
+    }
+    .fb-portfolio-logo img { width:100%; height:100%; object-fit:cover; display:block; }
+    .fb-portfolio summary strong { display:block; font-size:14px; color:#e2e8f0; }
+    .fb-portfolio summary small { display:block; font-size:11px; color:#94a3b8; margin-top:2px; }
+    .fb-portfolio-body { padding:0 14px 16px; border-top:1px solid rgba(148,163,184,0.12); }
+    .fb-portfolio-tag {
+      display:inline-block; margin:12px 0 8px; padding:4px 10px; border-radius:999px;
+      font-size:11px; color:#5ee1c0; background:rgba(94,225,192,0.1); border:1px solid rgba(94,225,192,0.2);
+    }
+    .fb-portfolio-body p { margin:0 0 10px; font-size:13px; line-height:1.55; color:#cbd5e1; }
+    .fb-portfolio-list { margin:0 0 12px; padding-left:18px; color:#94a3b8; font-size:12px; line-height:1.55; }
+    .fb-portfolio-contact {
+      display:grid; gap:8px; margin-bottom:10px;
+    }
+    .fb-contact-row {
+      display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px;
+      padding:10px 12px; border-radius:10px; background:rgba(15,23,42,0.75); border:1px solid var(--border);
+      font-size:12px; color:#94a3b8;
+    }
+    .fb-contact-row a {
+      color:#38bdf8; font-weight:700; text-decoration:none; font-size:13px;
+    }
+    .fb-contact-row a:hover { text-decoration:underline; }
+    .fb-portfolio-note { font-size:11px !important; color:#64748b !important; margin-bottom:0 !important; }
+
+    .act-term {
+      flex:1; min-height:0; margin:12px; border-radius:12px; overflow:hidden;
+      border:1px solid rgba(52,211,153,0.25); background:#020617;
+      display:flex; flex-direction:column;
+    }
+    .act-term-head {
+      padding:8px 12px; font:12px/1.4 ui-monospace,Menlo,monospace; color:#34d399;
+      background:rgba(15,23,42,0.95); border-bottom:1px solid rgba(52,211,153,0.15);
+    }
+    .act-term-body {
+      margin:0; flex:1; overflow:auto; padding:12px; min-height:220px;
+      font:12px/1.55 ui-monospace,Menlo,monospace; color:#a7f3d0; white-space:pre-wrap; word-break:break-word;
+    }
+    .act-term-footnote {
+      margin:0 12px 14px; font-size:11px; color:var(--text-muted); line-height:1.45;
+    }
     .activity-view { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; }
     .activity-view[hidden] { display:none !important; }
     .activity-view-bar {
