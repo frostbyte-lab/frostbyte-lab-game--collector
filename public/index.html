@@ -1708,6 +1708,30 @@
       color: #fff;
     }
 
+    .file-tree-item.scan-error {
+      border-left: 3px solid #f87171 !important;
+      background: rgba(248, 113, 113, 0.12) !important;
+    }
+    .file-tree-item.scan-error .file-tree-name {
+      color: #fca5a5 !important;
+      font-weight: 600;
+    }
+    .file-tree-item.scan-error::after {
+      content: 'ERR';
+      margin-left: auto;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: #fff;
+      background: #ef4444;
+      padding: 2px 5px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .file-tree-item.scan-error-folder {
+      border-left: 3px solid #fb923c !important;
+      background: rgba(251, 146, 60, 0.1) !important;
+    }
     .file-tree-item.active {
       background: #37373d;
       color: #fff;
@@ -3295,11 +3319,11 @@
               <button type="button" class="btn btn-primary btn-sm" onclick="autoCustomApiSdk()" title="Auto Custom API/SDK — patch path, API base, bootstrap (bukan kelola API key)">
                 <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-settings"></use></svg> Custom API
               </button>
-              <button type="button" class="btn btn-success btn-sm" onclick="prepareOfflinePipeline()" title="Cek api-map + Custom API + siap Sandbox">
-                Offline
+              <button type="button" class="btn btn-success btn-sm" id="btn-ai-zip-repair" onclick="runAiZipRepair()" title="AI perbaiki ZIP (URL absolut→lokal, frame-buster) lalu auto Sandbox">
+                <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> AI
               </button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="runDeteksiAI()" title="Deteksi AI">
-                <svg class="ui-icon ui-icon-sm ui-icon-fill" aria-hidden="true"><use href="#icon-ai"></use></svg> Deteksi AI
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-deteksi-ai" onclick="runDeteksiAI()" title="Lacak file error dari Scan Error — tandai merah di Explorer">
+                Deteksi AI
               </button>
             </div>
           </div>
@@ -4056,8 +4080,17 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           // Folder row (can be opened/closed)
           const folderEl = document.createElement('div');
           folderEl.className = 'file-tree-item';
+          // tandai folder jika ada file error di dalamnya
+          try {
+            const errSet = window.__gcScanErrorPaths;
+            if (errSet && errSet.size) {
+              const prefix = (depth === 0 ? name : '') ;
+              // reconstruct folder path from tree is hard; mark after via applyScanErrorTags
+            }
+          } catch (_) {}
           folderEl.innerHTML = folderIconHTML(false) + `<span class="file-tree-name">${name}</span>`;
           folderEl.style.paddingLeft = (8 + depth * 14) + 'px';
+          folderEl.dataset.folderName = name;
 
           const childWrap = buildTreeLevel(entry.__children, depth + 1);
           wrap.appendChild(folderEl);
@@ -4067,11 +4100,19 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             const isOpen = childWrap.style.display !== 'none';
             childWrap.style.display = isOpen ? 'none' : 'block';
             folderEl.innerHTML = folderIconHTML(!isOpen) + `<span class="file-tree-name">${name}</span>`;
+            if (folderEl.classList.contains('scan-error-folder')) {
+              /* keep class */
+            }
           });
         } else {
           // File row
           const fileEl = document.createElement('div');
           fileEl.className = 'file-tree-item';
+          try {
+            if (window.__gcScanErrorPaths && window.__gcScanErrorPaths.has(entry.__path)) {
+              fileEl.classList.add('scan-error');
+            }
+          } catch (_) {}
           fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span><button type="button" class="file-tree-delete" title="Delete file permanently" aria-label="Delete file permanently">${deleteIconHTML()}</button>`;
           fileEl.querySelector('.file-tree-name').textContent = name;
           fileEl.style.paddingLeft = (8 + depth * 14) + 'px';
@@ -6309,7 +6350,128 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       return hits;
     }
 
+
+    async function runTrackScanErrors() {
+      try {
+        if (!currentZip) {
+          alert('Load ZIP dulu di Workspace.');
+          return;
+        }
+        if (!window.__gcLastScan || (!(window.__gcLastScan.issues && window.__gcLastScan.issues.length) && !(window.__gcLastScan.runtime && window.__gcLastScan.runtime.length))) {
+          appendLog('Deteksi AI: belum ada hasil Scan — menjalankan Scan Error…', 'warn');
+          if (typeof runAnalysis === 'function') await runAnalysis();
+        }
+        const scan = window.__gcLastScan || { files: [], urls: [], issues: [], runtime: [] };
+        let files = (scan.files || []).slice();
+        const byBase = Object.create(null);
+        Object.keys(zipFileMap || {}).forEach(function (p) {
+          if (/^BACKUP\//i.test(p)) return;
+          const b = p.split('/').pop().toLowerCase();
+          if (!byBase[b]) byBase[b] = [];
+          byBase[b].push(p);
+        });
+        (scan.urls || []).forEach(function (u) {
+          try {
+            const base = new URL(u).pathname.split('/').pop();
+            if (base && byBase[base.toLowerCase()]) {
+              byBase[base.toLowerCase()].forEach(function (p) {
+                if (files.indexOf(p) < 0) files.push(p);
+              });
+            }
+          } catch (_) {}
+        });
+        if (!files.length) {
+          const entry = Object.keys(zipFileMap || {}).find(function (p) { return /(^|\/)index\.html?$/i.test(p); });
+          if (entry) files.push(entry);
+        }
+        window.__gcScanErrorPaths = new Set(files);
+        if (window.__gcLastScan) window.__gcLastScan.files = files;
+
+        try {
+          const fp = document.getElementById('file-panel');
+          if (fp && fp.classList.contains('collapsed') && typeof toggleFilePanel === 'function') toggleFilePanel();
+          if (typeof renderFileTree === 'function') renderFileTree(Object.keys(zipFileMap));
+          if (typeof applyScanErrorTags === 'function') applyScanErrorTags();
+        } catch (_) {}
+
+        appendLog('Deteksi AI: ' + files.length + ' file terkait error ditandai merah di Explorer', files.length ? 'err' : 'ok');
+        files.slice(0, 10).forEach(function (f) { appendLog('  ✗ ' + f, 'err'); });
+
+        const nUrl = (scan.urls || []).length;
+        const nIssue = (scan.issues || []).length;
+        const msg =
+          'Deteksi AI — file error dilacak\n\n' +
+          'File ditandai merah: ' + files.length + '\n' +
+          'URL absolut (scan): ' + nUrl + '\n' +
+          'Baris temuan: ' + nIssue + '\n\n' +
+          'Saran perbaikan offline:\n' +
+          '1) Tombol AI (bawah) — perbaiki ZIP lalu auto Sandbox\n' +
+          '2) Auto Repair di Preview\n' +
+          '3) Analisa Game → Backup & Konversi\n' +
+          '4) Hybrid jika error API/backend\n\n' +
+          'Jalankan perbaikan AI sekarang?';
+
+        const detail = document.getElementById('preview-error-detail');
+        if (detail) {
+          detail.textContent =
+            '— Deteksi AI (lacak file error) —\n' +
+            files.map(function (f) { return '✗ ' + f; }).join('\n') +
+            '\n\nURL:\n' + (scan.urls || []).slice(0, 20).map(function (u) { return '· ' + u; }).join('\n');
+        }
+
+        if (window.confirm(msg)) {
+          await runAiZipRepair();
+        }
+      } catch (e) {
+        appendLog('Deteksi AI gagal: ' + (e && e.message || e), 'err');
+        alert('Deteksi AI gagal: ' + (e && e.message || e));
+      }
+    }
+
+    async function runAiZipRepair() {
+      try {
+        if (!currentZip) {
+          alert('Load ZIP dulu.');
+          return;
+        }
+        const go = window.confirm(
+          'AI Repair ZIP\n\n' +
+          '• Rewrite URL absolut → file lokal (jika ada)\n' +
+          '• Netralisir frame-buster\n' +
+          '• Tulis offline-readiness.json\n' +
+          '• Lalu auto Sandbox Preview\n\nLanjut?'
+        );
+        if (!go) return;
+
+        const _confirm = window.confirm;
+        window.confirm = function (m) {
+          if (/SEMUA HTML|seluruh ZIP|Auto Repair tingkat/i.test(String(m))) return true;
+          return _confirm.apply(window, arguments);
+        };
+        try {
+          if (typeof runAutoRepair === 'function') await runAutoRepair();
+        } finally {
+          window.confirm = _confirm;
+        }
+
+        appendLog('AI Repair selesai — membuka Sandbox…', 'ok');
+        try {
+          const ws = document.querySelector('.nav-btn[data-panel="workspace"]');
+          if (ws) ws.click();
+        } catch (_) {}
+        setTimeout(function () {
+          if (typeof startPreview === 'function') startPreview('sandbox');
+        }, 300);
+      } catch (e) {
+        appendLog('AI Repair gagal: ' + (e && e.message || e), 'err');
+        alert('AI Repair gagal: ' + (e && e.message || e));
+      }
+    }
+    window.runTrackScanErrors = runTrackScanErrors;
+    window.runAiZipRepair = runAiZipRepair;
+
     async function runDeteksiAI() {
+      return runTrackScanErrors();
       try {
       const logEl = document.getElementById('error-log');
 
@@ -6679,6 +6841,44 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       }
       // Gabungkan error runtime yang sudah tertangkap
       const runtime = (window.__pvLastErrors || []).slice(-20);
+      // Simpan hasil scan untuk Deteksi AI (lacak file + tag merah)
+      try {
+        window.__gcLastScan = {
+          at: Date.now(),
+          issues: issues.slice(),
+          runtime: runtime.slice(),
+          files: [],
+          urls: []
+        };
+        const fileSet = new Set();
+        issues.forEach(function (line) {
+          const m = String(line).match(/^File:\s*([^\s—]+)/i);
+          if (m && m[1]) fileSet.add(m[1].replace(/\/$/, ''));
+          const um = String(line).match(/https?:\/\/[^\s]+/i);
+          if (um) {
+            window.__gcLastScan.urls.push(um[0]);
+            try {
+              const base = new URL(um[0]).pathname.split('/').pop();
+              if (base && zipFileMap) {
+                Object.keys(zipFileMap).forEach(function (p) {
+                  if (p.split('/').pop().toLowerCase() === base.toLowerCase()) fileSet.add(p);
+                });
+              }
+            } catch (_) {}
+          }
+        });
+        runtime.forEach(function (r) {
+          if (r && r.file) fileSet.add(r.file);
+        });
+        // default entry HTML
+        if (zipFileMap) {
+          Object.keys(zipFileMap).forEach(function (p) {
+            if (/(^|\/)index\.html?$/i.test(p)) fileSet.add(p);
+          });
+        }
+        window.__gcLastScan.files = Array.from(fileSet);
+        window.__gcScanErrorPaths = fileSet;
+      } catch (_) {}
       if (issues.length === 0 && runtime.length === 0) {
         appendLog('Analysis: tidak ada issue jelas di file aktif / runtime.', 'ok');
         if (detail) setDetailErrorContent('✓ Tidak ada error jelas pada file aktif atau runtime preview.', 'ok');
@@ -6716,6 +6916,34 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       }
       const panel = document.getElementById('preview-panel');
       if (panel) panel.classList.remove('collapsed');
+      try { if (typeof applyScanErrorTags === 'function') applyScanErrorTags(); } catch (_) {}
+    }
+
+    function applyScanErrorTags() {
+      const set = window.__gcScanErrorPaths;
+      document.querySelectorAll('#file-tree .file-tree-item[data-path]').forEach(function (el) {
+        const p = el.dataset.path;
+        if (set && set.has(p)) el.classList.add('scan-error');
+        else el.classList.remove('scan-error');
+      });
+      // folder yang mengandung path error
+      document.querySelectorAll('#file-tree .file-tree-item[data-folder-name]').forEach(function (el) {
+        el.classList.remove('scan-error-folder');
+      });
+      if (!set || !set.size) return;
+      document.querySelectorAll('#file-tree .file-tree-item.scan-error').forEach(function (el) {
+        let n = el.previousElementSibling;
+        // mark parent folders by walking up DOM is imperfect; use path prefixes
+      });
+      const paths = Array.from(set);
+      document.querySelectorAll('#file-tree .file-tree-item[data-folder-name]').forEach(function (folderEl) {
+        const name = folderEl.dataset.folderName;
+        if (!name) return;
+        const hit = paths.some(function (p) {
+          return p === name || p.indexOf(name + '/') === 0 || p.split('/').indexOf(name) >= 0;
+        });
+        if (hit) folderEl.classList.add('scan-error-folder');
+      });
     }
 
     function escapeHtml(s) {
