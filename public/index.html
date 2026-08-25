@@ -1184,11 +1184,18 @@
       border-bottom: none !important;
       padding: 0 0 8px !important;
       gap: 5px !important;
+      display: flex !important;
+      flex-wrap: nowrap !important;
+      overflow-x: auto !important;
+      overflow-y: hidden !important;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-x;
+      scrollbar-width: thin;
     }
     .pv-tbtn {
       font-family: var(--mono);
       font-size: 10px;
-      padding: 7px 8px;
+      padding: 7px 10px;
       border-radius: 7px;
       border: 1px solid var(--border);
       background: var(--surface);
@@ -1197,8 +1204,8 @@
       align-items: center;
       justify-content: center;
       gap: 5px;
-      flex: 1 1 0;
-      min-width: 0;
+      flex: 0 0 auto !important;
+      min-width: max-content;
       white-space: nowrap;
       cursor: pointer;
       transition: var(--transition);
@@ -3122,7 +3129,7 @@
           <strong id="preview-title" class="pv-hidden-title">Preview Game / ZIP</strong>
         </div>
 
-        <!-- Toolbar atas: Web View · Sandbox · Scan Error · Reload -->
+        <!-- Toolbar atas: Web View · Sandbox · Hybrid · Scan Error · Auto Repair · Reload -->
         <div class="preview-toolbar pv-toolbar">
           <button type="button" class="pv-tbtn active" id="preview-mode-web" onclick="switchPreviewMode('web')">
             <span class="pv-dot"></span> Web View
@@ -3130,8 +3137,14 @@
           <button type="button" class="pv-tbtn" id="preview-mode-sandbox" onclick="switchPreviewMode('sandbox')">
             <span class="pv-dot"></span> Sandbox
           </button>
+          <button type="button" class="pv-tbtn" id="preview-mode-hybrid" onclick="switchPreviewMode('hybrid')" title="Asset lokal + network diizinkan (cocok game butuh API)">
+            <span class="pv-dot"></span> Hybrid
+          </button>
           <button type="button" class="pv-tbtn warn" onclick="runAnalysis()">
             <span class="pv-dot"></span> Scan Error
+          </button>
+          <button type="button" class="pv-tbtn" id="btn-preview-auto-repair" onclick="runAutoRepair()" title="Perbaiki resource absolut / frame-buster">
+            <span class="pv-dot"></span> Auto Repair
           </button>
           <button type="button" class="pv-tbtn" onclick="reloadPreview()">
             <span class="pv-dot"></span> Reload
@@ -6595,22 +6608,38 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
 
     function switchPreviewMode(mode, shouldReload) {
-      activePreviewMode = mode === 'web' ? 'web' : 'sandbox';
+      // web | sandbox | hybrid
+      if (mode === 'web') activePreviewMode = 'web';
+      else if (mode === 'hybrid') activePreviewMode = 'hybrid';
+      else activePreviewMode = 'sandbox';
+
+      window.__gcHybridPreview = (activePreviewMode === 'hybrid');
+
       const webButton = document.getElementById('preview-mode-web');
       const sandboxButton = document.getElementById('preview-mode-sandbox');
+      const hybridButton = document.getElementById('preview-mode-hybrid');
       if (webButton) webButton.classList.toggle('active', activePreviewMode === 'web');
       if (sandboxButton) sandboxButton.classList.toggle('active', activePreviewMode === 'sandbox');
+      if (hybridButton) hybridButton.classList.toggle('active', activePreviewMode === 'hybrid');
+
       const label = document.getElementById('preview-stage-label');
-      if (label) label.textContent = activePreviewMode === 'web' ? 'Web Preview · Full' : 'Sandbox Preview';
-      // Web View = full layar; Sandbox = split 65/35 + log + detail
+      if (label) {
+        if (activePreviewMode === 'web') label.textContent = 'Web Preview · Full';
+        else if (activePreviewMode === 'hybrid') label.textContent = 'Hybrid Preview · Online OK';
+        else label.textContent = 'Sandbox Preview';
+      }
+      // Web View = full layar; Sandbox/Hybrid = split 65/35 + log + detail
       const pm = document.getElementById('preview-mode');
       if (pm) {
         pm.classList.toggle('mode-web', activePreviewMode === 'web');
-        pm.classList.toggle('mode-sandbox', activePreviewMode === 'sandbox');
+        pm.classList.toggle('mode-sandbox', activePreviewMode === 'sandbox' || activePreviewMode === 'hybrid');
+        pm.classList.toggle('mode-hybrid', activePreviewMode === 'hybrid');
       }
       const ws = document.querySelector('#preview-mode .preview-workspace');
       if (ws) ws.classList.toggle('preview-web', activePreviewMode === 'web');
-      if (shouldReload !== false && previewReload) previewReload(activePreviewMode);
+      if (shouldReload !== false && previewReload) {
+        previewReload(activePreviewMode === 'hybrid' ? 'sandbox' : activePreviewMode);
+      }
       try { fitPreviewFrame(); } catch (_) {}
     }
 
@@ -6658,7 +6687,9 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       mode = mode || 'sandbox';
       const isHybrid = mode === 'hybrid';
       window.__gcHybridPreview = isHybrid;
-      activePreviewMode = mode === 'web' ? 'web' : 'sandbox';
+      if (mode === 'web') activePreviewMode = 'web';
+      else if (mode === 'hybrid') activePreviewMode = 'hybrid';
+      else activePreviewMode = 'sandbox';
       if (!currentZip) {
         alert('Load File (ZIP) dulu sebelum Run / Preview.');
         appendLog('Preview dibatalkan: belum ada ZIP.', 'warn');
