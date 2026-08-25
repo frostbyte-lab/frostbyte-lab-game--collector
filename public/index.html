@@ -3270,11 +3270,11 @@
           <label>Nama slot (opsional)</label>
           <input id="cai-new-name" type="text" placeholder="otomatis: nomor berikutnya">
           <label>API Key</label>
-          <input id="cai-new-key" type="password" placeholder="gsk_... / sk-...">
+          <input id="cai-new-key" type="password" placeholder="AIza... (Gemini) / gsk_... / sk-...">
           <label>Base URL (OpenAI-compatible)</label>
-          <input id="cai-new-base" type="text" value="https://api.groq.com/openai/v1" placeholder="https://api.groq.com/openai/v1">
+          <input id="cai-new-base" type="text" value="https://generativelanguage.googleapis.com/v1beta/openai" placeholder="https://generativelanguage.googleapis.com/v1beta/openai">
           <label>Model</label>
-          <input id="cai-new-model" type="text" value="openai/gpt-oss-20b" placeholder="openai/gpt-oss-20b">
+          <input id="cai-new-model" type="text" value="gemini-2.0-flash" placeholder="gemini-2.0-flash">
           <div class="cai-actions" style="margin-top:12px;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
             <button type="button" class="btn btn-primary btn-sm" onclick="caiAddNewKey()">Simpan ke slot baru</button>
@@ -4520,13 +4520,19 @@
 
 
     // ===== Custom AI multi-key failover =====
+    // Default: Gemini (OpenAI-compatible). Slot lama di localStorage tetap dipakai sampai user clear/edit.
     const CAI_STORAGE = 'gc_custom_ai_apis';
+    const CAI_GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
     const CAI_DEFAULTS = [
-      { name: '1', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'openai/gpt-oss-20b', enabled: true },
-      { name: '2', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'openai/gpt-oss-20b', enabled: true },
-      { name: '3', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', model: 'openai/gpt-oss-120b', enabled: true }
+      { name: '1', baseUrl: CAI_GEMINI_BASE, apiKey: '', model: 'gemini-2.0-flash', enabled: true },
+      { name: '2', baseUrl: CAI_GEMINI_BASE, apiKey: '', model: 'gemini-2.0-flash', enabled: true },
+      { name: '3', baseUrl: CAI_GEMINI_BASE, apiKey: '', model: 'gemini-1.5-flash', enabled: true }
     ];
     const CAI_MODEL_OPTIONS = [
+      'gemini-2.0-flash',
+      'gemini-2.5-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
       'openai/gpt-oss-20b',
       'openai/gpt-oss-120b',
       'qwen/qwen3.6-27b',
@@ -4540,9 +4546,9 @@
         if (Array.isArray(raw) && raw.length) {
           return raw.map((s, i) => ({
             name: String(s.name || (i + 1)),
-            baseUrl: String(s.baseUrl || 'https://api.groq.com/openai/v1').replace(/\/+$/, ''),
+            baseUrl: String(s.baseUrl || CAI_GEMINI_BASE).replace(/\/+$/, ''),
             apiKey: String(s.apiKey || ''),
-            model: String(s.model || 'openai/gpt-oss-20b'),
+            model: String(s.model || 'gemini-2.0-flash'),
             enabled: s.enabled !== false
           }));
         }
@@ -4566,9 +4572,9 @@
       list.querySelectorAll('.cai-card').forEach((card, i) => {
         slots.push({
           name: (card.querySelector('[data-f="name"]')?.value || String(i + 1)).trim() || String(i + 1),
-          baseUrl: (card.querySelector('[data-f="baseUrl"]')?.value || 'https://api.groq.com/openai/v1').trim().replace(/\/+$/, ''),
+          baseUrl: (card.querySelector('[data-f="baseUrl"]')?.value || CAI_GEMINI_BASE).trim().replace(/\/+$/, ''),
           apiKey: (card.querySelector('[data-f="apiKey"]')?.value || '').trim(),
-          model: (card.querySelector('[data-f="model"]')?.value || 'openai/gpt-oss-20b').trim(),
+          model: (card.querySelector('[data-f="model"]')?.value || 'gemini-2.0-flash').trim(),
           enabled: !!(card.querySelector('[data-f="enabled"]')?.checked)
         });
       });
@@ -4606,7 +4612,7 @@
             '<div><label>Model</label><select data-f="model">' + caiModelOptionsHtml(slot.model) + '</select></div>' +
           '</div>' +
           '<label>Base URL (OpenAI-compatible)</label>' +
-          '<input data-f="baseUrl" value="' + escapeHtmlAttr(slot.baseUrl || '') + '" placeholder="https://api.groq.com/openai/v1">' +
+          '<input data-f="baseUrl" value="' + escapeHtmlAttr(slot.baseUrl || '') + '" placeholder="https://generativelanguage.googleapis.com/v1beta/openai">' +
           '<label>API Key</label>' +
           '<input data-f="apiKey" type="password" value="' + escapeHtmlAttr(slot.apiKey || '') + '" placeholder="gsk_... / sk-...">' +
           (limitNote ? '<div class="cai-limit-note">' + limitNote + '</div>' : '');
@@ -4621,7 +4627,7 @@
     function caiModelOptionsHtml(selected) {
       const opts = (typeof CAI_MODEL_OPTIONS !== 'undefined' && CAI_MODEL_OPTIONS.length)
         ? CAI_MODEL_OPTIONS.slice()
-        : ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.6-27b'];
+        : ['gemini-2.0-flash', 'gemini-1.5-flash', 'openai/gpt-oss-20b'];
       const sel = selected || opts[0];
       if (sel && !opts.includes(sel)) opts.unshift(sel);
       return opts.map(function (m) {
@@ -4814,8 +4820,8 @@
       if (!key) { alert('Isi API Key dulu.'); return; }
       const slots = loadCustomAISlots();
       const name = (document.getElementById('cai-new-name')?.value || '').trim() || String(slots.length + 1);
-      const baseUrl = (document.getElementById('cai-new-base')?.value || 'https://api.groq.com/openai/v1').trim().replace(/\/+$/, '');
-      const model = (document.getElementById('cai-new-model')?.value || 'openai/gpt-oss-20b').trim();
+      const baseUrl = (document.getElementById('cai-new-base')?.value || CAI_GEMINI_BASE).trim().replace(/\/+$/, '');
+      const model = (document.getElementById('cai-new-model')?.value || 'gemini-2.0-flash').trim();
       slots.push({ name: name, baseUrl: baseUrl, apiKey: key, model: model, enabled: true });
       localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
       window.__useCustomAI = true;
@@ -5200,9 +5206,9 @@
       const n = String(slots.length + 1);
       slots.push({
         name: n,
-        baseUrl: 'https://api.groq.com/openai/v1',
+        baseUrl: CAI_GEMINI_BASE,
         apiKey: '',
-        model: 'openai/gpt-oss-20b',
+        model: 'gemini-2.0-flash',
         enabled: true
       });
       localStorage.setItem(CAI_STORAGE, JSON.stringify(slots));
@@ -5235,7 +5241,7 @@
           'Authorization': 'Bearer ' + slot.apiKey
         },
         body: JSON.stringify({
-          model: slot.model || 'openai/gpt-oss-20b',
+          model: slot.model || 'gemini-2.0-flash',
           messages,
           temperature: options.temperature ?? 0.2,
           max_tokens: Math.min(Number(options.max_tokens || 2000), 8000)
