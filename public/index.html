@@ -2990,7 +2990,7 @@
           <button type="button" class="btn btn-secondary btn-sm" id="btn-analisa-game" onclick="runAnalisaGame()" title="Analisa dependency → offline sandbox">Analisa Game</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-restore-backup" onclick="gcRestoreBackupMenu()" title="Pulihkan dari BACKUP/offline-conversion/original/">Restore Backup</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-hosting-top" onclick="openHostingPage()" title="Hosting paket game">Hosting</button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Custom AI — multi API failover">Custom AI</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Login AI — sesi Groq + GPT">Login AI</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -3189,7 +3189,7 @@
               <span id="pv-filename-text">—</span>
             </div>
             <button type="button" class="pv-abtn" id="btn-pv-copy" onclick="copyErrorLog()">Copy</button>
-            <button type="button" class="pv-abtn custom" id="btn-pv-custom" onclick="openCustomAIManager()">Custom AI</button>
+            <button type="button" class="pv-abtn custom" id="btn-pv-custom" onclick="openCustomAIManager()">Login AI</button>
             <button type="button" class="pv-abtn ai" id="btn-pv-ai" onclick="openPreviewModal('AI')">AI</button>
           </div>
         </div>
@@ -3366,50 +3366,55 @@
       </div>
     </div>
 
-    <!-- Custom AI: 3 opsi + failover chain -->
+    <!-- Login AI: sesi Groq + GPT (pribadi) -->
     <div id="custom-ai-manager" class="cai-overlay" style="display:none;">
       <div class="cai-box">
         <div class="cai-head">
           <div>
-            <strong id="cai-title">Custom AI</strong>
-            <span class="cai-sub" id="cai-sub">Pilih opsi</span>
+            <strong id="cai-title">Login AI</strong>
+            <span class="cai-sub" id="cai-sub">Sesi Groq + GPT</span>
           </div>
           <button type="button" class="cai-close" onclick="closeCustomAIManager()" aria-label="Tutup">✕</button>
         </div>
 
-        <!-- Menu 3 opsi -->
+        <!-- Status sesi -->
+        <div id="cai-session-status" class="cai-hint" style="margin:0 0 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,.2);font-size:12px;">
+          Belum login. Isi key Groq dan/atau GPT lalu Login.
+        </div>
+
+        <!-- Menu login -->
         <div id="cai-menu" class="cai-menu">
           <button type="button" class="cai-opt" onclick="caiShowPanel('apply')">
             <span class="cai-opt-num">1</span>
             <span class="cai-opt-body">
-              <strong>Apply API</strong>
-              <small>Daftar key berantai · Limit → API berikutnya</small>
+              <strong>Login / Atur Key</strong>
+              <small>Groq + GPT · sesi tersimpan di browser ini</small>
             </span>
           </button>
           <button type="button" class="cai-opt" onclick="caiShowPanel('chat')">
             <span class="cai-opt-num">2</span>
             <span class="cai-opt-body">
               <strong>Chat</strong>
-              <small>Chat sebelum/sesudah load kode · edit langsung ke editor</small>
+              <small>Pakai AI yang sudah login · edit ke editor</small>
             </span>
           </button>
-          <button type="button" class="cai-opt" onclick="caiShowPanel('addkey')">
-            <span class="cai-opt-num">3</span>
+          <button type="button" class="cai-opt" onclick="caiLogoutAI()" id="cai-opt-logout">
+            <span class="cai-opt-num">⎋</span>
             <span class="cai-opt-body">
-              <strong>Masukkan key baru</strong>
-              <small>Tambah key → otomatis masuk slot baru</small>
+              <strong>Logout AI</strong>
+              <small>Hapus sesi key dari browser ini</small>
             </span>
           </button>
         </div>
 
-        <!-- Panel 1: Apply API (slot list) -->
+        <!-- Panel 1: Login / Atur Key (Groq + GPT) -->
         <div id="cai-panel-apply" class="cai-panel" style="display:none;">
-          <p class="cai-hint">Urutan = prioritas. API No.1 kena limit → otomatis No.2, lalu No.3, dst.</p>
+          <p class="cai-hint">Isi key lalu <b>Login</b>. Urutan = prioritas failover (limit → AI berikutnya). Semua tombol AI memakai sesi ini.</p>
           <div id="cai-list" class="cai-list"></div>
           <div class="cai-actions">
             <button type="button" class="btn btn-secondary btn-sm" onclick="caiShowPanel('menu')">← Kembali</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="addCustomAISlot()">+ Custom (slot baru)</button>
-            <button type="button" class="btn btn-primary btn-sm" onclick="saveCustomAISlots(); alert('API diterapkan.');">Apply API</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="addCustomAISlot()">+ Slot lain</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="caiLoginAI()">Login</button>
           </div>
         </div>
 
@@ -4706,7 +4711,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         body: JSON.stringify({ ...context, action, question: question || '', model: document.getElementById('ai-model')?.value || 'llama' })
       });
       const result = await res.json().catch(() => ({}));
-      if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi. Isi API key di Custom AI jika Workers AI tidak tersedia.');
+      if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi. Login AI dulu (Groq/GPT) jika Workers AI tidak tersedia.');
       aiSuggestedCode = result.repairedCode || null;
       const applyButton = document.getElementById('ai-apply-fix');
       if (applyButton) applyButton.hidden = !aiSuggestedCode;
@@ -4794,25 +4799,26 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
 
 
-    // ===== Custom AI multi-key failover =====
-    // Default: Gemini (OpenAI-compatible). Slot lama di localStorage tetap dipakai sampai user clear/edit.
+    // ===== Login AI — sesi Groq + GPT (pribadi, localStorage) =====
     const CAI_STORAGE = 'gc_custom_ai_apis';
+    const CAI_SESSION = 'gc_ai_session';
+    const CAI_GROQ_BASE = 'https://api.groq.com/openai/v1';
+    const CAI_OPENAI_BASE = 'https://api.openai.com/v1';
     const CAI_GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
+    // Default 2 AI: Groq dulu, GPT cadangan
     const CAI_DEFAULTS = [
-      { name: '1', baseUrl: CAI_GEMINI_BASE, apiKey: '', model: 'gemini-2.0-flash', enabled: true },
-      { name: '2', baseUrl: CAI_GEMINI_BASE, apiKey: '', model: 'gemini-2.0-flash', enabled: true },
-      { name: '3', baseUrl: CAI_GEMINI_BASE, apiKey: '', model: 'gemini-1.5-flash', enabled: true }
+      { name: 'Groq', baseUrl: CAI_GROQ_BASE, apiKey: '', model: 'llama-3.3-70b-versatile', enabled: true },
+      { name: 'GPT', baseUrl: CAI_OPENAI_BASE, apiKey: '', model: 'gpt-4o-mini', enabled: true }
     ];
     const CAI_MODEL_OPTIONS = [
-      'gemini-2.0-flash',
-      'gemini-2.5-flash',
-      'gemini-1.5-flash',
-      'gemini-1.5-pro',
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant',
       'openai/gpt-oss-20b',
-      'openai/gpt-oss-120b',
-      'qwen/qwen3.6-27b',
-      'groq/compound',
-      'groq/compound-mini'
+      'gpt-4o-mini',
+      'gpt-4o',
+      'gpt-4.1-mini',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash'
     ];
 
     function loadCustomAISlots() {
@@ -4860,9 +4866,73 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         s.aiKey = (slots.find(x => x.apiKey) || {}).apiKey || '';
         localStorage.setItem('gc_custom', JSON.stringify(s));
       } catch (_) {}
-      window.__useCustomAI = slots.some(s => s.enabled && s.apiKey);
-      if (typeof appendLog === 'function') appendLog('Custom AI: ' + slots.length + ' API slot disimpan (failover berantai).', 'ok');
+      const loggedIn = slots.some(s => s.enabled && s.apiKey);
+      window.__useCustomAI = loggedIn;
+      try {
+        localStorage.setItem(CAI_SESSION, JSON.stringify({
+          loggedIn,
+          at: Date.now(),
+          providers: slots.filter(s => s.enabled && s.apiKey).map(s => s.name)
+        }));
+      } catch (_) {}
+      if (typeof updateAILoginUI === 'function') updateAILoginUI();
+      if (typeof appendLog === 'function') {
+        appendLog(loggedIn
+          ? ('Login AI: sesi aktif (' + slots.filter(s => s.enabled && s.apiKey).map(s => s.name).join(' → ') + ')')
+          : 'Login AI: belum ada key aktif', loggedIn ? 'ok' : 'warn');
+      }
       return slots;
+    }
+
+    function caiLoginAI() {
+      const slots = saveCustomAISlots();
+      const active = slots.filter(s => s.enabled && String(s.apiKey || '').trim());
+      if (!active.length) {
+        alert('Isi minimal 1 API key (Groq atau GPT) lalu Login lagi.');
+        return;
+      }
+      alert('Login AI berhasil.\nAktif: ' + active.map(s => s.name).join(' → ') + '\n\nSemua tombol AI memakai sesi ini.');
+      caiShowPanel('menu');
+    }
+
+    function caiLogoutAI() {
+      if (!confirm('Logout AI? Key dihapus dari browser ini.')) return;
+      const cleared = CAI_DEFAULTS.map(d => ({ ...d, apiKey: '' }));
+      localStorage.setItem(CAI_STORAGE, JSON.stringify(cleared));
+      try { localStorage.setItem(CAI_SESSION, JSON.stringify({ loggedIn: false, at: Date.now(), providers: [] })); } catch (_) {}
+      try {
+        const s = JSON.parse(localStorage.getItem('gc_custom') || '{}');
+        s.aiKey = '';
+        localStorage.setItem('gc_custom', JSON.stringify(s));
+      } catch (_) {}
+      window.__useCustomAI = false;
+      if (typeof updateAILoginUI === 'function') updateAILoginUI();
+      if (typeof appendLog === 'function') appendLog('Login AI: logout — sesi dihapus', 'warn');
+      alert('Sudah logout. AI tidak aktif sampai login lagi.');
+      caiShowPanel('menu');
+    }
+
+    function updateAILoginUI() {
+      let loggedIn = false;
+      let providers = [];
+      try {
+        const slots = loadCustomAISlots().filter(s => s && s.enabled && String(s.apiKey || '').trim());
+        loggedIn = slots.length > 0;
+        providers = slots.map(s => s.name);
+        window.__useCustomAI = loggedIn;
+      } catch (_) {}
+      const status = document.getElementById('cai-session-status');
+      if (status) {
+        status.textContent = loggedIn
+          ? ('Sesi aktif: ' + providers.join(' → ') + ' · semua tombol AI memakai ini')
+          : 'Belum login. Isi key Groq dan/atau GPT lalu Login.';
+        status.style.borderColor = loggedIn ? 'rgba(34,197,94,.45)' : 'var(--border)';
+        status.style.color = loggedIn ? '#86efac' : 'var(--text-muted)';
+      }
+      const topBtn = document.getElementById('btn-custom-ai-top');
+      if (topBtn) topBtn.textContent = loggedIn ? ('AI: ' + (providers[0] || 'ON')) : 'Login AI';
+      const pvBtn = document.getElementById('btn-pv-custom');
+      if (pvBtn) pvBtn.textContent = loggedIn ? ('AI: ' + (providers[0] || 'ON')) : 'Login AI';
     }
 
     function renderCustomAISlots(slots) {
@@ -4912,11 +4982,13 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
 
     try { window.__useCustomAI = loadCustomAISlots().some(s => s.enabled && s.apiKey); } catch (_) { window.__useCustomAI = false; }
+    try { setTimeout(function () { if (typeof updateAILoginUI === 'function') updateAILoginUI(); }, 0); } catch (_) {}
 
     function openCustomAIManager() {
       const el = document.getElementById('custom-ai-manager');
       if (!el) return;
       el.style.display = 'flex';
+      if (typeof updateAILoginUI === 'function') updateAILoginUI();
       caiShowPanel('menu');
     }
 
@@ -4935,24 +5007,33 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         pChat.classList.toggle('is-open', which === 'chat');
       }
       if (pKey) pKey.style.display = which === 'addkey' ? 'block' : 'none';
-      // Perbesar box saat mode chat supaya area chat lebih leluasa
       if (box) box.classList.toggle('cai-mode-chat', which === 'chat');
       if (which === 'menu') {
-        if (title) title.textContent = 'Custom AI';
-        if (sub) sub.textContent = 'Pilih opsi';
+        if (title) title.textContent = 'Login AI';
+        if (sub) sub.textContent = 'Sesi Groq + GPT';
+        if (typeof updateAILoginUI === 'function') updateAILoginUI();
       } else if (which === 'apply') {
-        if (title) title.textContent = '1 · Apply API';
-        if (sub) sub.textContent = 'Failover berantai antar API key';
-        renderCustomAISlots(loadCustomAISlots());
+        if (title) title.textContent = '1 · Login / Atur Key';
+        if (sub) sub.textContent = 'Groq dulu, GPT cadangan · failover otomatis';
+        // Jika storage masih default lama / kosong, tampilkan template Groq+GPT
+        let slots = loadCustomAISlots();
+        if (!slots.length || slots.every(s => !String(s.apiKey || '').trim() && /^(1|2|3)$/.test(String(s.name || '')))) {
+          slots = CAI_DEFAULTS.map(d => ({ ...d }));
+        }
+        renderCustomAISlots(slots);
       } else if (which === 'chat') {
         if (title) title.textContent = '2 · Chat';
-        if (sub) sub.textContent = 'Area lebih leluasa · edit langsung ke editor bila diminta';
-        // Scroll log ke bawah kalau sudah ada pesan
+        if (sub) sub.textContent = 'Pakai AI yang sudah login';
+        if (!hasCustomAIKeys()) {
+          alert('Belum login AI. Isi key Groq/GPT dulu.');
+          caiShowPanel('apply');
+          return;
+        }
         const log = document.getElementById('cai-chat-log');
         if (log) setTimeout(function () { log.scrollTop = log.scrollHeight; }, 50);
       } else if (which === 'addkey') {
-        if (title) title.textContent = '3 · Masukkan key baru';
-        if (sub) sub.textContent = 'Otomatis masuk slot baru';
+        if (title) title.textContent = 'Slot tambahan';
+        if (sub) sub.textContent = 'Opsional';
         const nk = document.getElementById('cai-new-key');
         if (nk) nk.value = '';
         const nn = document.getElementById('cai-new-name');
@@ -5423,7 +5504,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (sendBtn) sendBtn.disabled = true;
       try {
         if (typeof callCustomAIWithFailover !== 'function') {
-          throw new Error('Custom AI belum siap. Set API key di Custom AI (Workspace).');
+          throw new Error('Belum login AI. Buka Login AI (Groq/GPT) (Workspace).');
         }
         var file = (typeof currentFile !== 'undefined' && currentFile) ? currentFile : null;
         var code = '';
@@ -5658,7 +5739,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     async function callCustomAIWithFailover(messages, options = {}) {
       const slots = loadCustomAISlots().filter(s => s.enabled && s.apiKey);
       if (!slots.length) {
-        throw new Error('Belum ada API key. Buka Custom AI → isi key di slot 1, 2, 3… lalu Apply.');
+        throw new Error('Belum login AI. Buka Login AI → isi key Groq dan/atau GPT → tekan Login.');
       }
       const errors = [];
       for (let i = 0; i < slots.length; i++) {
