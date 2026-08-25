@@ -2930,9 +2930,6 @@
               Collect via GitHub
             </button>
             <button class="btn btn-secondary" onclick="clearStatus()">Clear</button>
-            <button class="btn btn-primary" type="button" onclick="prepareOfflinePipeline()" title="Custom API + cek api-map untuk Sandbox offline">
-              Siapkan Offline
-            </button>
           </div>
 
           <div class="collect-help" id="collect-help">
@@ -2949,7 +2946,7 @@
                 <summary>Alur offline (tanpa EDU)</summary>
                 <p>1) Set <b>Auto-spins</b> (default 5) + Wait → Collect via GitHub.<br>
                 2) ZIP terunduh → Workspace.<br>
-                3) <b>Siapkan Offline</b> / Custom API → isi base URL domain baru.<br>
+                3) Workspace: tombol <b>AI</b> / Scan Error / Deteksi AI.<br>
                 4) Sandbox memakai <code>api-map.json</code> + snapshot untuk mock lokal.<br>
                 5) Download ZIP → hosting manual di server kamu.</p>
               </details>
@@ -3074,9 +3071,7 @@
         <div class="workspace-actions">
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
           <button type="button" class="btn btn-secondary btn-sm" id="btn-analisa-game" onclick="runAnalisaGame()" title="Analisa dependency → offline sandbox">Analisa Game</button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-restore-backup" onclick="gcRestoreBackupMenu()" title="Pulihkan dari BACKUP/offline-conversion/original/">Restore Backup</button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-hosting-top" onclick="openHostingPage()" title="Hosting paket game">Hosting</button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Login AI — sesi Groq + Gemini">Login AI</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Login AI — sesi API">Login AI</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -3311,7 +3306,6 @@
           <div class="file-panel-footer" id="file-panel-footer">
             <div class="file-panel-footer-row">
               <button type="button" class="btn btn-primary btn-sm" onclick="saveFile()" title="Save">Save</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="openAnalysisPanel()" title="Analysis">Analysis</button>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-load-file" onclick="document.getElementById('zip-input').click()" title="Load File">Load File</button>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-download-file" onclick="downloadWorkspaceZip()" title="Download ZIP hasil edit (seluruh paket)">Download ZIP</button>
             </div>
@@ -6419,9 +6413,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             '\n\nURL:\n' + (scan.urls || []).slice(0, 20).map(function (u) { return '· ' + u; }).join('\n');
         }
 
-        if (window.confirm(msg)) {
-          await runAiZipRepair();
-        }
+        // Tanpa confirm beruntun — user pakai tombol AI jika mau perbaiki
+        appendLog('Saran: ketuk AI (bawah) untuk perbaiki ZIP + auto Sandbox.', 'ok');
       } catch (e) {
         appendLog('Deteksi AI gagal: ' + (e && e.message || e), 'err');
         alert('Deteksi AI gagal: ' + (e && e.message || e));
@@ -6431,29 +6424,19 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     async function runAiZipRepair() {
       try {
         if (!currentZip) {
-          alert('Load ZIP dulu.');
+          appendLog('AI Repair: load ZIP dulu.', 'warn');
           return;
         }
-        const go = window.confirm(
-          'AI Repair ZIP\n\n' +
-          '• Rewrite URL absolut → file lokal (jika ada)\n' +
-          '• Netralisir frame-buster\n' +
-          '• Tulis offline-readiness.json\n' +
-          '• Lalu auto Sandbox Preview\n\nLanjut?'
-        );
-        if (!go) return;
-
-        const _confirm = window.confirm;
-        window.confirm = function (m) {
-          if (/SEMUA HTML|seluruh ZIP|Auto Repair tingkat/i.test(String(m))) return true;
-          return _confirm.apply(window, arguments);
-        };
+        appendLog('AI Repair: memperbaiki ZIP…', 'ok');
+        // Full-ZIP repair tanpa popup konfirmasi
+        window.__gcAutoRepairSilent = true;
+        window.__gcAutoRepairAll = true;
         try {
           if (typeof runAutoRepair === 'function') await runAutoRepair();
         } finally {
-          window.confirm = _confirm;
+          window.__gcAutoRepairSilent = false;
+          window.__gcAutoRepairAll = false;
         }
-
         appendLog('AI Repair selesai — membuka Sandbox…', 'ok');
         try {
           const ws = document.querySelector('.nav-btn[data-panel="workspace"]');
@@ -6464,7 +6447,6 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         }, 300);
       } catch (e) {
         appendLog('AI Repair gagal: ' + (e && e.message || e), 'err');
-        alert('AI Repair gagal: ' + (e && e.message || e));
       }
     }
     window.runTrackScanErrors = runTrackScanErrors;
@@ -6665,20 +6647,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           actRecord('deteksi', 'Deteksi AI ZIP: ' + scanned.length + ' file', summaryMsg + '\n\n' + (typeof reportText !== 'undefined' ? reportText : ''));
         }
       } catch (_) {}
-      var wantRepair = window.confirm(summaryMsg + '\n\nJalankan perbaikan otomatis (Custom API/path) pada SEMUA file teks di ZIP?\n\nGambar tidak diubah. Setelah itu Download ZIP.');
-      if (wantRepair && typeof autoCustomApiSdk === 'function') {
-        try { await autoCustomApiSdk(); } catch (re) {
-          appendLog('Auto repair ZIP: ' + (re && re.message ? re.message : re), 'err');
-        }
-      } else if (wantRepair) {
-        alert('Fungsi Auto Custom belum tersedia. Pakai tombol Custom di bawah.');
-      } else {
-        alert(summaryMsg);
-      }
+      appendLog(summaryMsg.replace(/\n+/g, ' · '), total ? 'ok' : 'warn');
       } catch (err) {
         if (typeof setLoading === 'function') setLoading(false);
         console.error('Deteksi AI error:', err);
-        alert('Deteksi AI gagal: ' + (err && err.message ? err.message : err));
         if (typeof appendLog === 'function') appendLog('Deteksi AI error: ' + (err && err.message ? err.message : err), 'err');
       }
     }
@@ -8335,14 +8307,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
     async function runAutoRepair() {
       if (!currentZip) {
-        alert('Load ZIP dulu di Workspace.');
+        appendLog('Auto Repair: load ZIP dulu.', 'warn');
         return;
       }
-      const scopeAll = window.confirm(
-        'Auto Repair tingkat lanjut\n\n' +
-        'OK = perbaiki SEMUA HTML/CSS/JS di ZIP (rewrite URL absolut → file lokal jika ada)\n' +
-        'Batal = hanya file aktif di editor'
-      );
+      const scopeAll = window.__gcAutoRepairAll !== false; // default seluruh ZIP; set __gcAutoRepairAll=false untuk file aktif saja
       setLoading(true, 'Auto Repair', 'Membangun indeks asset…');
       const byBase = gcBuildLocalAssetIndex();
       let totalChanges = 0;
@@ -8384,7 +8352,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         } else {
           if (!currentFile) {
             setLoading(false);
-            alert('Buka file di editor, atau pilih OK untuk scan seluruh ZIP.');
+            appendLog('Auto Repair: tidak ada file aktif — dibatalkan.', 'warn');
             return;
           }
           await repairOne(currentFile);
@@ -8426,16 +8394,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (typeof renderFileTree === 'function') {
           try { renderFileTree(Object.keys(zipFileMap)); } catch (_) {}
         }
-        alert(
-          'Auto Repair selesai.\n\n' +
-          'Patch: ' + totalChanges + '\nFile: ' + filesTouched.length + '\n' +
-          'Skor offline: ' + score.score + '/100 (' + score.grade + ')\n\n' +
-          score.note + '\n\nLaporan tersimpan: offline-readiness.json\nJalankan Sandbox / Scan Error lagi.'
-        );
+        if (!window.__gcAutoRepairSilent) {
+          appendLog('Auto Repair selesai — skor ' + score.score + '/100 (' + score.grade + '). Cek offline-readiness.json', 'ok');
+        }
       } catch (e) {
         setLoading(false);
         appendLog('Auto Repair gagal: ' + (e && e.message || e), 'err');
-        alert('Auto Repair gagal: ' + (e && e.message || e));
       }
     }
     window.gcComputeOfflineScore = gcComputeOfflineScore;
@@ -8523,12 +8487,11 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           '',
           'Lanjut Custom API (base URL domain baru) + patch path?'
         ];
-        if (!window.confirm(lines.join('\n'))) return;
+        appendLog(lines.join(' · '), 'ok');
 
         await autoCustomApiSdk();
 
-        var go = window.confirm('Custom selesai.\n\nBuka Sandbox sekarang?\n(Mock lokal memakai api-map bila ada)');
-        if (go && typeof startPreview === 'function') {
+        if (typeof startPreview === 'function') {
           try {
             var ws = document.querySelector('.nav-btn[data-panel="workspace"]');
             if (ws) ws.click();
@@ -10015,7 +9978,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
                   statusEl.textContent = 'Status: Selesai — ZIP ' + sizeMb + ' MB diunduh & dimuat ke Workspace';
                 try {
                   setTimeout(function () {
-                    if (window.confirm('ZIP dimuat ke Workspace.\n\nJalankan Siapkan Offline sekarang?\n(Custom API domain + cek api-map → Sandbox)')) {
+                    if (false && window.confirm('ZIP dimuat')) {
                       prepareOfflinePipeline();
                     }
                   }, 600);
