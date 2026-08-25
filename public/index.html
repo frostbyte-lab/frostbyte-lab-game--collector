@@ -2067,7 +2067,7 @@
       flex-direction: column;
       min-height: 0;
       /* Jangan menghabisi area editor: tinggi terbatas + scroll internal */
-      max-height: min(42vh, 420px);
+      max-height: min(38vh, 380px);
       flex: 0 0 auto;
       overflow-x: hidden;
       overflow-y: auto;
@@ -2159,22 +2159,41 @@
       touch-action: pan-y;
     }
     @media (max-width: 768px) {
+      /* AI panel: jangan makan separuh layar — editor tetap terlihat */
       .ai-panel {
-        max-height: min(48vh, 480px);
-        padding: 12px 12px 20px;
+        max-height: min(36vh, 320px) !important;
+        padding: 10px 12px 14px !important;
+        flex: 0 0 auto !important;
       }
       .editor-panel.binary-mode .ai-panel:not(.hidden) {
-        max-height: min(32vh, 280px);
+        max-height: min(26vh, 220px) !important;
       }
       .ai-input textarea {
-        min-height: 100px;
-        font-size: 15px;
+        min-height: 56px !important;
+        max-height: 88px !important;
+        font-size: 14px;
       }
       .ai-response {
-        min-height: 140px;
-        max-height: min(40vh, 400px);
-        font-size: 13.5px;
-        padding: 14px;
+        min-height: 64px !important;
+        max-height: min(18vh, 160px) !important;
+        font-size: 12.5px;
+        padding: 10px 12px;
+      }
+      .ai-buttons {
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .ai-buttons .btn {
+        min-height: 36px;
+        font-size: 12px;
+      }
+      /* Saat AI terbuka, Monaco tetap punya ruang */
+      .editor-panel:has(.ai-panel:not(.hidden)) #monaco-editor {
+        min-height: 28vh !important;
+        flex: 1 1 auto !important;
+      }
+      .editor-panel {
+        overflow: hidden !important;
       }
     }
 
@@ -2527,6 +2546,22 @@
         min-height: 0;
         position: relative;
       }
+      .workspace-actions {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap !important;
+        scrollbar-width: none;
+      }
+      .workspace-actions::-webkit-scrollbar { display: none; }
+      .workspace-actions .btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        font-size: 11px !important;
+        padding: 6px 8px !important;
+      }
+
       /* Editor SELALU mengisi layar */
       .editor-panel {
         flex: 1 1 0 !important;
