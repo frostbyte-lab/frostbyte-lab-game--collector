@@ -285,33 +285,84 @@
   }
 
   function sandboxMockApiSource() {
-    return "/* GC Sandbox Mock API — demo only */\n" +
+    return "/* GC Sandbox Mock API + network shim (Sprint 1) */\n" +
       "(function (g) {\n" +
+      "  if (g.__GC_SHIM_INSTALLED__) return;\n" +
+      "  g.__GC_SHIM_INSTALLED__ = true;\n" +
       "  var balance = typeof g.__GC_MOCK_BALANCE__ === 'number' ? g.__GC_MOCK_BALANCE__ : 100000;\n" +
       "  var session = { id: 'sandbox-' + Date.now(), ok: true };\n" +
-      "  function json(data) {\n" +
-      "    return Promise.resolve({\n" +
-      "      ok: true, status: 200,\n" +
-      "      json: function () { return Promise.resolve(data); },\n" +
-      "      text: function () { return Promise.resolve(JSON.stringify(data)); }\n" +
-      "    });\n" +
+      "  function payload(url) {\n" +
+      "    var s = String(url || '').toLowerCase();\n" +
+      "    if (/spin|bet|play/.test(s)) {\n" +
+      "      var win = Math.random() > 0.7 ? Math.floor(Math.random() * 500) : 0;\n" +
+      "      balance += win;\n" +
+      "      return { ok: true, win: win, balance: balance, symbols: [[1,2,3],[4,5,6],[7,8,9]], mock: true };\n" +
+      "    }\n" +
+      "    if (/balance|wallet|credit/.test(s)) return { ok: true, balance: balance, mock: true };\n" +
+      "    if (/session|auth|token|login|init/.test(s)) return { ok: true, session: session, balance: balance, mock: true };\n" +
+      "    if (/history|result/.test(s)) return { ok: true, items: [], balance: balance, mock: true };\n" +
+      "    return { ok: true, mock: true, balance: balance, session: session };\n" +
+      "  }\n" +
+      "  function jsonResp(data) {\n" +
+      "    var body = JSON.stringify(data);\n" +
+      "    if (typeof Response !== 'undefined') {\n" +
+      "      return Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'application/json', 'X-GC-Mock': '1' } }));\n" +
+      "    }\n" +
+      "    return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve(data); }, text: function () { return Promise.resolve(body); } });\n" +
       "  }\n" +
       "  g.__GC_OFFLINE__ = true;\n" +
       "  g.__GC_MOCK_BALANCE__ = balance;\n" +
       "  g.__GC_SANDBOX_API__ = {\n" +
-      "    init: function () { return json({ ok: true, session: session, balance: balance }); },\n" +
-      "    session: function () { return json(session); },\n" +
-      "    balance: function () { return json({ balance: balance }); },\n" +
-      "    bet: function (n) { balance = Math.max(0, balance - (Number(n) || 0)); return json({ balance: balance }); },\n" +
-      "    spin: function () {\n" +
-      "      var win = Math.random() > 0.7 ? Math.floor(Math.random() * 500) : 0;\n" +
-      "      balance += win;\n" +
-      "      return json({ ok: true, win: win, balance: balance, symbols: [[1,2,3],[4,5,6],[7,8,9]] });\n" +
-      "    },\n" +
-      "    result: function () { return json({ balance: balance }); },\n" +
-      "    history: function () { return json({ items: [] }); }\n" +
+      "    init: function () { return jsonResp({ ok: true, session: session, balance: balance }); },\n" +
+      "    session: function () { return jsonResp(session); },\n" +
+      "    balance: function () { return jsonResp({ balance: balance }); },\n" +
+      "    bet: function (n) { balance = Math.max(0, balance - (Number(n) || 0)); return jsonResp({ balance: balance }); },\n" +
+      "    spin: function () { return jsonResp(payload('/spin')); },\n" +
+      "    result: function () { return jsonResp({ balance: balance }); },\n" +
+      "    history: function () { return jsonResp({ items: [] }); }\n" +
       "  };\n" +
-      "  console.info('[GC Sandbox] mock API siap');\n" +
+      "  function isApi(u) {\n" +
+      "    return /\\/api\\/|\\/game\\/(init|session|balance|bet|spin|result)|gamewallet|verifysession|\\/spin\\b|\\/bet\\b|\\/balance\\b/i.test(String(u || ''));\n" +
+      "  }\n" +
+      "  if (g.fetch) {\n" +
+      "    var of = g.fetch;\n" +
+      "    g.fetch = function (input, init) {\n" +
+      "      var u = (input && input.url) || input;\n" +
+      "      if (isApi(u)) return jsonResp(payload(u));\n" +
+      "      return of.apply(this, arguments);\n" +
+      "    };\n" +
+      "  }\n" +
+      "  try {\n" +
+      "    var XO = g.XMLHttpRequest;\n" +
+      "    if (XO) {\n" +
+      "      var oOpen = XO.prototype.open, oSend = XO.prototype.send;\n" +
+      "      XO.prototype.open = function (m, u) {\n" +
+      "        this.__gc_api = isApi(u);\n" +
+      "        this.__gc_url = u;\n" +
+      "        if (this.__gc_api) return oOpen.call(this, m, 'about:blank');\n" +
+      "        return oOpen.apply(this, arguments);\n" +
+      "      };\n" +
+      "      XO.prototype.send = function () {\n" +
+      "        var self = this;\n" +
+      "        if (self.__gc_api) {\n" +
+      "          var text = JSON.stringify(payload(self.__gc_url));\n" +
+      "          setTimeout(function () {\n" +
+      "            try {\n" +
+      "              Object.defineProperty(self, 'status', { value: 200 });\n" +
+      "              Object.defineProperty(self, 'readyState', { value: 4 });\n" +
+      "              Object.defineProperty(self, 'responseText', { value: text });\n" +
+      "              Object.defineProperty(self, 'response', { value: text });\n" +
+      "              if (self.onreadystatechange) self.onreadystatechange();\n" +
+      "              if (self.onload) self.onload();\n" +
+      "            } catch (e) {}\n" +
+      "          }, 8);\n" +
+      "          return;\n" +
+      "        }\n" +
+      "        return oSend.apply(self, arguments);\n" +
+      "      };\n" +
+      "    }\n" +
+      "  } catch (e) {}\n" +
+      "  console.info('[GC Sandbox] mock API + network shim siap');\n" +
       "})(typeof window !== 'undefined' ? window : globalThis);\n";
   }
 

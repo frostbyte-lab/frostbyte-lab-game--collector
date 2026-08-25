@@ -6227,31 +6227,117 @@
           return m;
         });
 
-        // Bridge: kirim error/network dari iframe → parent (panel Detail Error)
-        // Preview memakai blob: URL. Normalisasi URL relatif sebelum XHR/fetch
-        // agar request seperti /shared/... tidak gagal dengan Invalid URL.
-        // Map dynamic runtime requests (fetch/XHR) to files loaded from the ZIP.
+        // Bridge + Network Shim (Sandbox): asset lokal, mock API, lapor request eksternal
         const previewAssetMap = Object.fromEntries(Object.entries(blobUrls).map(([p, url]) => [p.replace(/^\/+/, ''), url]));
         const previewAssetNames = {};
         Object.keys(previewAssetMap).forEach((p) => { previewAssetNames[p.split('/').pop()] = previewAssetMap[p]; });
         const previewBaseUrl = window.location.origin + '/';
+        const sandboxMode = activePreviewMode !== 'web';
+
+        // Coba baca api-map / keterangan dari ZIP untuk mock
+        let apiMapPayload = null;
+        try {
+          const mapPath = names.find(n => /(^|\/)api-map\.json$/i.test(n) || /(^|\/)keterangan\.json$/i.test(n));
+          if (mapPath && zipFileMap[mapPath]) {
+            const raw = openFiles.has(mapPath) ? openFiles.get(mapPath) : await zipFileMap[mapPath].async('string');
+            apiMapPayload = JSON.parse(raw);
+          }
+        } catch (_) { apiMapPayload = null; }
+
         const bridge = `<script>(function(){
+  var GC_SANDBOX = ${sandboxMode ? 'true' : 'false'};
   var GC_BASE_URL = ${JSON.stringify(previewBaseUrl)};
   var GC_ASSET_MAP = ${JSON.stringify(previewAssetMap)};
   var GC_ASSET_NAMES = ${JSON.stringify(previewAssetNames)};
-  function gcAbsoluteUrl(input){
-    if (typeof input !== 'string' || !input) return input;
+  var GC_API_MAP = ${JSON.stringify(apiMapPayload)};
+  var stats = { local: 0, mocked: 0, external: 0, blocked: 0, urls: [] };
+  function send(type, msg, extra){
+    try { parent.postMessage({ source:'gc-preview', type:type, msg:String(msg||''), extra:extra||null }, '*'); } catch(e){}
+  }
+  function reportNet(){
+    var status = 'READY';
+    if (stats.external > 0 || stats.blocked > 0) status = stats.mocked > 0 || stats.local > 0 ? 'PARTIAL' : 'NOT READY';
+    if (stats.external === 0 && stats.blocked === 0 && (stats.mocked > 0 || stats.local > 0)) status = 'READY';
+    if (stats.external === 0 && stats.blocked === 0 && stats.mocked === 0 && stats.local === 0) status = 'READY';
+    send('net-report', status, {
+      status: status,
+      local: stats.local,
+      mocked: stats.mocked,
+      external: stats.external,
+      blocked: stats.blocked,
+      sample: stats.urls.slice(-12)
+    });
+  }
+  function track(kind, url){
+    stats[kind] = (stats[kind] || 0) + 1;
+    if (stats.urls.length < 40) stats.urls.push({ kind: kind, url: String(url||'').slice(0, 180) });
+    if (kind === 'external' || kind === 'blocked') {
+      send(kind === 'external' ? 'warn' : 'err', 'NET ' + kind + ' — ' + String(url||'').slice(0, 160));
+    }
+    reportNet();
+  }
+  function gcAssetUrl(input){
+    if (typeof input !== 'string' || !input) return null;
     try {
       var resolved = new URL(input, GC_BASE_URL);
       var assetPath = decodeURIComponent(resolved.pathname || '').replace(/^\/+/, '');
       var hit = GC_ASSET_MAP[assetPath] || GC_ASSET_NAMES[assetPath.split('/').pop()];
       if (hit) return hit + (resolved.search || '');
-      return resolved.toString();
-    } catch (err) { send('err', 'Invalid runtime URL — ' + input); return input; }
+    } catch (err) {}
+    return null;
   }
-  function send(type, msg, extra){
-    try { parent.postMessage({ source:'gc-preview', type:type, msg:String(msg||''), extra:extra||null }, '*'); } catch(e){}
+  function isApiLike(u){
+    var s = String(u || '').toLowerCase();
+    return /\\/api\\/|\\/game\\/(init|session|balance|bet|spin|result|history)|gamewallet|verifysession|game-api|game-proxy|\\/spin\\b|\\/bet\\b|\\/balance\\b|\\/session\\b|graphql|\\/v1\\/|\\/v2\\//i.test(s);
   }
+  function isExternalHttp(u){
+    try {
+      var x = new URL(u, GC_BASE_URL);
+      if (x.protocol !== 'http:' && x.protocol !== 'https:') return false;
+      if (String(u).indexOf('blob:') === 0 || String(u).indexOf('data:') === 0) return false;
+      return true;
+    } catch (e) { return false; }
+  }
+  var balance = 100000;
+  var session = { id: 'sandbox-' + Date.now(), ok: true };
+  function mockPayload(url){
+    var s = String(url || '').toLowerCase();
+    if (/spin|bet|play/.test(s)) {
+      var win = Math.random() > 0.7 ? Math.floor(Math.random() * 500) : 0;
+      balance += win;
+      return { ok: true, win: win, balance: balance, symbols: [[1,2,3],[4,5,6],[7,8,9]], mock: true };
+    }
+    if (/balance|wallet|credit/.test(s)) return { ok: true, balance: balance, mock: true };
+    if (/session|auth|token|login|init/.test(s)) return { ok: true, session: session, balance: balance, mock: true };
+    if (/history|result/.test(s)) return { ok: true, items: [], balance: balance, mock: true };
+    return { ok: true, mock: true, balance: balance, session: session, url: String(url||'').slice(0,120) };
+  }
+  function mockResponse(url){
+    var data = mockPayload(url);
+    if (window.__GC_SANDBOX_API__) {
+      try {
+        if (/spin/.test(url) && window.__GC_SANDBOX_API__.spin) return window.__GC_SANDBOX_API__.spin();
+        if (/balance/.test(url) && window.__GC_SANDBOX_API__.balance) return window.__GC_SANDBOX_API__.balance();
+        if (/session|init/.test(url) && window.__GC_SANDBOX_API__.session) return window.__GC_SANDBOX_API__.session();
+      } catch (e) {}
+    }
+    var body = JSON.stringify(data);
+    return Promise.resolve(new Response(body, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'X-GC-Mock': '1' }
+    }));
+  }
+  window.__GC_OFFLINE__ = GC_SANDBOX;
+  window.__GC_SANDBOX_API__ = window.__GC_SANDBOX_API__ || {
+    init: function(){ return mockResponse('/api/game/init'); },
+    session: function(){ return mockResponse('/api/game/session'); },
+    balance: function(){ return mockResponse('/api/game/balance'); },
+    spin: function(){ return mockResponse('/api/game/spin'); },
+    bet: function(){ return mockResponse('/api/game/bet'); },
+    result: function(){ return mockResponse('/api/game/result'); },
+    history: function(){ return mockResponse('/api/game/history'); }
+  };
+
   window.addEventListener('error', function(ev){
     send('err', (ev.message||'Error') + (ev.filename ? ' @ '+ev.filename+':'+ev.lineno : ''), { file: ev.filename, line: ev.lineno, col: ev.colno });
   });
@@ -6269,18 +6355,48 @@
       };
     });
   }
+
+  function resolveRequestUrl(raw){
+    var asset = gcAssetUrl(typeof raw === 'string' ? raw : (raw && raw.url));
+    if (asset) return { kind: 'local', url: asset };
+    var u = typeof raw === 'string' ? raw : (raw && raw.url) || '';
+    try { u = new URL(u, GC_BASE_URL).toString(); } catch (e) {}
+    if (GC_SANDBOX && isApiLike(u)) return { kind: 'mock', url: u };
+    if (GC_SANDBOX && isExternalHttp(u) && !gcAssetUrl(u)) {
+      // di sandbox: blokir external non-asset → mock generik atau blocked
+      if (isApiLike(u) || /json|api/i.test(u)) return { kind: 'mock', url: u };
+      return { kind: 'blocked', url: u };
+    }
+    return { kind: 'pass', url: u };
+  }
+
   if (window.fetch) {
     var of = window.fetch;
-    window.fetch = function(){
-      var args = Array.prototype.slice.call(arguments);
-      var rawUrl = (args[0] && args[0].url) || args[0];
-      var url = gcAbsoluteUrl(rawUrl);
-      if (typeof args[0] === 'string') args[0] = url;
-      return of.apply(this, args).then(function(res){
-        if (!res.ok) send('err', 'NET fetch '+res.status+' '+res.statusText+' — '+url);
+    window.fetch = function(input, init){
+      var rawUrl = (input && input.url) || input;
+      var resolved = resolveRequestUrl(rawUrl);
+      if (resolved.kind === 'local') {
+        track('local', rawUrl);
+        input = resolved.url;
+        return of.call(this, input, init).then(function(res){
+          if (!res.ok) send('err', 'NET fetch '+res.status+' — '+resolved.url);
+          return res;
+        });
+      }
+      if (resolved.kind === 'mock') {
+        track('mocked', resolved.url);
+        return mockResponse(resolved.url);
+      }
+      if (resolved.kind === 'blocked') {
+        track('blocked', resolved.url);
+        return mockResponse(resolved.url);
+      }
+      track('external', resolved.url);
+      return of.call(this, typeof input === 'string' ? resolved.url : input, init).then(function(res){
+        if (!res.ok) send('err', 'NET fetch '+res.status+' — '+resolved.url);
         return res;
       }).catch(function(err){
-        send('err', 'NET fetch failed — '+url+' — '+(err && err.message || err));
+        send('err', 'NET fetch failed — '+resolved.url+' — '+(err && err.message || err));
         throw err;
       });
     };
@@ -6289,21 +6405,49 @@
     var XO = window.XMLHttpRequest;
     if (XO) {
       var open = XO.prototype.open, sendX = XO.prototype.send;
-      XO.prototype.open = function(m,u){
-        this.__gc_url = gcAbsoluteUrl(u);
+      XO.prototype.open = function(m, u){
+        var resolved = resolveRequestUrl(u);
+        this.__gc_kind = resolved.kind;
+        this.__gc_url = resolved.url;
         var rest = Array.prototype.slice.call(arguments, 2);
-        return open.apply(this, [m, this.__gc_url].concat(rest));
+        if (resolved.kind === 'mock' || resolved.kind === 'blocked') {
+          this.__gc_mock = true;
+          return open.apply(this, [m, 'about:blank'].concat(rest));
+        }
+        return open.apply(this, [m, resolved.url].concat(rest));
       };
-      XO.prototype.send = function(){
-        this.addEventListener('error', function(){ send('err', 'NET XHR error — '+ (this.__gc_url||'')); });
-        this.addEventListener('load', function(){ if (this.status>=400) send('err', 'NET XHR '+this.status+' — '+(this.__gc_url||'')); });
-        return sendX.apply(this, arguments);
+      XO.prototype.send = function(body){
+        var self = this;
+        if (self.__gc_mock) {
+          track(self.__gc_kind === 'blocked' ? 'blocked' : 'mocked', self.__gc_url);
+          var data = mockPayload(self.__gc_url);
+          var text = JSON.stringify(data);
+          setTimeout(function(){
+            try {
+              Object.defineProperty(self, 'status', { value: 200 });
+              Object.defineProperty(self, 'readyState', { value: 4 });
+              Object.defineProperty(self, 'responseText', { value: text });
+              Object.defineProperty(self, 'response', { value: text });
+              if (self.onreadystatechange) self.onreadystatechange();
+              if (self.onload) self.onload();
+            } catch (e) { send('warn', 'XHR mock incomplete — '+self.__gc_url); }
+          }, 10);
+          return;
+        }
+        if (self.__gc_kind === 'local') track('local', self.__gc_url);
+        else if (self.__gc_kind === 'pass') track('external', self.__gc_url);
+        self.addEventListener('error', function(){ send('err', 'NET XHR error — '+ (self.__gc_url||'')); });
+        self.addEventListener('load', function(){ if (self.status>=400) send('err', 'NET XHR '+self.status+' — '+(self.__gc_url||'')); });
+        return sendX.apply(self, arguments);
       };
     }
   } catch(e){}
   document.addEventListener('securitypolicyviolation', function(ev){
     send('warn', 'CSP: '+ (ev.blockedURI||'') + ' ('+(ev.violatedDirective||'')+')');
   });
+  setTimeout(reportNet, 1500);
+  setTimeout(reportNet, 4000);
+  console.info('[GC] network shim active · sandbox=' + GC_SANDBOX);
 })();<\/script>`;
         if (/<head[\s>]/i.test(html)) html = html.replace(/<head([^>]*)>/i, '<head$1>' + bridge);
         else if (/<html[\s>]/i.test(html)) html = html.replace(/<html([^>]*)>/i, '<html$1><head>' + bridge + '</head>');
@@ -6336,12 +6480,41 @@
         if (title) title.textContent = (activePreviewMode === 'web' ? 'Web Preview' : 'Sandbox Preview') + ' · ' + entryPath;
         appendLog('Preview dimuat: ' + entryPath, 'ok');
 
-        // Terima pesan error dari bridge iframe
+        // Terima pesan error + laporan network dari bridge iframe
         if (!window.__gcPreviewMsgBound) {
           window.__gcPreviewMsgBound = true;
           window.addEventListener('message', function (ev) {
             const d = ev && ev.data;
             if (!d || d.source !== 'gc-preview') return;
+            if (d.type === 'net-report') {
+              const extra = d.extra || {};
+              const st = extra.status || d.msg || 'PARTIAL';
+              window.__gcSandboxNet = extra;
+              const badge =
+                st === 'READY' ? 'ok' : st === 'PARTIAL' ? 'warn' : 'err';
+              appendLog(
+                'Sandbox network: ' + st +
+                ' · local=' + (extra.local || 0) +
+                ' · mocked=' + (extra.mocked || 0) +
+                ' · external=' + (extra.external || 0) +
+                ' · blocked=' + (extra.blocked || 0),
+                badge
+              );
+              if (Array.isArray(extra.sample) && extra.sample.length) {
+                extra.sample.slice(-6).forEach(function (row) {
+                  appendLog('  · [' + (row.kind || '?') + '] ' + (row.url || ''), row.kind === 'external' || row.kind === 'blocked' ? 'warn' : 'ok');
+                });
+              }
+              const title = document.getElementById('preview-title');
+              if (title && title.textContent) {
+                title.textContent = title.textContent.replace(/\s·\s(READY|PARTIAL|NOT READY).*$/, '') + ' · ' + st;
+              }
+              const countEl = document.getElementById('pv-error-count');
+              if (countEl && st !== 'READY') {
+                countEl.textContent = st + (extra.external ? ' · ' + extra.external + ' ext' : '');
+              }
+              return;
+            }
             const lvl = d.type === 'warn' ? 'warn' : 'err';
             appendLog(d.msg || '(empty error)', lvl);
             if (d.extra && d.extra.file) {
