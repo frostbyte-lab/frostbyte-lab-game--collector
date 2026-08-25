@@ -6671,36 +6671,169 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const sandboxMode = activePreviewMode !== 'web';
         const hybridMode = Boolean(window.__gcHybridPreview);
 
-        // Baca api-map.json (prioritas) atau bangun ringkas dari keterangan.json
+        // api-map.json → keterangan/manifest → file server/api → template umum (agar loading tidak stuck)
         let apiMapPayload = null;
+        function gcKindFromUrl(u) {
+          const s = String(u || '').toLowerCase();
+          if (/spin|bet|wager|play/.test(s)) return 'spin';
+          if (/balance|wallet|credit|gamewallet/.test(s)) return 'balance';
+          if (/session|auth|token|login|verifysession/.test(s)) return 'session';
+          if (/init|launch|config|gamedata|gameinfo/.test(s)) return 'init';
+          if (/history|result|settle/.test(s)) return 'result';
+          return 'api';
+        }
+        function gcRichTemplate(kind) {
+          const balance = 100000;
+          const session = { id: 'sandbox-local', ok: true, si: 'sandbox-local' };
+          const data = kind === 'spin'
+            ? { win: 0, winAmount: 0, balance, bl: balance, symbols: [[1,2,3],[4,5,6],[7,8,9]], reels: [[1,2,3],[4,5,6],[7,8,9]], rl: [[1,2,3],[4,5,6],[7,8,9]], si: session.si }
+            : kind === 'balance'
+              ? { balance, bl: balance, credit: balance, currency: 'IDR' }
+              : kind === 'session' || kind === 'auth'
+                ? { session, token: 'sandbox-token', accessToken: 'sandbox-token', balance, bl: balance, playerId: 'p-sandbox' }
+                : kind === 'init' || kind === 'launch'
+                  ? { session, balance, bl: balance, config: { rtp: 96, lines: 20 }, gameInfo: { offline: true }, symbols: [1,2,3,4,5,6,7,8,9] }
+                  : { balance, bl: balance, session, items: [] };
+          return {
+            ok: true, mock: true, __gcMock: true, err: null, error: 0, code: 0, status: 'ok',
+            dt: data, data: data, balance, bl: balance, session, ...data
+          };
+        }
+        function gcPushEp(list, ep) {
+          if (!ep || !ep.path) return;
+          const key = String(ep.pathLower || ep.path).toLowerCase();
+          if (list._seen.has(key)) return;
+          list._seen.add(key);
+          list.push(ep);
+        }
         try {
           const apiMapPath = names.find(n => /(^|\/)api-map\.json$/i.test(n));
           const ketPath = names.find(n => /(^|\/)keterangan\.json$/i.test(n));
+          const manPath = names.find(n => /(^|\/)manifest\.json$/i.test(n) && !/BACKUP\//i.test(n));
+          const endpoints = [];
+          endpoints._seen = new Set();
+          let source = '';
+
           if (apiMapPath && zipFileMap[apiMapPath]) {
             const raw = openFiles.has(apiMapPath) ? openFiles.get(apiMapPath) : await zipFileMap[apiMapPath].async('string');
             apiMapPayload = JSON.parse(raw);
-          } else if (ketPath && zipFileMap[ketPath]) {
+            source = 'api-map.json';
+          }
+
+          if ((!apiMapPayload || !apiMapPayload.endpoints || !apiMapPayload.endpoints.length) && ketPath && zipFileMap[ketPath]) {
             const raw = openFiles.has(ketPath) ? openFiles.get(ketPath) : await zipFileMap[ketPath].async('string');
             const ket = JSON.parse(raw);
             const eps = Array.isArray(ket.apiEndpoints) ? ket.apiEndpoints : [];
-            apiMapPayload = {
-              version: 1,
-              from: 'keterangan.json',
-              endpoints: eps.map(function (e) {
-                var path = '/';
-                try { path = new URL(e.url).pathname; } catch (err) {}
-                return {
-                  url: e.url,
+            eps.forEach(function (e) {
+              let path = '/';
+              try { path = new URL(e.url).pathname; } catch (err) {}
+              const kind = gcKindFromUrl(e.url || path);
+              gcPushEp(endpoints, {
+                url: e.url,
+                path: path,
+                pathLower: path.toLowerCase(),
+                kind: kind,
+                localPath: e.localPath || null,
+                mockTemplate: gcRichTemplate(kind),
+                snapshot: null
+              });
+            });
+            source = source || 'keterangan.json';
+          }
+
+          if ((!apiMapPayload || !apiMapPayload.endpoints || !apiMapPayload.endpoints.length) && manPath && zipFileMap[manPath]) {
+            try {
+              const raw = openFiles.has(manPath) ? openFiles.get(manPath) : await zipFileMap[manPath].async('string');
+              const man = JSON.parse(raw);
+              const res = Array.isArray(man.resources) ? man.resources : [];
+              res.forEach(function (r) {
+                if (!r || (r.category !== 'api' && r.category !== 'server' && r.type !== 'xhr' && r.type !== 'fetch')) return;
+                let path = '/';
+                try { path = new URL(r.url).pathname; } catch (err) { path = '/' + String(r.localPath || '').split('/').pop(); }
+                const kind = r.apiKind && r.apiKind !== 'unknown' ? r.apiKind : gcKindFromUrl(r.url || path);
+                gcPushEp(endpoints, {
+                  url: r.url,
                   path: path,
                   pathLower: path.toLowerCase(),
-                  kind: 'api',
-                  localPath: e.localPath || null,
-                  mockTemplate: { ok: true, mock: true, balance: 100000 },
+                  kind: kind,
+                  localPath: r.localPath || null,
+                  mockTemplate: gcRichTemplate(kind),
                   snapshot: null
-                };
-              })
-            };
+                });
+              });
+              source = source || 'manifest.json';
+            } catch (_) {}
           }
+
+          // Snapshot body dari server/api/* di ZIP
+          for (const p of names) {
+            if (!/^server\/api\//i.test(p) && !/\/server\/api\//i.test(p)) continue;
+            try {
+              const raw = openFiles.has(p) ? openFiles.get(p) : await zipFileMap[p].async('string');
+              const t = String(raw || '').trim();
+              if (!(t.startsWith('{') || t.startsWith('['))) continue;
+              let snap = null;
+              try { snap = JSON.parse(t.length > 80000 ? t.slice(0, 80000) : t); } catch (e) { continue; }
+              const base = p.split('/').pop().replace(/\.[^.]+$/, '');
+              const path = '/api/' + base;
+              const kind = gcKindFromUrl(p + ' ' + base);
+              gcPushEp(endpoints, {
+                url: path,
+                path: path,
+                pathLower: path.toLowerCase(),
+                kind: kind,
+                localPath: p,
+                hasSnapshot: true,
+                snapshot: snap,
+                mockTemplate: gcRichTemplate(kind)
+              });
+              source = source || 'server/api';
+            } catch (_) {}
+          }
+
+          // Template path umum — cegah stuck di layar "jaringan sibuk"
+          if (sandboxMode) {
+            const common = [
+              ['/api/game/init', 'init'], ['/api/game/session', 'session'], ['/api/game/balance', 'balance'],
+              ['/api/game/spin', 'spin'], ['/api/game/bet', 'spin'], ['/api/game/result', 'result'],
+              ['/game/init', 'init'], ['/game/session', 'session'], ['/game/spin', 'spin'],
+              ['/verifysession', 'session'], ['/gamewallet', 'balance'], ['/spin', 'spin'], ['/balance', 'balance']
+            ];
+            common.forEach(function (pair) {
+              gcPushEp(endpoints, {
+                url: pair[0],
+                path: pair[0],
+                pathLower: pair[0].toLowerCase(),
+                kind: pair[1],
+                mockTemplate: gcRichTemplate(pair[1]),
+                snapshot: null
+              });
+            });
+            if (!source) source = 'builtin-common';
+          }
+
+          if (!apiMapPayload || !apiMapPayload.endpoints || !apiMapPayload.endpoints.length) {
+            apiMapPayload = {
+              version: 1,
+              from: source || 'synthetic',
+              totals: { endpoints: endpoints.length, withSnapshot: endpoints.filter(function (e) { return e.snapshot; }).length },
+              endpoints: endpoints
+            };
+          } else if (endpoints.length) {
+            // merge snapshot/common into existing map
+            (apiMapPayload.endpoints || []).forEach(function (e) {
+              if (e && e.path) endpoints._seen.add(String(e.pathLower || e.path).toLowerCase());
+            });
+            endpoints.forEach(function (e) {
+              if (!apiMapPayload.endpoints.some(function (x) {
+                return String(x.pathLower || x.path || '').toLowerCase() === String(e.pathLower || e.path).toLowerCase();
+              })) {
+                apiMapPayload.endpoints.push(e);
+              }
+            });
+            apiMapPayload.from = (apiMapPayload.from || 'api-map') + '+' + (source || 'merge');
+          }
+          window.__gcApiMapSource = source || (apiMapPayload && apiMapPayload.from) || '';
         } catch (_) { apiMapPayload = null; }
 
         const bridge = `<script>(function(){
@@ -7022,16 +7155,16 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const title = document.getElementById('preview-title');
         if (title) title.textContent = (activePreviewMode === 'web' ? 'Web Preview' : 'Sandbox Preview') + ' · ' + entryPath;
         appendLog('Preview dimuat: ' + entryPath, 'ok');
-        if (apiMapPayload && apiMapPayload.endpoints) {
+        if (apiMapPayload && apiMapPayload.endpoints && apiMapPayload.endpoints.length) {
+          const snapN = (apiMapPayload.endpoints || []).filter(function (e) { return e && e.snapshot; }).length;
           appendLog(
-            'API map: ' + apiMapPayload.endpoints.length + ' endpoint' +
-            (apiMapPayload.totals && apiMapPayload.totals.withSnapshot != null
-              ? ' · snapshot ' + apiMapPayload.totals.withSnapshot
-              : ''),
+            'API map: ' + apiMapPayload.endpoints.length + ' endpoint · sumber ' +
+            (window.__gcApiMapSource || apiMapPayload.from || 'map') +
+            (snapN ? ' · snapshot ' + snapN : ''),
             'ok'
           );
         } else {
-          appendLog('API map: tidak ada api-map.json — mock pakai pattern generik.', 'warn');
+          appendLog('API map: kosong — mock pattern saja. Collect ulang agar api-map.json ikut.', 'warn');
         }
 
         // Terima pesan error + laporan network dari bridge iframe
