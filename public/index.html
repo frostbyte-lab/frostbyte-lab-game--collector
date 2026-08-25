@@ -7970,24 +7970,247 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       }
     }
 
-    function runAutoRepair() {
-      if (!editor || !currentFile) {
-        alert('Buka file dulu di editor.');
+    /** Index basename → path relatif di ZIP (untuk rewrite URL absolut) */
+    function gcBuildLocalAssetIndex() {
+      const byBase = Object.create(null);
+      const paths = Object.keys(zipFileMap || {});
+      paths.forEach(function (p) {
+        if (/^BACKUP\//i.test(p)) return;
+        const base = p.split('/').pop();
+        if (!base) return;
+        const key = base.toLowerCase();
+        if (!byBase[key]) byBase[key] = [];
+        byBase[key].push(p);
+      });
+      return byBase;
+    }
+
+    function gcResolveLocalForUrl(absUrl, fileDir, byBase) {
+      let pathname = '';
+      try {
+        pathname = new URL(absUrl).pathname;
+      } catch (_) {
+        return null;
+      }
+      const base = pathname.split('/').pop() || '';
+      if (!base || base.length < 3) return null;
+      // skip API-looking paths as "local asset"
+      if (/\/api\/|spin|session|balance|verifysession/i.test(pathname) && !/\.(js|css|png|jpg|json|wasm)$/i.test(base)) {
+        return null;
+      }
+      const cands = byBase[base.toLowerCase()];
+      if (!cands || !cands.length) return null;
+      // prefer same folder depth / assets path
+      let pick = cands[0];
+      for (let i = 0; i < cands.length; i++) {
+        if (/assets?\/|static\/|res\//i.test(cands[i])) { pick = cands[i]; break; }
+      }
+      // relative from fileDir
+      const dirParts = (fileDir || '').split('/').filter(Boolean);
+      const pickParts = pick.split('/');
+      // simple relative
+      let rel = pick;
+      if (dirParts.length) {
+        rel = pickParts.join('/');
+        // if file is in subfolder, try ../
+        const depth = dirParts.length;
+        rel = (depth ? new Array(depth + 1).join('../') : '') + pick;
+        // cleaner: if pick under same root, use path without leading
+        rel = pick.replace(/^\.\//, '');
+      }
+      return rel;
+    }
+
+    function gcRewriteAbsoluteInCode(code, filePath, byBase) {
+      const fileDir = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/') + 1) : '';
+      let n = 0;
+      const report = [];
+      const next = String(code).replace(
+        /\b(src|href|data-src|poster)\s*=\s*(["'])(https?:\/\/[^"']+)\2/gi,
+        function (full, attr, q, url) {
+          const local = gcResolveLocalForUrl(url, fileDir, byBase);
+          if (!local) return full;
+          n++;
+          report.push(attr + ': ' + url.slice(0, 60) + ' → ' + local);
+          return attr + '=' + q + local + q;
+        }
+      ).replace(
+        /url\(\s*(["']?)(https?:\/\/[^"')\s]+)\1\s*\)/gi,
+        function (full, q, url) {
+          const local = gcResolveLocalForUrl(url, fileDir, byBase);
+          if (!local) return full;
+          n++;
+          report.push('css-url: ' + url.slice(0, 60) + ' → ' + local);
+          return 'url(' + (q || '') + local + (q || '') + ')';
+        }
+      );
+      let out = next;
+      const before = out;
+      out = out.replace(/top\.location\s*=\s*self\.location/gi, '/* frame-buster neutralized */');
+      out = out.replace(/if\s*\(\s*top\s*!==\s*self\s*\)/gi, 'if(false)');
+      if (out !== before) {
+        n++;
+        report.push('frame-buster neutralized');
+      }
+      return { code: out, changes: n, report: report };
+    }
+
+    async function gcComputeOfflineScore() {
+      const paths = Object.keys(zipFileMap || {});
+      const hasApiMap = paths.some(function (p) { return /(^|\/)api-map\.json$/i.test(p); });
+      const hasIndex = paths.some(function (p) { return /(^|\/)index\.html?$/i.test(p); });
+      const hasKet = paths.some(function (p) { return /(^|\/)keterangan\.json$/i.test(p); });
+      let absInHtml = 0;
+      let apiAbs = 0;
+      let assetAbs = 0;
+      try {
+        const entry = paths.find(function (p) { return /(^|\/)index\.html?$/i.test(p); });
+        if (entry) {
+          const code = openFiles.has(entry) ? openFiles.get(entry) : await zipFileMap[entry].async('string');
+          const urls = typeof extractAbsoluteUrls === 'function' ? extractAbsoluteUrls(code) : [];
+          absInHtml = urls.length;
+          urls.forEach(function (u) {
+            if (u.kind === 'API/backend' || u.kind === 'campuran (API+asset)') apiAbs++;
+            else if (u.kind === 'asset') assetAbs++;
+          });
+        }
+      } catch (_) {}
+      let score = 40;
+      if (hasIndex) score += 15;
+      if (hasApiMap) score += 20;
+      if (hasKet) score += 5;
+      if (paths.length >= 50) score += 10;
+      if (paths.length >= 150) score += 5;
+      if (absInHtml === 0) score += 10;
+      else score -= Math.min(15, absInHtml);
+      score = Math.max(0, Math.min(100, score));
+      let grade = 'D';
+      if (score >= 90) grade = 'A';
+      else if (score >= 80) grade = 'B';
+      else if (score >= 70) grade = 'C';
+      else if (score >= 60) grade = 'D';
+      else grade = 'E';
+      return {
+        score: score,
+        grade: grade,
+        files: paths.length,
+        hasApiMap: hasApiMap,
+        hasIndex: hasIndex,
+        absoluteUrlsInIndex: absInHtml,
+        absoluteAssets: assetAbs,
+        absoluteApis: apiAbs,
+        note: apiAbs
+          ? 'Masih ada URL API absolut — Sandbox memakai mock; Hybrid untuk server live. Game server-side tidak 100% offline.'
+          : (assetAbs ? 'Rewrite asset absolut dengan Auto Repair.' : 'Struktur paket relatif baik.')
+      };
+    }
+
+    async function runAutoRepair() {
+      if (!currentZip) {
+        alert('Load ZIP dulu di Workspace.');
         return;
       }
-      let code = editor.getValue();
-      let changes = 0;
-      // Neutralize simple frame-busters
-      const before = code;
-      code = code.replace(/top\.location\s*=\s*self\.location/gi, '/* frame-buster neutralized */');
-      code = code.replace(/if\s*\(\s*top\s*!==\s*self\s*\)/gi, 'if(false)');
-      if (code !== before) changes++;
-      // Balance note only
-      editor.setValue(code);
-      openFiles.set(currentFile, code);
-      appendLog('Auto Repair (dasar) pada ' + currentFile + (changes ? ' — frame-buster dinetralisir' : ' — tidak ada patch otomatis'), changes ? 'ok' : 'warn');
-      alert('Auto Repair dasar selesai. Cek Analysis untuk issue tersisa.');
+      const scopeAll = window.confirm(
+        'Auto Repair tingkat lanjut\n\n' +
+        'OK = perbaiki SEMUA HTML/CSS/JS di ZIP (rewrite URL absolut → file lokal jika ada)\n' +
+        'Batal = hanya file aktif di editor'
+      );
+      setLoading(true, 'Auto Repair', 'Membangun indeks asset…');
+      const byBase = gcBuildLocalAssetIndex();
+      let totalChanges = 0;
+      const filesTouched = [];
+      const detailLines = [];
+
+      async function repairOne(path) {
+        if (!path || /^BACKUP\//i.test(path)) return;
+        if (!/\.(html?|css|js|mjs)$/i.test(path)) return;
+        let code;
+        try {
+          code = openFiles.has(path) ? openFiles.get(path) : await zipFileMap[path].async('string');
+        } catch (_) { return; }
+        const result = gcRewriteAbsoluteInCode(code, path, byBase);
+        if (result.changes > 0 && result.code !== code) {
+          openFiles.set(path, result.code);
+          if (currentZip) {
+            currentZip.file(path, result.code);
+            zipFileMap[path] = currentZip.file(path);
+          }
+          if (currentFile === path && editor) {
+            try { editor.setValue(result.code); } catch (_) {}
+          }
+          totalChanges += result.changes;
+          filesTouched.push(path);
+          result.report.slice(0, 5).forEach(function (r) {
+            detailLines.push(path + ' · ' + r);
+          });
+        }
+      }
+
+      try {
+        if (scopeAll) {
+          const list = Object.keys(zipFileMap || {});
+          for (let i = 0; i < list.length; i++) {
+            await repairOne(list[i]);
+            if (i % 30 === 0) setLoading(true, 'Auto Repair', (i + 1) + ' / ' + list.length + ' file…');
+          }
+        } else {
+          if (!currentFile) {
+            setLoading(false);
+            alert('Buka file di editor, atau pilih OK untuk scan seluruh ZIP.');
+            return;
+          }
+          await repairOne(currentFile);
+        }
+
+        // tulis laporan kesiapan
+        const score = await gcComputeOfflineScore();
+        const report = {
+          generatedAt: new Date().toISOString(),
+          tool: 'Game Collector Pro · Auto Repair',
+          offlineScore: score,
+          repairs: { files: filesTouched.length, patches: totalChanges, samples: detailLines.slice(0, 30) }
+        };
+        const reportJson = JSON.stringify(report, null, 2);
+        openFiles.set('offline-readiness.json', reportJson);
+        if (currentZip) {
+          currentZip.file('offline-readiness.json', reportJson);
+          zipFileMap['offline-readiness.json'] = currentZip.file('offline-readiness.json');
+        }
+
+        setLoading(false);
+        appendLog(
+          'Auto Repair: ' + totalChanges + ' patch · ' + filesTouched.length + ' file · skor offline ' + score.score + '/100 (' + score.grade + ')',
+          totalChanges ? 'ok' : 'warn'
+        );
+        if (detailLines.length) {
+          detailLines.slice(0, 8).forEach(function (l) { appendLog(l, 'ok'); });
+        }
+        const detail = document.getElementById('preview-error-detail');
+        if (detail) {
+          detail.textContent =
+            '— Auto Repair —\n' +
+            'Patch: ' + totalChanges + ' · File: ' + filesTouched.length + '\n' +
+            'Skor offline: ' + score.score + '/100 · Grade ' + score.grade + '\n' +
+            score.note + '\n\n' +
+            (detailLines.length ? detailLines.join('\n') : '(tidak ada URL absolut yang cocok file lokal)') +
+            '\n\nLaporan: offline-readiness.json';
+        }
+        if (typeof renderFileTree === 'function') {
+          try { renderFileTree(Object.keys(zipFileMap)); } catch (_) {}
+        }
+        alert(
+          'Auto Repair selesai.\n\n' +
+          'Patch: ' + totalChanges + '\nFile: ' + filesTouched.length + '\n' +
+          'Skor offline: ' + score.score + '/100 (' + score.grade + ')\n\n' +
+          score.note + '\n\nLaporan tersimpan: offline-readiness.json\nJalankan Sandbox / Scan Error lagi.'
+        );
+      } catch (e) {
+        setLoading(false);
+        appendLog('Auto Repair gagal: ' + (e && e.message || e), 'err');
+        alert('Auto Repair gagal: ' + (e && e.message || e));
+      }
     }
+    window.gcComputeOfflineScore = gcComputeOfflineScore;
 
     function scanIssues() {
       runAnalysis();
