@@ -7758,7 +7758,16 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         // Bridge + Network Shim (Sandbox): asset lokal, mock API, lapor request eksternal
         const previewAssetMap = Object.fromEntries(Object.entries(blobUrls).map(([p, url]) => [p.replace(/^\/+/, ''), url]));
         const previewAssetNames = {};
-        Object.keys(previewAssetMap).forEach((p) => { previewAssetNames[p.split('/').pop()] = previewAssetMap[p]; });
+        Object.keys(previewAssetMap).forEach((p) => {
+          const base = p.split('/').pop() || '';
+          previewAssetNames[base] = previewAssetMap[p];
+          // strip NNNN- collect prefix
+          const stripped = base.replace(/^\d{2,6}-/, '');
+          if (stripped && stripped !== base) previewAssetNames[stripped] = previewAssetMap[p];
+          // hash tokens for CDN match
+          const toks = base.match(/[a-f0-9]{8,}/gi) || [];
+          toks.forEach(function (tok) { previewAssetNames[tok] = previewAssetMap[p]; previewAssetNames[tok.toLowerCase()] = previewAssetMap[p]; });
+        });
         const previewBaseUrl = window.location.origin + '/';
         const sandboxMode = activePreviewMode !== 'web';
         const hybridMode = Boolean(window.__gcHybridPreview);
@@ -7972,6 +7981,26 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     if (GC_ASSET_MAP['./' + noSlash]) return GC_ASSET_MAP['./' + noSlash];
     var bare = noSlash.split('/').pop();
     if (bare && GC_ASSET_NAMES[bare]) return GC_ASSET_NAMES[bare];
+    // Strip collect prefix 0004- from names side: match bare without NNNN-
+    if (bare) {
+      var bareLow = bare.toLowerCase();
+      var nameKeys = Object.keys(GC_ASSET_NAMES || {});
+      for (var ni = 0; ni < nameKeys.length; ni++) {
+        var nk = nameKeys[ni];
+        var nkLow = nk.toLowerCase();
+        if (nkLow === bareLow || nkLow.endsWith('-' + bareLow) || nkLow.indexOf(bareLow) >= 0) {
+          return GC_ASSET_NAMES[nk];
+        }
+      }
+      // Hash-token match: 996b5422dd from CDN path → 0004-996b5422dd.cee54.js
+      var tokens = bareLow.match(/[a-f0-9]{8,}/g) || [];
+      for (var ti = 0; ti < tokens.length; ti++) {
+        var tok = tokens[ti];
+        for (var nj = 0; nj < nameKeys.length; nj++) {
+          if (nameKeys[nj].toLowerCase().indexOf(tok) >= 0) return GC_ASSET_NAMES[nameKeys[nj]];
+        }
+      }
+    }
     // suffix match: .../shared/984721902a/index.json
     try {
       var keys = Object.keys(GC_ASSET_MAP);
