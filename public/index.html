@@ -5139,6 +5139,117 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
 
 
+
+    /* ===== Chat AI (Custom AI Manager panel) — was missing caiSendChat ===== */
+    function caiAppendChat(role, text) {
+      var log = document.getElementById('cai-chat-log');
+      if (!log) return;
+      var div = document.createElement('div');
+      div.className = role === 'user' ? 'cai-msg-user' : 'cai-msg-ai';
+      div.textContent = String(text || '');
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function caiExtractCodeBlock(text) {
+      var m = String(text || '').match(/```(?:[\w+-]*)\n([\s\S]*?)```/);
+      return m ? m[1].trim() : null;
+    }
+
+    async function caiSendChat() {
+      var input = document.getElementById('cai-chat-input');
+      var sendBtn = document.getElementById('cai-chat-send');
+      var applyEdit = document.getElementById('cai-apply-edit');
+      var q = (input && input.value || '').trim();
+      if (!q) {
+        if (input) input.focus();
+        return;
+      }
+      if (typeof callCustomAIWithFailover !== 'function') {
+        caiAppendChat('ai', 'Belum login AI. Pilih Groq/GPT → isi API key → Login.');
+        return;
+      }
+      if (typeof hasCustomAIKeys === 'function' && !hasCustomAIKeys()) {
+        caiAppendChat('ai', 'Belum login AI. Pilih Groq/GPT → Email 1–5 → isi key → Login.');
+        return;
+      }
+
+      caiAppendChat('user', q);
+      if (input) input.value = '';
+      if (sendBtn) sendBtn.disabled = true;
+
+      try {
+        var file = (typeof currentFile !== 'undefined' && currentFile) ? currentFile : null;
+        var code = '';
+        if (file && typeof editor !== 'undefined' && editor) {
+          try { code = editor.getValue() || ''; } catch (_) {}
+        }
+        if (file && !code && typeof openFiles !== 'undefined' && openFiles && openFiles.has(file)) {
+          code = openFiles.get(file) || '';
+        }
+        if ((!file || !code) && typeof zipFileMap !== 'undefined' && zipFileMap) {
+          var keys = Object.keys(zipFileMap);
+          var prefer = keys.filter(function (k) { return /(^|\/)index\.html?$/i.test(k); });
+          if (!prefer.length) prefer = keys.filter(function (k) { return /\.(html?|js|mjs)$/i.test(k); });
+          if (prefer[0]) {
+            file = prefer[0];
+            try {
+              code = (openFiles && openFiles.has(file))
+                ? openFiles.get(file)
+                : await zipFileMap[file].async('string');
+            } catch (_) {}
+          }
+        }
+
+        var system = [
+          'Anda asisten kode Game Collector Pro (Chat AI).',
+          'Bahasa Indonesia, ringkas.',
+          'Jika ada KODE SAAT INI dan user minta perbaiki/edit, kembalikan FILE LENGKAP dalam satu code fence.',
+          'Jangan bilang file tidak ada jika kode dilampirkan.'
+        ].join(' ');
+
+        var userMsg = 'PERMINTAAN:\n' + q + '\n';
+        if (file && code) {
+          userMsg += '\nFILE: ' + file + '\n\nKODE SAAT INI:\n```\n' + String(code).slice(0, 28000) + '\n```\n';
+        }
+
+        var messages = [
+          { role: 'system', content: system },
+          { role: 'user', content: userMsg }
+        ];
+
+        var res = await callCustomAIWithFailover(messages, { max_tokens: 4000 });
+        var text = (res && res.content) || String(res || '');
+        var slotName = res && res.slotName;
+        caiAppendChat('ai', text + (slotName ? '\n\n(via ' + slotName + ')' : ''));
+
+        var wantApply = applyEdit ? applyEdit.checked : true;
+        var newCode = caiExtractCodeBlock(text);
+        if (wantApply && newCode && file) {
+          try {
+            if (typeof editor !== 'undefined' && editor) editor.setValue(newCode);
+            if (typeof openFiles !== 'undefined' && openFiles) openFiles.set(file, newCode);
+            if (typeof currentFile !== 'undefined') currentFile = file;
+            if (typeof currentZip !== 'undefined' && currentZip) {
+              try { currentZip.file(file, newCode); } catch (_) {}
+            }
+            caiAppendChat('ai', '✓ Edit diterapkan ke ' + file);
+          } catch (ae) {
+            caiAppendChat('ai', 'Gagal apply: ' + (ae.message || ae));
+          }
+        }
+      } catch (e) {
+        caiAppendChat('ai', 'Gagal: ' + (e.message || e));
+      } finally {
+        if (sendBtn) sendBtn.disabled = false;
+      }
+    }
+
+    window.caiSendChat = caiSendChat;
+    window.caiAppendChat = caiAppendChat;
+    window.caiExtractCodeBlock = caiExtractCodeBlock;
+
+
     /* ===== Activity (ex-History): Chat AI + Histories — isolated ===== */
     var ACT_LOG_KEY = 'gc_activity_log_v1';
     var actPendingImages = [];
