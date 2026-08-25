@@ -318,9 +318,25 @@
       display:flex; align-items:center; justify-content:center;
       font-weight:800; background: rgba(94,225,192,.15); color: var(--accent);
     }
-    .cai-opt-body { display:flex; flex-direction:column; gap:2px; min-width:0; }
+    .cai-opt-body { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
     .cai-opt-body strong { font-size:14px; }
     .cai-opt-body small { font-size:11px; color: var(--text-muted); }
+    .cai-opt-toggle {
+      flex-shrink:0; margin-left:auto; display:flex; align-items:center; gap:6px;
+    }
+    .cai-opt-toggle span { font-size:10px; color:var(--text-muted); min-width:22px; text-align:right; }
+    .cai-switch {
+      position:relative; width:42px; height:24px; border-radius:999px;
+      background:#3a4552; border:1px solid var(--border); cursor:pointer;
+      transition: background .2s ease, border-color .2s ease; flex-shrink:0;
+    }
+    .cai-switch::after {
+      content:''; position:absolute; top:2px; left:2px; width:18px; height:18px;
+      border-radius:50%; background:#c8d0db; transition: transform .2s ease, background .2s ease;
+    }
+    .cai-switch.on { background: rgba(94,225,192,.35); border-color: var(--accent); }
+    .cai-switch.on::after { transform: translateX(18px); background: var(--accent); }
+    .cai-opt.provider-off { opacity:.55; }
     .cai-panel { margin-top:4px; }
     /* Panel chat: flex full height supaya log + input leluasa */
     #cai-panel-chat.cai-panel {
@@ -3383,18 +3399,26 @@
 
         <!-- Menu utama -->
         <div id="cai-menu" class="cai-menu">
-          <button type="button" class="cai-opt" onclick="caiShowPanel('groq')">
+          <button type="button" class="cai-opt" id="cai-opt-groq" onclick="caiShowPanel('groq')">
             <span class="cai-opt-num">1</span>
             <span class="cai-opt-body">
               <strong>Groq</strong>
               <small>Email 1–5 · login · terapkan ke semua tombol AI</small>
             </span>
+            <span class="cai-opt-toggle" onclick="event.stopPropagation()">
+              <span id="cai-lbl-groq">ON</span>
+              <button type="button" class="cai-switch on" id="cai-sw-groq" role="switch" aria-checked="true" title="Aktifkan/nonaktifkan Groq" onclick="event.stopPropagation(); caiToggleProvider('groq')"></button>
+            </span>
           </button>
-          <button type="button" class="cai-opt" onclick="caiShowPanel('gpt')">
+          <button type="button" class="cai-opt" id="cai-opt-gpt" onclick="caiShowPanel('gpt')">
             <span class="cai-opt-num">2</span>
             <span class="cai-opt-body">
               <strong>GPT</strong>
               <small>Email 1–5 · login · terapkan ke semua tombol AI</small>
+            </span>
+            <span class="cai-opt-toggle" onclick="event.stopPropagation()">
+              <span id="cai-lbl-gpt">ON</span>
+              <button type="button" class="cai-switch on" id="cai-sw-gpt" role="switch" aria-checked="true" title="Aktifkan/nonaktifkan GPT" onclick="event.stopPropagation(); caiToggleProvider('gpt')"></button>
             </span>
           </button>
           <button type="button" class="cai-opt" onclick="caiShowPanel('chat')">
@@ -4815,7 +4839,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
     function caiEmptyAccounts() {
       const mk = () => Array.from({ length: 5 }, (_, i) => ({ email: '', apiKey: '', enabled: false }));
-      return { groq: mk(), gpt: mk(), active: null };
+      return { groq: mk(), gpt: mk(), active: null, providerEnabled: { groq: true, gpt: true } };
     }
 
     function loadAIAccounts() {
@@ -4834,10 +4858,15 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             }
             return out;
           };
+          const pe = raw.providerEnabled && typeof raw.providerEnabled === 'object' ? raw.providerEnabled : {};
           return {
             groq: norm(raw.groq),
             gpt: norm(raw.gpt),
-            active: raw.active && typeof raw.active === 'object' ? raw.active : null
+            active: raw.active && typeof raw.active === 'object' ? raw.active : null,
+            providerEnabled: {
+              groq: pe.groq !== false,
+              gpt: pe.gpt !== false
+            }
           };
         }
       } catch (_) {}
@@ -4894,11 +4923,13 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     function accountsToSlots(acc) {
       const slots = [];
       const order = [];
-      // active first, then other filled slots as failover
-      if (acc.active && acc[acc.active.provider] && acc[acc.active.provider][acc.active.index]) {
+      const pe = (acc && acc.providerEnabled) || { groq: true, gpt: true };
+      // active first, then other filled slots as failover (only enabled providers)
+      if (acc.active && pe[acc.active.provider] !== false && acc[acc.active.provider] && acc[acc.active.provider][acc.active.index]) {
         order.push({ provider: acc.active.provider, index: acc.active.index });
       }
       ['groq', 'gpt'].forEach((p) => {
+        if (pe[p] === false) return;
         (acc[p] || []).forEach((slot, i) => {
           if (!slot.apiKey) return;
           if (acc.active && acc.active.provider === p && acc.active.index === i) return;
@@ -5029,11 +5060,35 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       caiShowPanel('menu');
     }
 
+    function caiToggleProvider(provider) {
+      if (provider !== 'groq' && provider !== 'gpt') return;
+      const acc = loadAIAccounts();
+      if (!acc.providerEnabled) acc.providerEnabled = { groq: true, gpt: true };
+      const next = acc.providerEnabled[provider] === false;
+      acc.providerEnabled[provider] = next;
+      // If turning off the active provider, clear active session
+      if (!next && acc.active && acc.active.provider === provider) {
+        acc.active = null;
+      }
+      // If both off, force at least one on (prefer the one just toggled)
+      if (acc.providerEnabled.groq === false && acc.providerEnabled.gpt === false) {
+        acc.providerEnabled[provider] = true;
+        if (typeof appendLog === 'function') appendLog('Login AI: minimal satu provider harus ON', 'warn');
+      }
+      saveAIAccounts(acc);
+      if (typeof appendLog === 'function') {
+        appendLog('Login AI: ' + (CAI_PROVIDERS[provider] || {}).label + ' → ' + (acc.providerEnabled[provider] ? 'ON' : 'OFF'), 'ok');
+      }
+      updateAILoginUI();
+    }
+
     function updateAILoginUI() {
       const acc = loadAIAccounts();
+      const pe = acc.providerEnabled || { groq: true, gpt: true };
       let loggedIn = false;
       let label = '';
-      if (acc.active && acc[acc.active.provider] && acc[acc.active.provider][acc.active.index] && acc[acc.active.provider][acc.active.index].apiKey) {
+      const activeOn = !!(acc.active && pe[acc.active.provider] !== false && acc[acc.active.provider] && acc[acc.active.provider][acc.active.index] && acc[acc.active.provider][acc.active.index].apiKey);
+      if (activeOn) {
         loggedIn = true;
         const meta = CAI_PROVIDERS[acc.active.provider] || { label: acc.active.provider };
         const email = acc[acc.active.provider][acc.active.index].email;
@@ -5060,6 +5115,19 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (topBtn) topBtn.textContent = loggedIn ? ('AI: ' + label) : 'Login AI';
       const pvBtn = document.getElementById('btn-pv-custom');
       if (pvBtn) pvBtn.textContent = loggedIn ? ('AI: ' + label) : 'Login AI';
+      // Sync provider on/off switches in menu
+      ['groq', 'gpt'].forEach(function (p) {
+        const on = pe[p] !== false;
+        const sw = document.getElementById('cai-sw-' + p);
+        const lbl = document.getElementById('cai-lbl-' + p);
+        const opt = document.getElementById('cai-opt-' + p);
+        if (sw) {
+          sw.classList.toggle('on', on);
+          sw.setAttribute('aria-checked', on ? 'true' : 'false');
+        }
+        if (lbl) lbl.textContent = on ? 'ON' : 'OFF';
+        if (opt) opt.classList.toggle('provider-off', !on);
+      });
     }
 
     function addCustomAISlot() { /* no-op: fixed Email 1-5 */ }
