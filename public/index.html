@@ -3577,7 +3577,10 @@
         <div class="file-panel" id="file-panel">
           <div class="file-panel-header">
             <span class="file-panel-header-left"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-folder"></use></svg> Explorer</span>
-            <span class="file-panel-meta" id="explorer-meta"></span>
+            <span style="display:inline-flex;align-items:center;gap:4px;">
+              <button type="button" class="explorer-add-btn" id="btn-explorer-add" title="Tambah file baru" aria-label="Tambah file" onclick="addNewFile('')">+</button>
+              <span class="file-panel-meta" id="explorer-meta"></span>
+            </span>
           </div>
           <div class="file-search">
             <input type="search" id="file-search" placeholder="Cari file…" oninput="filterFiles()">
@@ -4452,7 +4455,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           '<div class="file-tree-empty-icon" aria-hidden="true">📁</div>' +
           '<h3>Belum ada paket</h3>' +
           '<p>Load ZIP hasil Collect untuk melihat file, edit, dan preview offline.</p>' +
-          '<button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById(\'zip-input\').click()">Load File</button>';
+          '<button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById(\'zip-input\').click()">Load File</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px" onclick="addNewFile(\'\')">+ File baru</button>';
         container.appendChild(empty);
         return;
       }
@@ -4480,7 +4484,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
     window.setPreviewNetBadge = setPreviewNetBadge;
 
-    function buildTreeLevel(node, depth) {
+    function buildTreeLevel(node, depth, parentPath) {
+      parentPath = parentPath || '';
       const wrap = document.createElement('div');
       Object.keys(node).sort((a, b) => {
         const aIsFolder = !!node[a].__children;
@@ -4501,18 +4506,37 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
               // reconstruct folder path from tree is hard; mark after via applyScanErrorTags
             }
           } catch (_) {}
-          folderEl.innerHTML = folderIconHTML(false) + `<span class="file-tree-name">${name}</span>`;
+          const folderPath = parentPath ? (parentPath + '/' + name) : name;
+          folderEl.innerHTML = folderIconHTML(false) + `<span class="file-tree-name">${name}</span>` +
+            `<button type="button" class="file-tree-folder-add" title="Tambah file di folder ini" aria-label="Tambah file">+</button>`;
           folderEl.style.paddingLeft = (8 + depth * 14) + 'px';
           folderEl.dataset.folderName = name;
+          folderEl.dataset.folderPath = folderPath;
 
-          const childWrap = buildTreeLevel(entry.__children, depth + 1);
+          const childWrap = buildTreeLevel(entry.__children, depth + 1, folderPath);
           wrap.appendChild(folderEl);
           wrap.appendChild(childWrap);
+
+          const folderAddBtn = folderEl.querySelector('.file-tree-folder-add');
+          if (folderAddBtn) {
+            folderAddBtn.addEventListener('click', (event) => {
+              event.stopPropagation();
+              addNewFile(folderPath);
+            });
+          }
 
           folderEl.addEventListener('click', () => {
             const isOpen = childWrap.style.display !== 'none';
             childWrap.style.display = isOpen ? 'none' : 'block';
-            folderEl.innerHTML = folderIconHTML(!isOpen) + `<span class="file-tree-name">${name}</span>`;
+            folderEl.innerHTML = folderIconHTML(!isOpen) + `<span class="file-tree-name">${name}</span>` +
+              `<button type="button" class="file-tree-folder-add" title="Tambah file di folder ini" aria-label="Tambah file">+</button>`;
+            const btn = folderEl.querySelector('.file-tree-folder-add');
+            if (btn) {
+              btn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                addNewFile(folderPath);
+              });
+            }
             if (folderEl.classList.contains('scan-error-folder')) {
               /* keep class */
             }
@@ -4530,10 +4554,14 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           } catch (_) {}
           const isErr = !!(window.__gcScanErrorPaths && window.__gcScanErrorPaths.has(entry.__path));
           // File ERROR: tombol V (opsi perbaiki) — bukan ikon sampah
+          const parentDir = (entry.__path || '').includes('/')
+            ? entry.__path.slice(0, entry.__path.lastIndexOf('/'))
+            : '';
           const actionBtn = isErr
             ? `<button type="button" class="file-tree-action-v" title="Opsi perbaiki file error" aria-label="Perbaiki">V</button>`
             : `<button type="button" class="file-tree-delete" title="Delete file permanently" aria-label="Delete file permanently">${deleteIconHTML()}</button>`;
-          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span>` + actionBtn;
+          const addBtn = `<button type="button" class="file-tree-add" title="Tambah file di folder ini" aria-label="Tambah file">+</button>`;
+          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span>` + addBtn + actionBtn;
           fileEl.querySelector('.file-tree-name').textContent = name;
           fileEl.style.paddingLeft = (8 + depth * 14) + 'px';
           fileEl.dataset.path = entry.__path;
@@ -4547,6 +4575,13 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
               } else {
                 deleteFile(entry.__path);
               }
+            });
+          }
+          const addEl = fileEl.querySelector('.file-tree-add');
+          if (addEl) {
+            addEl.addEventListener('click', (event) => {
+              event.stopPropagation();
+              addNewFile(parentDir);
             });
           }
 
@@ -5143,6 +5178,88 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (breadcrumb) breadcrumb.classList.remove('active');
       if (deleteButton) deleteButton.disabled = true;
     }
+
+
+    function defaultContentForNewFile(filename) {
+      const lower = String(filename || '').toLowerCase();
+      if (lower.endsWith('.html') || lower.endsWith('.htm')) {
+        return '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  <title>New page</title>\n</head>\n<body>\n  <h1>Hello</h1>\n</body>\n</html>\n';
+      }
+      if (lower.endsWith('.css')) {
+        return '/* new stylesheet */\n:root {\n  --bg: #0f172a;\n  --text: #e2e8f0;\n}\nbody {\n  margin: 0;\n  background: var(--bg);\n  color: var(--text);\n  font-family: system-ui, sans-serif;\n}\n';
+      }
+      if (lower.endsWith('.js') || lower.endsWith('.mjs')) {
+        return '// new script\nconsole.log("ready");\n';
+      }
+      if (lower.endsWith('.json')) {
+        return '{\n  "ok": true\n}\n';
+      }
+      if (lower.endsWith('.md')) {
+        return '# New file\n\n';
+      }
+      if (lower.endsWith('.svg')) {
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">\n  <rect width="64" height="64" fill="#5ee1c0"/>\n</svg>\n';
+      }
+      return '';
+    }
+
+    /**
+     * Tambah file baru ke paket (folder opsional).
+     * @param {string} folderPath - path folder, '' = root
+     */
+    function addNewFile(folderPath) {
+      try {
+        if (typeof currentZip === 'undefined' || !currentZip) {
+          // buat paket kosong jika belum ada ZIP
+          if (typeof JSZip === 'undefined') {
+            alert('JSZip belum siap. Muat ulang halaman.');
+            return;
+          }
+          currentZip = new JSZip();
+          zipFileMap = Object.create(null);
+        }
+        const folder = String(folderPath || '').replace(/^\/+|\/+$/g, '');
+        const hint = folder ? (' di ' + folder) : ' di root';
+        let name = window.prompt(
+          'Nama file baru' + hint + ':\nContoh: index.html, style.css, app.js, data.json',
+          folder ? '' : 'new-file.html'
+        );
+        if (name == null) return;
+        name = String(name).trim().replace(/\\\\/g, '/');
+        if (!name || name.includes('..') || name.startsWith('/')) {
+          alert('Nama file tidak valid.');
+          return;
+        }
+        // jika user isi path relatif, hormati
+        let fullPath = name.includes('/') ? name.replace(/^\/+/, '') : (folder ? folder + '/' + name : name);
+        fullPath = fullPath.replace(/\/+/g, '/');
+        if (zipFileMap[fullPath] || (currentZip && currentZip.file(fullPath))) {
+          if (!window.confirm('File sudah ada. Timpa isinya?\\n' + fullPath)) return;
+        }
+        const content = defaultContentForNewFile(fullPath);
+        currentZip.file(fullPath, content);
+        const entry = currentZip.file(fullPath);
+        zipFileMap[fullPath] = entry || {
+          async: async function (type) {
+            if (type === 'string') return content;
+            return new Blob([content]);
+          }
+        };
+        if (typeof openFiles !== 'undefined' && openFiles.set) openFiles.set(fullPath, content);
+        const paths = Object.keys(zipFileMap).sort();
+        renderFileTree(paths);
+        if (typeof openFile === 'function') openFile(fullPath, content, content.length);
+        const projectNameEl = document.getElementById('project-name');
+        if (projectNameEl) projectNameEl.textContent = paths.length + ' file';
+        if (typeof appendLog === 'function') appendLog('File baru: ' + fullPath, 'ok');
+        const meta = document.getElementById('explorer-meta');
+        if (meta) meta.textContent = paths.length + ' file';
+      } catch (err) {
+        console.error(err);
+        alert('Gagal menambah file: ' + (err && err.message ? err.message : err));
+      }
+    }
+    window.addNewFile = addNewFile;
 
     function deleteFile(filename) {
       if (!filename) return;
@@ -12091,6 +12208,82 @@ function isApiLike(u){
     /* Preview panel teks lebih legible */
     .pv-log, #error-log, .act-detail-pre {
       line-height: 1.5 !important;
+    }
+
+
+    /* Explorer scroll fix (mobile drawer + desktop) */
+    .file-panel {
+      height: 100%;
+      max-height: 100%;
+    }
+    .file-tree {
+      flex: 1 1 0% !important;
+      min-height: 0 !important;
+      max-height: 100%;
+      overflow-y: scroll !important;
+      overflow-x: hidden !important;
+      -webkit-overflow-scrolling: touch !important;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
+      padding-bottom: 12px;
+    }
+    .file-tree-add,
+    .file-tree-folder-add,
+    .explorer-add-btn {
+      border: 0;
+      background: transparent;
+      color: var(--accent, #5ee1c0);
+      width: 26px;
+      height: 26px;
+      min-width: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      flex: 0 0 26px;
+      font-weight: 800;
+      font-size: 16px;
+      line-height: 1;
+      opacity: 0.85;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .file-tree-add:hover,
+    .file-tree-folder-add:hover,
+    .explorer-add-btn:hover {
+      background: rgba(94, 225, 192, 0.15);
+      opacity: 1;
+    }
+    .file-tree-item .file-tree-add,
+    .file-tree-item .file-tree-folder-add {
+      opacity: 0.7;
+    }
+    .file-tree-item:hover .file-tree-add,
+    .file-tree-item:hover .file-tree-folder-add,
+    .file-tree-item.active .file-tree-add {
+      opacity: 1;
+    }
+    @media (max-width: 900px) {
+      .file-tree-item .file-tree-delete,
+      .file-tree-item .file-tree-action-v,
+      .file-tree-item .file-tree-add,
+      .file-tree-item .file-tree-folder-add {
+        opacity: 1 !important;
+      }
+      .file-panel {
+        display: flex !important;
+        flex-direction: column !important;
+        height: 100% !important;
+        max-height: 100% !important;
+      }
+      .file-tree {
+        flex: 1 1 0% !important;
+        min-height: 0 !important;
+        overflow-y: scroll !important;
+        -webkit-overflow-scrolling: touch !important;
+        touch-action: pan-y !important;
+      }
     }
 
     @media (max-width: 768px) {
