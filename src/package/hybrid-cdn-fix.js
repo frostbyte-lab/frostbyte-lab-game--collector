@@ -3,6 +3,7 @@
  * - TRACKING (GTM/gtag) → HAPUS script
  * - SVG namespace (w3.org/2000/svg) → BIARKAN
  * - Signed CDN (static.eajzzxhro.com … ?sign=) → DOWNLOAD lokal + rewrite path
+ * - Tolak body palsu (< 200B / HTML) agar tidak jadi PNG kosong 116B
  */
 import { strToU8 } from "fflate";
 import { safe } from "../lib/safe.js";
@@ -15,7 +16,11 @@ const TRACKING_INLINE_RE =
 const SIGNED_CDN_RE =
   /(?:https?:)?\/\/(?:static\.)?[a-z0-9.-]*eajzzxhro\.com\/[^\s"'<>)\\]+/gi;
 const GENERIC_SIGNED_ASSET_RE =
-  /(?:https?:)?\/\/[a-z0-9.-]+\/[^\s"'<>)\\]+\.(?:png|jpe?g|gif|webp|svg|mp3|ogg|woff2?)(?:\?[^\s"'<>)\\]*)?/gi;
+  /(?:https?:)?\/\/[a-z0-9.-]+\/[^\s"'<>)\\]+\.(?:png|jpe?g|gif|webp|svg|mp3|ogg|woff2?|js|css|json)(?:\?[^\s"'<>)\\]*)?/gi;
+const PUBLIC_CDN_RE =
+  /(?:https?:)?\/\/public\.[a-z0-9.-]+\/[^\s"'<>)\\]+/gi;
+
+const MIN_REAL_ASSET_BYTES = 200;
 
 function basenameFromUrl(url) {
   try {
@@ -42,13 +47,10 @@ function uniqueLocalPath(zipFiles, preferredDir, baseName) {
   return path;
 }
 
-/**
- * Extract absolute signed CDN / image URLs from text
- */
 export function extractHybridAssetUrls(text) {
   const found = new Set();
   if (!text) return found;
-  const patterns = [SIGNED_CDN_RE, GENERIC_SIGNED_ASSET_RE];
+  const patterns = [SIGNED_CDN_RE, GENERIC_SIGNED_ASSET_RE, PUBLIC_CDN_RE];
   for (const re of patterns) {
     const r = new RegExp(re.source, re.flags);
     let m;
@@ -63,9 +65,6 @@ export function extractHybridAssetUrls(text) {
   return found;
 }
 
-/**
- * Remove tracking scripts only (keep SVG xmlns).
- */
 export function stripTrackingScripts(text) {
   let n = 0;
   let out = String(text || "");
@@ -80,9 +79,6 @@ export function stripTrackingScripts(text) {
   return { text: out, removed: n };
 }
 
-/**
- * Rewrite URL → local path in text (exact match, then no-query basename).
- */
 export function rewriteUrlsInText(text, urlToLocal) {
   let out = String(text || "");
   let hits = 0;
@@ -95,7 +91,6 @@ export function rewriteUrlsInText(text, urlToLocal) {
       out = parts.join(to);
     }
   }
-  // remaining signed same-basename
   out = out.replace(SIGNED_CDN_RE, (match) => {
     let u = match;
     while (/[.,;:)]$/.test(u)) u = u.slice(0, -1);
@@ -109,48 +104,96 @@ export function rewriteUrlsInText(text, urlToLocal) {
     }
     return match;
   });
+  out = out.replace(GENERIC_SIGNED_ASSET_RE, (match) => {
+    let u = match;
+    while (/[.,;:)]$/.test(u)) u = u.slice(0, -1);
+    if (/googletagmanager|w3\.org/i.test(u)) return match;
+    const base = basenameFromUrl(u).toLowerCase();
+    for (const [, local] of urlToLocal) {
+      const lb = String(local).split("/").pop().toLowerCase();
+      if (lb === base || lb.replace(/^\d+-/, "") === base) {
+        hits++;
+        return local;
+      }
+    }
+    return match;
+  });
   return { text: out, hits };
 }
 
-/**
- * Download one URL → Uint8Array (Worker-safe fetch)
- */
+function isRealAssetBuffer(buf, url) {
+  if (!buf || buf.byteLength < MIN_REAL_ASSET_BYTES) return false;
+  // reject HTML error pages saved as "png"
+  const head = String.fromCharCode(...buf.slice(0, 64)).toLowerCase();
+  if (head.includes("<!doctype") || head.includes("<html") || head.includes("access denied")) return false;
+  const u = (url || "").toLowerCase();
+  if (/\.png(\?|$)/.test(u) || true) {
+    // soft: if claims png, prefer magic; still allow other binary
+    const isPng = buf[0] === 0x89 && buf[1] === 0x50;
+    const isJpg = buf[0] === 0xff && buf[1] === 0xd8;
+    const isGif = buf[0] === 0x47 && buf[1] === 0x49;
+    const isWebp = buf[0] === 0x52 && buf[8] === 0x57;
+    if (/\.(png|jpe?g|gif|webp)(\?|$)/i.test(u)) {
+      return isPng || isJpg || isGif || isWebp;
+    }
+  }
+  return buf.byteLength >= MIN_REAL_ASSET_BYTES;
+}
+
 async function fetchBinary(url, referer) {
   let ref = referer || "";
   let ua =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
   try {
     const host = new URL(url).hostname.toLowerCase();
     if (/eajzzxhro\.com/i.test(host)) {
       ref = "https://m.eajzzxhro.com/";
-      ua =
-        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
-    } else if (/^static\./i.test(host) && !ref) {
+    } else if (/^static\./i.test(host)) {
       ref = "https://m." + host.replace(/^static\./i, "") + "/";
     } else if (!ref) {
       ref = new URL(url).origin + "/";
     }
   } catch {
-    if (!ref) ref = "https://m.pgsoft-games.com/";
+    if (!ref) ref = "https://m.eajzzxhro.com/";
   }
-  const res = await fetch(url, {
-    redirect: "follow",
-    headers: {
-      "User-Agent": ua,
-      Accept: "image/avif,image/webp,image/*,*/*;q=0.8",
-      Referer: ref,
-      Origin: ref.replace(/\/$/, "")
+
+  const attempts = [
+    { Referer: ref, Origin: ref.replace(/\/$/, "") },
+    { Referer: "https://m.pgsoft-games.com/", Origin: "https://m.pgsoft-games.com" },
+    { Referer: new URL(url).origin + "/", Origin: new URL(url).origin }
+  ];
+
+  let lastErr = "fetch failed";
+  for (const h of attempts) {
+    try {
+      const res = await fetch(url, {
+        redirect: "follow",
+        headers: {
+          "User-Agent": ua,
+          Accept: "image/avif,image/webp,image/*,*/*;q=0.8",
+          Referer: h.Referer,
+          Origin: h.Origin
+        }
+      });
+      if (!res.ok) {
+        lastErr = "HTTP " + res.status;
+        continue;
+      }
+      const buf = new Uint8Array(await res.arrayBuffer());
+      if (!isRealAssetBuffer(buf, url)) {
+        lastErr = "invalid/empty body " + buf.byteLength + "B";
+        continue;
+      }
+      return { buffer: buf, contentType: res.headers.get("content-type") || "" };
+    } catch (e) {
+      lastErr = String(e.message || e);
     }
-  });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  const buf = new Uint8Array(await res.arrayBuffer());
-  if (!buf.byteLength) throw new Error("empty");
-  return { buffer: buf, contentType: res.headers.get("content-type") || "" };
+  }
+  throw new Error(lastErr);
 }
 
 /**
  * Apply hybrid fix on zipFiles + manifest.
- * @returns {{ trackingRemoved, downloaded, rewritten, failed, map }}
  */
 export async function applyHybridCdnFix(zipFiles, manifest, opts = {}) {
   const report = {
@@ -158,16 +201,18 @@ export async function applyHybridCdnFix(zipFiles, manifest, opts = {}) {
     downloaded: 0,
     rewritten: 0,
     failed: [],
+    skippedTiny: 0,
     map: {},
-    option: "HYBRID"
+    option: "HYBRID",
+    minBytes: MIN_REAL_ASSET_BYTES
   };
   const dir = opts.assetDir || "assets/eajzz";
   const baseUrl =
     opts.baseUrl ||
     (manifest && manifest[0] && manifest[0].url) ||
     "";
+  const maxDownload = Math.min(120, Number(opts.maxDownload) || 80);
 
-  // Collect candidate URLs from all text files
   const candidates = new Set();
   for (const [key, data] of Object.entries(zipFiles || {})) {
     if (!/\.(html?|js|mjs|css|json)$/i.test(key) && key !== "index.html") continue;
@@ -179,32 +224,45 @@ export async function applyHybridCdnFix(zipFiles, manifest, opts = {}) {
     }
   }
 
-  // Prefer URLs already on manifest (fresh sign from collect)
   for (const r of manifest || []) {
     if (!r.url) continue;
-    if (/eajzzxhro\.com/i.test(r.url) && /\.(png|jpe?g|webp|gif)/i.test(r.url)) {
+    if (
+      (/\.(png|jpe?g|webp|gif|js|css|mp3|ogg|woff2?)(\?|$)/i.test(r.url) ||
+        /static\.|public\.|eajzzxhro/i.test(r.url)) &&
+      !/web-api|game-api|verifysession/i.test(r.url)
+    ) {
       candidates.add(r.url);
     }
   }
 
   const urlToLocal = new Map();
 
-  // Map already-local files by basename
+  // Map already-local files by basename (skip tiny placeholders)
   for (const [path, data] of Object.entries(zipFiles || {})) {
-    if (!/\.(png|jpe?g|gif|webp)$/i.test(path)) continue;
+    if (!/\.(png|jpe?g|gif|webp|js|css|mp3|ogg|woff2?)$/i.test(path)) continue;
+    const size = data && data.byteLength != null ? data.byteLength : 0;
+    if (size > 0 && size < MIN_REAL_ASSET_BYTES) {
+      // remove fake placeholder so we can re-download
+      try {
+        delete zipFiles[path];
+        report.skippedTiny++;
+      } catch {}
+      continue;
+    }
     const base = path.split("/").pop().toLowerCase();
     const stripped = base.replace(/^\d{2,6}-/, "");
     for (const u of candidates) {
       const b = basenameFromUrl(u).toLowerCase();
-      if (b === base || b === stripped || base.endsWith(b)) {
+      if (b === base || b === stripped || base.endsWith(b) || base.includes(b.replace(/\.[a-z0-9]+$/, ""))) {
         urlToLocal.set(u, path);
         urlToLocal.set(u.split("?")[0], path);
       }
     }
   }
 
-  // Download missing
+  let dl = 0;
   for (const u of candidates) {
+    if (dl >= maxDownload) break;
     if (urlToLocal.has(u) || urlToLocal.has(u.split("?")[0])) continue;
     const base = basenameFromUrl(u);
     try {
@@ -214,7 +272,8 @@ export async function applyHybridCdnFix(zipFiles, manifest, opts = {}) {
       urlToLocal.set(u, localPath);
       urlToLocal.set(u.split("?")[0], localPath);
       report.downloaded++;
-      report.map[u.slice(0, 120)] = localPath;
+      report.map[u.slice(0, 140)] = localPath;
+      dl++;
       if (manifest) {
         manifest.push({
           url: u,
@@ -223,7 +282,7 @@ export async function applyHybridCdnFix(zipFiles, manifest, opts = {}) {
           size: buffer.byteLength,
           category: "game",
           classifyReason: "hybrid-cdn-download",
-          collectStatus: "DOWNLOADED"
+          collectStatus: "VERIFIED"
         });
       }
     } catch (e) {
@@ -231,7 +290,6 @@ export async function applyHybridCdnFix(zipFiles, manifest, opts = {}) {
     }
   }
 
-  // Rewrite + strip tracking on text files
   for (const key of Object.keys(zipFiles || {})) {
     if (!/\.(html?|js|mjs|css|json)$/i.test(key) && key !== "index.html") continue;
     try {
@@ -244,7 +302,7 @@ export async function applyHybridCdnFix(zipFiles, manifest, opts = {}) {
       report.rewritten += rw.hits;
       zipFiles[key] = strToU8(text);
     } catch {
-      /* skip binary */
+      /* skip */
     }
   }
 

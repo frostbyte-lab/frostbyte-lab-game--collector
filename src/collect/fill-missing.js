@@ -75,7 +75,10 @@ export async function fillMissingAssets(
     // Prioritas CDN asset host (public.*/static.*) yang tertulis di JS — sering miss di runtime singkat
     const prio = (u) => {
       const s = String(u).toLowerCase();
-      if (/public\./i.test(s) && /\.(png|jpe?g|gif|webp|svg|js|css|json|mp3|ogg|woff)/i.test(s)) return 0;
+      // Signed game CDN (6 PNG di index, dll.) — paling dulu
+      if (/eajzzxhro\.com/i.test(s) && /\.(png|jpe?g|gif|webp)(\?|$)/i.test(s)) return 0;
+      if (/[?&]sign=/i.test(s) && /\.(png|jpe?g|gif|webp|js|css)(\?|$)/i.test(s)) return 0;
+      if (/public\./i.test(s) && /\.(png|jpe?g|gif|webp|svg|js|css|json|mp3|ogg|woff)/i.test(s)) return 1;
       if (/static\./i.test(s) && /\.(png|jpe?g|gif|webp|svg|js|css|json|mp3|ogg|woff)/i.test(s)) return 1;
       if (/\.(png|jpe?g|gif|webp|mp3|ogg|woff2?)/i.test(s)) return 2;
       if (/\.(js|mjs|css)/i.test(s)) return 3;

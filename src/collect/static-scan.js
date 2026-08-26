@@ -2,8 +2,9 @@
  * Static analyzer — discover dependencies without browser.
  * Scans HTML/CSS/JS/JSON/manifest/SW references from a seed HTML or ZIP texts.
  */
-import { extractReferencedUrls } from "./urls.js";
+import { extractReferencedUrls, looksLikeStaticAsset } from "./urls.js";
 import { isExcluded } from "../classify/resource.js";
+import { extractHybridAssetUrls } from "../package/hybrid-cdn-fix.js";
 
 /**
  * @param {string} html
@@ -20,6 +21,9 @@ export function staticAnalyzeHtml(html, baseHref) {
 
   for (const u of extractReferencedUrls(html, baseHref)) {
     if (!isExcluded(u)) urls.add(u);
+  }
+  for (const u of extractHybridAssetUrls(html)) {
+    if (!isExcluded(u) && looksLikeStaticAsset(u)) urls.add(u);
   }
 
   // service worker registration
