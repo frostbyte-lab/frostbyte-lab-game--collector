@@ -1773,25 +1773,32 @@
       flex: 1 1 auto;
     }
 
-    .file-tree-delete {
+    .file-tree-delete,
+    .file-tree-action-v {
       border: 0;
       background: transparent;
       color: #8b949e;
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
       opacity: 0;
-      flex: 0 0 22px;
+      flex: 0 0 24px;
       transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+      font-weight: 800;
+      font-size: 13px;
+      line-height: 1;
     }
 
     .file-tree-item:hover .file-tree-delete,
     .file-tree-item.active .file-tree-delete,
-    .file-tree-delete:focus-visible {
+    .file-tree-delete:focus-visible,
+    .file-tree-item.scan-error .file-tree-action-v,
+    .file-tree-item:hover .file-tree-action-v,
+    .file-tree-item.active .file-tree-action-v {
       opacity: 1;
     }
 
@@ -1803,6 +1810,99 @@
     .file-tree-delete svg {
       width: 14px;
       height: 14px;
+    }
+
+    .file-tree-action-v {
+      color: #fff;
+      background: #16a34a;
+      border: 1px solid #4ade80;
+      opacity: 1;
+    }
+    .file-tree-action-v:hover {
+      background: #22c55e;
+      color: #052e16;
+    }
+
+    /* Modal opsi file error (V) */
+    .gc-err-fix-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 12000;
+      background: rgba(0,0,0,.55);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 12px;
+    }
+    .gc-err-fix-overlay.open { display: flex; }
+    .gc-err-fix-box {
+      width: min(420px, 100%);
+      max-height: 85vh;
+      overflow: auto;
+      background: #161b22;
+      border: 1px solid var(--border);
+      border-radius: 14px 14px 10px 10px;
+      padding: 14px;
+      box-shadow: 0 -8px 40px rgba(0,0,0,.45);
+    }
+    .gc-err-fix-box h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      color: #fff;
+    }
+    .gc-err-fix-box .path {
+      font-size: 11px;
+      color: var(--text-muted);
+      word-break: break-all;
+      margin-bottom: 12px;
+      font-family: ui-monospace, monospace;
+    }
+    .gc-err-opt {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 12px;
+      margin-bottom: 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.03);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .gc-err-opt:hover { border-color: var(--accent); background: rgba(94,225,192,.08); }
+    .gc-err-opt strong { display: block; font-size: 13px; margin-bottom: 4px; }
+    .gc-err-opt small { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+    .gc-err-opt.danger:hover { border-color: #f87171; background: rgba(248,113,113,.1); }
+    .gc-err-custom {
+      display: none;
+      margin-top: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .gc-err-custom.open { display: block; }
+    .gc-err-custom label {
+      display: block;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin: 8px 0 4px;
+    }
+    .gc-err-custom textarea {
+      width: 100%;
+      min-height: 72px;
+      resize: vertical;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+    .gc-err-custom-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
     }
 
     .file-tree-item:hover {
@@ -3579,6 +3679,36 @@
     </div>
 
     <!-- Login AI: Groq / Gemini → Email 1-5 (email + API key) -->
+    <!-- Popup opsi file ERROR (tombol V) -->
+    <div id="gc-err-fix-overlay" class="gc-err-fix-overlay" onclick="if(event.target===this)closeErrFixPopup()">
+      <div class="gc-err-fix-box" role="dialog" aria-modal="true">
+        <h3>Perbaiki file error</h3>
+        <div class="path" id="gc-err-fix-path">—</div>
+        <button type="button" class="gc-err-opt danger" id="gc-err-opt-delete" onclick="gcErrFixDelete()">
+          <strong>1 · Hapus</strong>
+          <small>Hapus file ini dari paket ZIP secara permanen.</small>
+        </button>
+        <button type="button" class="gc-err-opt" id="gc-err-opt-custom" onclick="gcErrFixShowCustom()">
+          <strong>2 · Custom</strong>
+          <small>Saran perbaikan + tanya / terapkan lewat AI.</small>
+        </button>
+        <div class="gc-err-custom" id="gc-err-custom-panel">
+          <label>Saran (otomatis / edit)</label>
+          <textarea id="gc-err-suggest" placeholder="Saran perbaikan…"></textarea>
+          <label>Balas / instruksi ke AI</label>
+          <textarea id="gc-err-ask" placeholder="Contoh: hapus URL absolut CDN, rewrite ke assets/eajzz/…"></textarea>
+          <div class="gc-err-custom-actions">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeErrFixPopup()">Batal</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="gcErrFixAskAI()">Tanya AI</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="gcErrFixApplyAI()">Terapkan</button>
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <button type="button" class="btn btn-secondary btn-sm" style="width:100%;" onclick="closeErrFixPopup()">Tutup</button>
+        </div>
+      </div>
+    </div>
+
     <div id="custom-ai-manager" class="cai-overlay" style="display:none;">
       <div class="cai-box">
         <div class="cai-head">
@@ -4285,15 +4415,27 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
               fileEl.classList.add('scan-warn');
             }
           } catch (_) {}
-          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span><button type="button" class="file-tree-delete" title="Delete file permanently" aria-label="Delete file permanently">${deleteIconHTML()}</button>`;
+          const isErr = !!(window.__gcScanErrorPaths && window.__gcScanErrorPaths.has(entry.__path));
+          // File ERROR: tombol V (opsi perbaiki) — bukan ikon sampah
+          const actionBtn = isErr
+            ? `<button type="button" class="file-tree-action-v" title="Opsi perbaiki file error" aria-label="Perbaiki">V</button>`
+            : `<button type="button" class="file-tree-delete" title="Delete file permanently" aria-label="Delete file permanently">${deleteIconHTML()}</button>`;
+          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span>` + actionBtn;
           fileEl.querySelector('.file-tree-name').textContent = name;
           fileEl.style.paddingLeft = (8 + depth * 14) + 'px';
           fileEl.dataset.path = entry.__path;
 
-          fileEl.querySelector('.file-tree-delete').addEventListener('click', (event) => {
-            event.stopPropagation();
-            deleteFile(entry.__path);
-          });
+          const actEl = fileEl.querySelector('.file-tree-action-v, .file-tree-delete');
+          if (actEl) {
+            actEl.addEventListener('click', (event) => {
+              event.stopPropagation();
+              if (isErr) {
+                openErrFixPopup(entry.__path);
+              } else {
+                deleteFile(entry.__path);
+              }
+            });
+          }
 
           fileEl.addEventListener('click', async () => {
               document.querySelectorAll('.file-tree-item').forEach(el => el.classList.remove('active')); fileEl.classList.add('active'); const zipEntry = zipFileMap[entry.__path]; if (!zipEntry) return;
@@ -7280,8 +7422,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         div.dataset.level = level || '';
         div.dataset.raw = String(msg || '');
         if (level === 'err' || level === 'warn') {
+          div.title = 'Klik → buka file di editor + label error';
           div.onclick = function () {
             updatePreviewErrorDetail(div.dataset.raw, div.dataset.level);
+            if (typeof gcJumpToErrorFromLog === 'function') {
+              gcJumpToErrorFromLog(div.dataset.raw);
+            }
           };
         }
         el.appendChild(div);
@@ -7290,6 +7436,190 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       updatePreviewErrorDetail(msg, level);
       console.log(line);
     }
+
+    /** Klik log error → keluar preview (opsional) → buka file di editor */
+    async function gcJumpToErrorFromLog(rawMsg) {
+      try {
+        const msg = String(rawMsg || '');
+        let path = null;
+        const m1 = msg.match(/(?:File|file):\s*([^\s,·]+)/i);
+        const m2 = msg.match(/([a-z0-9_\-./]+\.(?:html?|js|mjs|css|json))/i);
+        if (m1) path = m1[1].replace(/[^\w./\-]/g, '');
+        else if (m2) path = m2[1];
+        // default index jika URL absolut / scan
+        if (!path && /https?:\/\/|resource absolut|TRACKING|CDN|eajzz/i.test(msg)) {
+          path = (window.__gcScanErrorPaths && [...window.__gcScanErrorPaths][0]) || 'index.html';
+        }
+        if (!path && window.__gcScanErrorPaths && window.__gcScanErrorPaths.size) {
+          path = [...window.__gcScanErrorPaths][0];
+        }
+        if (!path) return;
+
+        // Kembali ke editor jika masih mode preview
+        try {
+          if (typeof exitPreviewMode === 'function') {
+            const pm = document.getElementById('preview-mode');
+            if (pm && pm.style.display !== 'none') exitPreviewMode();
+          }
+        } catch (_) {}
+
+        // Resolve path di ZIP
+        let resolved = path;
+        if (zipFileMap && !zipFileMap[resolved]) {
+          const keys = Object.keys(zipFileMap);
+          const hit = keys.find(function (k) {
+            return k === path || k.endsWith('/' + path) || k.split('/').pop() === path.split('/').pop();
+          });
+          if (hit) resolved = hit;
+        }
+        if (!zipFileMap || !zipFileMap[resolved]) {
+          appendLog('File tidak ditemukan di ZIP: ' + path, 'warn');
+          return;
+        }
+
+        if (!window.__gcScanErrorPaths) window.__gcScanErrorPaths = new Set();
+        window.__gcScanErrorPaths.add(resolved);
+        try {
+          if (typeof renderFileTree === 'function') renderFileTree(Object.keys(zipFileMap));
+          if (typeof applyScanErrorTags === 'function') applyScanErrorTags();
+        } catch (_) {}
+
+        const content = openFiles.has(resolved)
+          ? openFiles.get(resolved)
+          : await zipFileMap[resolved].async('string');
+        openFile(resolved, content, content.length);
+        appendLog('Editor ← ' + resolved + ' (dari log error)', 'ok');
+
+        // Highlight baris yang mengandung URL/error di Monaco
+        try {
+          if (editor && typeof monaco !== 'undefined') {
+            const model = editor.getModel();
+            if (model) {
+              const text = model.getValue();
+              let lineNum = 1;
+              const needle = (msg.match(/https?:\/\/[^\s]+/) || [])[0];
+              if (needle) {
+                const idx = text.indexOf(needle.slice(0, 40));
+                if (idx >= 0) lineNum = text.slice(0, idx).split('\n').length;
+              }
+              editor.revealLineInCenter(lineNum);
+              editor.setPosition({ lineNumber: lineNum, column: 1 });
+              if (window.__gcErrDecorations) {
+                window.__gcErrDecorations = editor.deltaDecorations(window.__gcErrDecorations, []);
+              }
+              window.__gcErrDecorations = editor.deltaDecorations([], [{
+                range: new monaco.Range(lineNum, 1, lineNum, 1),
+                options: {
+                  isWholeLine: true,
+                  className: 'gc-err-line-highlight',
+                  glyphMarginClassName: 'gc-err-glyph'
+                }
+              }]);
+            }
+          }
+        } catch (_) {}
+      } catch (e) {
+        appendLog('Jump log gagal: ' + (e && e.message || e), 'warn');
+      }
+    }
+    window.gcJumpToErrorFromLog = gcJumpToErrorFromLog;
+
+    let __gcErrFixPath = null;
+    function openErrFixPopup(filePath) {
+      __gcErrFixPath = filePath;
+      const ov = document.getElementById('gc-err-fix-overlay');
+      const pathEl = document.getElementById('gc-err-fix-path');
+      const custom = document.getElementById('gc-err-custom-panel');
+      const sug = document.getElementById('gc-err-suggest');
+      const ask = document.getElementById('gc-err-ask');
+      if (pathEl) pathEl.textContent = filePath || '—';
+      if (custom) custom.classList.remove('open');
+      if (sug) {
+        sug.value =
+          'File error dari Scan.\n' +
+          '• Hapus script tracking (GTM/gtag) jika ada\n' +
+          '• URL CDN signed (?sign=) → download lokal assets/eajzz/ + rewrite path\n' +
+          '• Biarkan xmlns SVG (w3.org/2000/svg)\n' +
+          '• Jangan hapus dependency game yang valid';
+      }
+      if (ask) ask.value = '';
+      if (ov) ov.classList.add('open');
+    }
+    function closeErrFixPopup() {
+      const ov = document.getElementById('gc-err-fix-overlay');
+      if (ov) ov.classList.remove('open');
+      __gcErrFixPath = null;
+    }
+    function gcErrFixShowCustom() {
+      const custom = document.getElementById('gc-err-custom-panel');
+      if (custom) custom.classList.add('open');
+    }
+    function gcErrFixDelete() {
+      if (!__gcErrFixPath) return;
+      const p = __gcErrFixPath;
+      closeErrFixPopup();
+      if (typeof deleteFile === 'function') deleteFile(p);
+    }
+    async function gcErrFixAskAI() {
+      const path = __gcErrFixPath;
+      const sug = (document.getElementById('gc-err-suggest') || {}).value || '';
+      const ask = (document.getElementById('gc-err-ask') || {}).value || '';
+      if (!path) return;
+      try {
+        // buka file
+        if (zipFileMap && zipFileMap[path]) {
+          const content = openFiles.has(path) ? openFiles.get(path) : await zipFileMap[path].async('string');
+          openFile(path, content, content.length);
+        }
+        const prompt =
+          'File: ' + path + '\n\nSaran sistem:\n' + sug +
+          (ask ? '\n\nPertanyaan user:\n' + ask : '') +
+          '\n\nAnalisis masalah offline/URL absolut dan berikan perbaikan konkret.';
+        closeErrFixPopup();
+        if (typeof openCustomAIManager === 'function') openCustomAIManager();
+        setTimeout(function () {
+          try {
+            if (typeof caiShowPanel === 'function') caiShowPanel('chat');
+            const input = document.getElementById('cai-chat-input');
+            if (input) input.value = prompt;
+          } catch (_) {}
+        }, 200);
+        appendLog('Custom AI: siap tanya untuk ' + path, 'ok');
+      } catch (e) {
+        appendLog('Tanya AI gagal: ' + (e && e.message || e), 'err');
+      }
+    }
+    async function gcErrFixApplyAI() {
+      const path = __gcErrFixPath;
+      if (!path) return;
+      closeErrFixPopup();
+      // Buka file lalu jalankan Auto Repair / AI ZIP (fokus file aktif)
+      try {
+        if (zipFileMap && zipFileMap[path]) {
+          const content = openFiles.has(path) ? openFiles.get(path) : await zipFileMap[path].async('string');
+          openFile(path, content, content.length);
+        }
+        window.__gcAutoRepairAll = false;
+        window.__gcAutoRepairSilent = true;
+        if (typeof runAutoRepair === 'function') {
+          await runAutoRepair();
+        } else if (typeof runAiZipRepair === 'function') {
+          await runAiZipRepair();
+        }
+        appendLog('Terapkan perbaikan pada ' + path + ' (Auto Repair)', 'ok');
+      } catch (e) {
+        appendLog('Terapkan gagal: ' + (e && e.message || e), 'err');
+      } finally {
+        window.__gcAutoRepairSilent = false;
+        window.__gcAutoRepairAll = true;
+      }
+    }
+    window.openErrFixPopup = openErrFixPopup;
+    window.closeErrFixPopup = closeErrFixPopup;
+    window.gcErrFixDelete = gcErrFixDelete;
+    window.gcErrFixShowCustom = gcErrFixShowCustom;
+    window.gcErrFixAskAI = gcErrFixAskAI;
+    window.gcErrFixApplyAI = gcErrFixApplyAI;
 
     function copyErrorLog() {
       const detail = document.getElementById('preview-error-detail');
