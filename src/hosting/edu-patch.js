@@ -9,7 +9,7 @@ const DEFAULT_EDU_BASE = "https://ea29118c.edu-network.pages.dev";
 
 /** Domain/host yang sering muncul di game hasil collect — diganti ke EDU */
 const PROVIDER_HOST_RE =
-  /https?:\/\/(?:[a-z0-9-]+\.)*(?:pgsoft|pragmatic|habanero|spadegaming|jili|jokergaming|fastspin|cq9|hacksaw|relax|playtech|evolution|netent|redtiger|btg|nolimit|pushgaming|playngo|yggdrasil|thunderkick|blueprint|microgaming|isoftbet|fugaso|booming|spinomenal|kalamba|slotmill|avatarux|fantasma|gamomat|novomatic|greentube|amatic|egt|apollo|wazdan|endorphina|platipus|tomhorn|betsoft|rival|nextgen|igtech|softswiss|slotegrator|aggregator|gameprovider|cdn-games|slot-cdn)[a-z0-9.-]*/gi;
+  /https?:\/\/(?:[a-z0-9-]+\.)*(?:pgsoft|pragmatic|habanero|spadegaming|jili|jokergaming|fastspin|cq9|hacksaw|relax|playtech|evolution|netent|redtiger|btg|nolimit|pushgaming|playngo|yggdrasil|thunderkick|blueprint|microgaming|isoftbet|fugaso|booming|spinomenal|kalamba|slotmill|avatarux|fantasma|gamomat|novomatic|greentube|amatic|egt|apollo|wazdan|endorphina|platipus|tomhorn|betsoft|rival|nextgen|igtech|softswiss|slotegrator|aggregator|gameprovider|cdn-games|slot-cdn|eajzzxhro|ea-game|pg-demo)[a-z0-9.-]*/gi;
 
 /** Pola generic API base di config JS */
 const API_BASE_ASSIGN_RE =
