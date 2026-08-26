@@ -74,9 +74,17 @@ export async function handleAssetProxy(request, url) {
     const isPgSoftCdn =
       /pgsoft|pg-soft|eajzzxhro|static\.[a-z0-9-]+\.(com|net|io)/i.test(host) ||
       /\?sign=/i.test(target.href);
-    const pgOrigin = "https://m.pgsoft-games.com";
+    // CDN static.X.com → Referer https://m.X.com (host game, bukan origin Workers)
+    let pgOrigin = "https://m.pgsoft-games.com";
+    if (/eajzzxhro\.com/i.test(host)) {
+      pgOrigin = "https://m.eajzzxhro.com";
+    } else if (/^static\./i.test(host)) {
+      const root = host.replace(/^static\./i, "");
+      if (root) pgOrigin = "https://m." + root;
+    }
+    const clientRef = request.headers.get("X-GC-Referer");
     const referer =
-      request.headers.get("X-GC-Referer") ||
+      (clientRef && /^https?:\/\//i.test(clientRef) ? clientRef : null) ||
       (isPgSoftCdn ? pgOrigin + "/" : null) ||
       request.headers.get("Referer") ||
       target.origin + "/";

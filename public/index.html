@@ -9728,9 +9728,21 @@ function isApiLike(u){
           const timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (_) {} }, 25000) : null;
           // Prefer same-origin Worker proxy (hindari CORS CDN)
           let res = null;
+          let gameRef = 'https://m.pgsoft-games.com/';
+          try {
+            const hu = new URL(url);
+            if (/eajzzxhro\.com/i.test(hu.hostname)) gameRef = 'https://m.eajzzxhro.com/';
+            else if (/^static\./i.test(hu.hostname)) {
+              gameRef = 'https://m.' + hu.hostname.replace(/^static\./i, '') + '/';
+            }
+          } catch (_) {}
           const proxyUrl = '/api/asset-proxy?url=' + encodeURIComponent(url);
           try {
-            res = await fetch(proxyUrl, { method: 'GET', signal: ctrl ? ctrl.signal : undefined });
+            res = await fetch(proxyUrl, {
+              method: 'GET',
+              signal: ctrl ? ctrl.signal : undefined,
+              headers: { 'X-GC-Referer': gameRef, 'Accept': 'image/*,*/*' }
+            });
           } catch (_) { res = null; }
           if (!res || !res.ok) {
             try {
@@ -9799,7 +9811,7 @@ function isApiLike(u){
       // Pass A: unduh ASSET CDN yang belum ada di ZIP (6 PNG signed, dll.)
       let fetchReport = { fetched: 0, failed: 0, details: [] };
       try {
-        fetchReport = await gcStrictFetchMissingAssets(24);
+        fetchReport = await gcStrictFetchMissingAssets(40);
         if (fetchReport.fetched) {
           appendLog('Strict download: ' + fetchReport.fetched + ' asset → ZIP', 'ok');
         }
@@ -9823,7 +9835,17 @@ function isApiLike(u){
         try {
           code = openFiles.has(path) ? openFiles.get(path) : await zipFileMap[path].async('string');
         } catch (_) { return; }
-        const result = gcRewriteAbsoluteInCode(code, path, byBase);
+        let result = gcRewriteAbsoluteInCode(code, path, byBase);
+        // Hapus GTM/gtag (TRACKING) — wajib offline bersih
+        if (/\.(html?)$/i.test(path) || /googletagmanager|gtag\s*\(/i.test(result.code || code)) {
+          let c2 = result.code || code;
+          let tr = 0;
+          c2 = c2.replace(/<script\b[^>]*\bsrc\s*=\s*["'][^"']*(?:googletagmanager|google-analytics|gtag\/js|gtm\.js)[^"']*["'][^>]*>\s*<\/script>/gi, function () { tr++; return '<!-- GC: tracking removed -->'; });
+          c2 = c2.replace(/<script\b[^>]*>[\s\S]*?(?:googletagmanager|gtag\s*\(|GTM-[A-Z0-9]+)[\s\S]*?<\/script>/gi, function () { tr++; return '<!-- GC: tracking inline removed -->'; });
+          if (tr) {
+            result = { code: c2, changes: (result.changes || 0) + tr, report: (result.report || []).concat(['tracking removed x' + tr]) };
+          }
+        }
         if (result.changes > 0 && result.code !== code) {
           openFiles.set(path, result.code);
           if (currentZip) {

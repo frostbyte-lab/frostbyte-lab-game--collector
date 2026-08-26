@@ -116,13 +116,30 @@ export function rewriteUrlsInText(text, urlToLocal) {
  * Download one URL → Uint8Array (Worker-safe fetch)
  */
 async function fetchBinary(url, referer) {
+  let ref = referer || "";
+  let ua =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (/eajzzxhro\.com/i.test(host)) {
+      ref = "https://m.eajzzxhro.com/";
+      ua =
+        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+    } else if (/^static\./i.test(host) && !ref) {
+      ref = "https://m." + host.replace(/^static\./i, "") + "/";
+    } else if (!ref) {
+      ref = new URL(url).origin + "/";
+    }
+  } catch {
+    if (!ref) ref = "https://m.pgsoft-games.com/";
+  }
   const res = await fetch(url, {
     redirect: "follow",
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "User-Agent": ua,
       Accept: "image/avif,image/webp,image/*,*/*;q=0.8",
-      Referer: referer || new URL(url).origin + "/"
+      Referer: ref,
+      Origin: ref.replace(/\/$/, "")
     }
   });
   if (!res.ok) throw new Error("HTTP " + res.status);
