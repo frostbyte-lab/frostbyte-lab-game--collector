@@ -170,26 +170,49 @@ export function verifyDownload(res, buffer, expectedExt) {
     return { ok: false, status: "INVALID", error: "empty-file", size, contentType };
   }
 
-  // Content-type mismatch (HTML error page served as image)
-  if (expectedExt && /image|audio|font/.test(expectedExt) && /text\/html|application\/json/.test(contentType)) {
-    return { ok: false, status: "INVALID", error: "content-type-mismatch", size, contentType };
+  // Content-type mismatch (HTML error page served as image/audio/font)
+  if (expectedExt && /image|audio|font|png|jpe?g|gif|webp|mp3|ogg|woff/i.test(expectedExt) && /text\/html|application\/json/.test(contentType)) {
+    return { ok: false, status: "INVALID_RESPONSE", error: "content-type-mismatch", size, contentType };
   }
 
+  // Body looks like HTML error page despite 200
+  try {
+    const head = typeof buffer === "string"
+      ? buffer.slice(0, 200)
+      : new TextDecoder("utf-8", { fatal: false }).decode(
+          (buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)).slice(0, 200)
+        );
+    if (/^\s*<(!DOCTYPE|html|head|body)\b/i.test(head) && expectedExt && /image|audio|font|png|jpe?g|gif|webp|mp3|ogg|woff|wasm/i.test(expectedExt)) {
+      return { ok: false, status: "INVALID_RESPONSE", error: "html-body-as-binary-asset", size, contentType };
+    }
+  } catch (_) {}
+
   const signature = detectSignature(buffer);
-  // Soft check: if signature exists and contradicts extension, warn but still accept
+  // Hard reject: signature clearly contradicts binary image/audio extension
   let sigOk = true;
   if (signature && expectedExt) {
-    const map = { png: "png", jpg: "jpeg", jpeg: "jpeg", gif: "gif", webp: "webp", mp3: "mp3", ogg: "ogg", wav: "wav", woff: "woff", woff2: "woff2" };
+    const map = { png: "png", jpg: "jpeg", jpeg: "jpeg", gif: "gif", webp: "webp", mp3: "mp3", ogg: "ogg", wav: "wav", woff: "woff", woff2: "woff2", wasm: "wasm" };
     const expect = map[expectedExt.replace(".", "").toLowerCase()];
     if (expect && signature.type !== expect && !(expect === "jpeg" && signature.type === "jpeg")) {
       sigOk = false;
+      // Reject when magic bytes are definitive and mismatch (e.g. PNG ext but ZIP header)
+      if (/png|jpe?g|gif|webp|mp3|ogg|woff2?|wasm/i.test(expectedExt)) {
+        return {
+          ok: false,
+          status: "INVALID_RESPONSE",
+          error: "signature-mismatch:" + signature.type + "!=" + expect,
+          size,
+          contentType,
+          signature
+        };
+      }
     }
   }
 
   const hash = sha256(buffer);
   return {
     ok: true,
-    status: "DOWNLOADED",
+    status: "VERIFIED",
     size,
     contentType,
     signature: signature || undefined,

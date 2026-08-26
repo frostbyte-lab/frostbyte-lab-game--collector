@@ -50,3 +50,13 @@ export function sumZipFilesBytes(zipFiles) {
   }
   return total;
 }
+
+/** Auto-fill: max URL attempts per pass (Worker-safe) */
+export const MAX_FILL_PER_PASS = 80;
+
+/** Auto-fill: max recursive scan passes */
+export const MAX_FILL_PASSES = 4;
+
+/** Hard ceiling so caller cannot explode memory */
+export const MAX_FILL_PER_PASS_CAP = 120;
+export const MAX_FILL_PASSES_CAP = 4;

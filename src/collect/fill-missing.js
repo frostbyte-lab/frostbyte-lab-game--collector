@@ -3,13 +3,21 @@ import { isExcluded, classifyResource } from "../classify/resource.js";
 import { classifySlotSubfolder, folderOf } from "../classify/slot-folder.js";
 import { shouldIncludeResource } from "../classify/select-filter.js";
 import { extractReferencedUrls, guessTypeFromUrl } from "./urls.js";
-import { MAX_SINGLE_FILE, MAX_RAW_TOTAL, sumZipFilesBytes } from "./limits.js";
-import { verifyDownload, normalizeUrl } from "../offline/strict-collector.js";
+import {
+  MAX_SINGLE_FILE,
+  MAX_RAW_TOTAL,
+  sumZipFilesBytes,
+  MAX_FILL_PER_PASS,
+  MAX_FILL_PASSES,
+  MAX_FILL_PER_PASS_CAP,
+  MAX_FILL_PASSES_CAP
+} from "./limits.js";
+import { verifyDownload, normalizeUrl, sha256 } from "../offline/strict-collector.js";
 
 /**
  * Multi-pass auto-fill: scan HTML/JS/CSS → fetch missing → scan newly fetched → pass 2.
- * @param {number} [maxPerPass=40]
- * @param {number} [maxPasses=2]
+ * @param {number} [maxPerPass=80]
+ * @param {number} [maxPasses=4]
  */
 export async function fillMissingAssets(
   zipFiles,
@@ -19,21 +27,32 @@ export async function fillMissingAssets(
   id,
   env,
   selectAllowed = null,
-  maxPerPass = 40,
-  maxPasses = 2
+  maxPerPass = MAX_FILL_PER_PASS,
+  maxPasses = MAX_FILL_PASSES
 ) {
   const report = {
     scanned: 0,
     missingFound: 0,
     fetched: 0,
     failed: 0,
+    duplicates: 0,
     stillMissing: [],
     passes: 0,
     perPass: []
   };
 
-  const MAX_FILL = Math.min(80, Math.max(10, Number(maxPerPass) || 40));
-  const PASSES = Math.min(3, Math.max(1, Number(maxPasses) || 2));
+  const MAX_FILL = Math.min(MAX_FILL_PER_PASS_CAP, Math.max(20, Number(maxPerPass) || MAX_FILL_PER_PASS));
+  const PASSES = Math.min(MAX_FILL_PASSES_CAP, Math.max(1, Number(maxPasses) || MAX_FILL_PASSES));
+
+  // Content-hash index for dedup (signed URL variants → one local file)
+  const hashIndex = new Map();
+  for (const [path, data] of Object.entries(zipFiles || {})) {
+    if (!data || typeof data === "string") continue;
+    try {
+      const h = sha256(data instanceof Uint8Array ? data : new Uint8Array(data));
+      if (h && !hashIndex.has(h)) hashIndex.set(h, path);
+    } catch (_) {}
+  }
 
   for (let pass = 1; pass <= PASSES; pass++) {
     const texts = [];
@@ -110,19 +129,50 @@ export async function fillMissingAssets(
           report.stillMissing.push({
             url: u,
             error: verified.error || verified.status,
+            collectStatus: "INVALID_RESPONSE",
             pass,
             strict: true
           });
           continue;
         }
+        // Content-hash dedup: same bytes already in ZIP (e.g. signed URL variants)
+        if (verified.hash && hashIndex.has(verified.hash)) {
+          const existing = hashIndex.get(verified.hash);
+          seen.add(u);
+          manifest.push({
+            url: u,
+            type,
+            status: res.status,
+            localPath: existing,
+            size: buffer.byteLength,
+            contentType: ct,
+            category: classifyResource(u, type, ct, "").category,
+            autoFilled: true,
+            fillPass: pass,
+            duplicateOf: existing,
+            hash: verified.hash,
+            strictStatus: "VERIFIED",
+            collectStatus: "DUPLICATE"
+          });
+          report.duplicates++;
+          passReport.fetched++;
+          report.fetched++;
+          continue;
+        }
         let name = safe(new URL(u).pathname.split("/").pop() || "file");
-        // Strip query from local filename (Rule 7)
+        // Strip query from local filename (signed URL)
         name = name.split("?")[0].split("#")[0];
         if (!/\.[a-z0-9]{1,8}$/i.test(name)) {
           if (type === "script") name += ".js";
           else if (type === "stylesheet") name += ".css";
-          else if (type === "image") name += ".bin";
+          else if (type === "image") name += ".png";
+          else if (type === "media") name += ".bin";
           else if (ct.includes("json")) name += ".json";
+        }
+        // Content-addressed name when URL is signed / query-heavy
+        if (verified.hash && (/[?&](sign|signature|token|expires)=/i.test(u) || u.includes("?"))) {
+          const ext = (name.match(/\.([a-z0-9]{1,8})$/i) || [])[1] || "bin";
+          name = "sha256-" + verified.hash.slice(0, 16) + "." + ext;
         }
         const classified = classifyResource(u, type, ct, "");
         // Skip tracking / SVG namespace even if somehow reached here
@@ -149,7 +199,8 @@ export async function fillMissingAssets(
         }
 
         const localPath = `${folder}/${String(manifest.length + 1).padStart(4, "0")}-fill${pass}-${name}`;
-        zipFiles[localPath] = buffer;
+        zipFiles[localPath] = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+        if (verified.hash) hashIndex.set(verified.hash, localPath);
         seen.add(u);
         manifest.push({
           url: u,
@@ -168,7 +219,8 @@ export async function fillMissingAssets(
           strictStatus: classified.status || "ASSET",
           hash: verified.hash || null,
           signature: verified.signature?.type || null,
-          signatureMatch: verified.signatureMatch
+          signatureMatch: verified.signatureMatch,
+          collectStatus: "VERIFIED"
         });
         report.fetched++;
         passReport.fetched++;

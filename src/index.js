@@ -659,7 +659,7 @@ export default {
         zipFiles,
         manifest,
         targetUrl || (stillMissing[0] && (stillMissing[0].url || stillMissing[0])),
-        Math.min(80, Number(body.maxFetch) || 40)
+        Math.min(120, Number(body.maxFetch) || 80)
       );
 
       // Pack partial ZIP of newly fetched only (fflate sudah di-import di top-level)
@@ -1447,15 +1447,17 @@ export default {
           id,
           env,
           selectAllowed,
-          50,
-          3
+          80,
+          4
         );
         await report(
           68,
           "fill",
           "Fill selesai: +" +
             (fillReport.fetched || 0) +
-            " file · pass " +
+            " file · dup " +
+            (fillReport.duplicates || 0) +
+            " · pass " +
             (fillReport.passes || 1) +
             " · sisa " +
             ((fillReport.stillMissing || []).length),
