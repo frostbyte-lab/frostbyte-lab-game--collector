@@ -2197,6 +2197,59 @@
       white-space: nowrap;
     }
 
+
+    /* ===== Mobile Editor Toolbar (profesional) ===== */
+    .editor-mobile-toolbar {
+      display: none;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 10px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    @media (max-width: 900px) {
+      .editor-mobile-toolbar {
+        display: flex;
+      }
+    }
+    .editor-mobile-toolbar .mt-btn {
+      flex: 1 1 auto;
+      min-width: 64px;
+      min-height: 40px;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text);
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .editor-mobile-toolbar .mt-btn:active {
+      opacity: 0.75;
+      transform: scale(0.97);
+    }
+    .editor-mobile-toolbar .mt-btn.primary {
+      background: rgba(94, 225, 192, 0.18);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .editor-mobile-toolbar .mt-btn.danger {
+      border-color: rgba(255, 107, 94, 0.4);
+      color: #ff8a7a;
+    }
+    .editor-mobile-toolbar .mt-sep {
+      width: 1px;
+      background: var(--border);
+      margin: 4px 2px;
+      align-self: stretch;
+    }
+
     .editor-actions {
       display: flex;
       align-items: center;
@@ -3570,6 +3623,21 @@
             </div>
           </div>
 
+
+          <!-- Mobile Editor Toolbar -->
+          <div class="editor-mobile-toolbar" id="editor-mobile-toolbar">
+            <button type="button" class="mt-btn" onclick="edSelectAll()" title="Select All">Select</button>
+            <button type="button" class="mt-btn" onclick="edCopy()" title="Copy">Copy</button>
+            <button type="button" class="mt-btn" onclick="edCut()" title="Cut">Cut</button>
+            <button type="button" class="mt-btn" onclick="edPaste()" title="Paste">Paste</button>
+            <span class="mt-sep"></span>
+            <button type="button" class="mt-btn" onclick="edUndo()" title="Undo">Undo</button>
+            <button type="button" class="mt-btn primary" onclick="saveFile()" title="Save">Save</button>
+            <button type="button" class="mt-btn primary" onclick="triggerReplaceFile()" title="Ganti file ini">Replace</button>
+            <button type="button" class="mt-btn danger" onclick="edDeleteFile()" title="Hapus file">Del</button>
+          </div>
+          <input type="file" id="replace-file-input" accept=".html,.htm,.js,.css,.json,.txt,.xml,.svg,.md" style="display:none" />
+
           <!-- Monaco Editor -->
           <div id="monaco-editor"></div>
           <div id="binary-preview" aria-live="polite"></div>
@@ -4925,6 +4993,135 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       const el = document.getElementById('status-info');
       if (el) el.textContent = 'Saved: ' + currentFile;
     }
+
+
+    /* ===== Mobile Editor Actions (profesional) ===== */
+    function edSelectAll() {
+      if (!editor) return;
+      const model = editor.getModel();
+      if (!model) return;
+      editor.setSelection(model.getFullModelRange());
+      editor.focus();
+    }
+
+    function edCopy() {
+      if (!editor) return;
+      try {
+        const sel = editor.getSelection();
+        const text = editor.getModel().getValueInRange(sel);
+        const payload = text || editor.getValue();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(payload).then(function() {
+            appendLog(text ? 'Copied' : 'Copied (all)', 'ok');
+          }).catch(function() {
+            appendLog('Copy gagal — coba long-press', 'warn');
+          });
+        } else {
+          appendLog('Clipboard API tidak tersedia', 'warn');
+        }
+      } catch (e) {
+        appendLog('Copy error: ' + (e.message || e), 'err');
+      }
+    }
+
+    function edCut() {
+      if (!editor) return;
+      try {
+        const sel = editor.getSelection();
+        const text = editor.getModel().getValueInRange(sel);
+        if (!text) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function() {
+            editor.executeEdits('cut', [{ range: sel, text: '' }]);
+            appendLog('Cut', 'ok');
+          }).catch(function() {});
+        }
+      } catch (e) {
+        appendLog('Cut error: ' + (e.message || e), 'err');
+      }
+    }
+
+    async function edPaste() {
+      if (!editor) return;
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.readText) {
+          appendLog('Paste otomatis tidak didukung. Long-press di editor → Paste.', 'warn');
+          alert('Paste otomatis diblokir browser.\nLong-press di area editor → pilih Paste.');
+          return;
+        }
+        const text = await navigator.clipboard.readText();
+        if (!text) return;
+        const sel = editor.getSelection();
+        editor.executeEdits('paste', [{ range: sel, text: text }]);
+        editor.focus();
+        appendLog('Pasted', 'ok');
+      } catch (e) {
+        appendLog('Paste gagal (izin clipboard). Long-press di editor → Paste.', 'warn');
+        alert('Paste otomatis diblokir browser.\nLong-press di area editor → pilih Paste.');
+      }
+    }
+
+    function edUndo() {
+      if (!editor) return;
+      try { editor.trigger('toolbar', 'undo'); } catch (_) {}
+    }
+
+    function triggerReplaceFile() {
+      if (!currentFile) {
+        alert('Buka file dulu sebelum Replace.');
+        return;
+      }
+      const input = document.getElementById('replace-file-input');
+      if (input) {
+        input.value = '';
+        input.click();
+      }
+    }
+
+    (function setupReplaceFileInput() {
+      const input = document.getElementById('replace-file-input');
+      if (!input || input.__fbBound) return;
+      input.__fbBound = true;
+      input.addEventListener('change', async function(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file || !currentFile) return;
+        try {
+          const content = await file.text();
+          if (editor) editor.setValue(content);
+          if (typeof openFiles !== 'undefined' && openFiles.set) openFiles.set(currentFile, content);
+          if (typeof currentZip !== 'undefined' && currentZip) currentZip.file(currentFile, content);
+          appendLog('Replaced: ' + currentFile + ' ← ' + file.name, 'ok');
+          const elSz = document.getElementById('editor-size');
+          if (elSz) elSz.textContent = content.length + ' bytes';
+        } catch (err) {
+          appendLog('Replace gagal: ' + (err.message || err), 'err');
+          alert('Gagal replace: ' + (err.message || err));
+        } finally {
+          e.target.value = '';
+        }
+      });
+    })();
+
+    function edDeleteFile() {
+      if (!currentFile) {
+        alert('Tidak ada file aktif.');
+        return;
+      }
+      const path = currentFile;
+      if (!confirm('Hapus file ini dari paket?\n' + path)) return;
+      if (typeof openFiles !== 'undefined' && openFiles.delete) openFiles.delete(path);
+      if (typeof currentZip !== 'undefined' && currentZip && typeof zipFileMap !== 'undefined' && zipFileMap[path]) {
+        currentZip.remove(path);
+        delete zipFileMap[path];
+      }
+      const paths = Object.keys(typeof zipFileMap !== 'undefined' ? zipFileMap : {}).sort();
+      if (typeof renderFileTree === 'function') renderFileTree(paths);
+      currentFile = null;
+      if (editor) editor.setValue('// File deleted\n');
+      if (typeof updateEditorTabs === 'function') updateEditorTabs(null);
+      appendLog('Deleted: ' + path, 'ok');
+    }
+
 
     function clearEditorState() {
       currentFile = null;
