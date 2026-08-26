@@ -3998,9 +3998,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const status = document.getElementById('status-info');
         if (status && status.textContent === 'Ready') status.textContent = 'Editor siap (mode kompatibel HP)';
       }
+      // Beri waktu CDN Monaco di jaringan lambat (HP) — jangan buru-buru textarea polos
       const mobileEditorFallbackTimer = setTimeout(function() {
         if (!editor) installMobileEditorFallback();
-      }, 7000);
+      }, 15000);
 
         if (typeof require !== 'undefined') {
       require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs' }});
@@ -4012,24 +4013,44 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           host.style.height = '100%';
           host.style.width = '100%';
         }
-        // Warna token HTML/CSS/JS (tag, class, atribut, string, keyword)
+        // Tema warna detail (mirip VS Code / Acode): keyword ungu, string hijau, fungsi cyan
         monaco.editor.defineTheme('fb-vscode-dark', {
           base: 'vs-dark',
           inherit: true,
           rules: [
+            { token: '', foreground: 'D4D4D4' },
             { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
             { token: 'comment.content', foreground: '6A9955', fontStyle: 'italic' },
             { token: 'string', foreground: 'CE9178' },
+            { token: 'string.escape', foreground: 'D7BA7D' },
             { token: 'string.html', foreground: 'CE9178' },
             { token: 'string.css', foreground: 'CE9178' },
             { token: 'keyword', foreground: 'C586C0' },
+            { token: 'keyword.control', foreground: 'C586C0' },
+            { token: 'keyword.operator', foreground: 'D4D4D4' },
             { token: 'keyword.css', foreground: 'C586C0' },
+            { token: 'storage', foreground: '569CD6' },
+            { token: 'storage.type', foreground: '569CD6' },
+            { token: 'constant', foreground: '4FC1FF' },
+            { token: 'constant.language', foreground: '569CD6' },
+            { token: 'constant.numeric', foreground: 'B5CEA8' },
             { token: 'number', foreground: 'B5CEA8' },
             { token: 'regexp', foreground: 'D16969' },
             { token: 'type', foreground: '4EC9B0' },
+            { token: 'type.identifier', foreground: '4EC9B0' },
             { token: 'class', foreground: '4EC9B0' },
+            { token: 'class.name', foreground: '4EC9B0' },
+            { token: 'function', foreground: 'DCDCAA' },
+            { token: 'function.name', foreground: 'DCDCAA' },
+            { token: 'member', foreground: '9CDCFE' },
+            { token: 'key', foreground: '9CDCFE' },
+            { token: 'key.json', foreground: '9CDCFE' },
+            { token: 'string.key.json', foreground: '9CDCFE' },
+            { token: 'string.value.json', foreground: 'CE9178' },
             { token: 'tag', foreground: '569CD6' },
             { token: 'tag.html', foreground: '569CD6' },
+            { token: 'tag.id', foreground: '4EC9B0' },
+            { token: 'tag.class', foreground: '4EC9B0' },
             { token: 'metatag', foreground: '569CD6' },
             { token: 'metatag.content', foreground: '569CD6' },
             { token: 'metatag.html', foreground: '569CD6' },
@@ -4040,65 +4061,97 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             { token: 'attribute.value.css', foreground: 'CE9178' },
             { token: 'attribute.value.number.css', foreground: 'B5CEA8' },
             { token: 'attribute.value.unit.css', foreground: 'B5CEA8' },
+            { token: 'attribute.value.hex.css', foreground: 'D7BA7D' },
             { token: 'delimiter', foreground: 'D4D4D4' },
             { token: 'delimiter.html', foreground: '808080' },
             { token: 'delimiter.xml', foreground: '808080' },
+            { token: 'delimiter.bracket', foreground: 'FFD700' },
             { token: 'identifier', foreground: '9CDCFE' },
             { token: 'variable', foreground: '9CDCFE' },
+            { token: 'variable.name', foreground: '9CDCFE' },
             { token: 'variable.predefined', foreground: '4FC1FF' },
+            { token: 'operator', foreground: 'D4D4D4' },
+            { token: 'operator.scss', foreground: 'D4D4D4' },
             { token: 'emphasis', fontStyle: 'italic' },
             { token: 'strong', fontStyle: 'bold' }
           ],
           colors: {
-            'editor.background': '#0e1116',
-            'editor.foreground': '#d4d4d4',
-            'editorLineNumber.foreground': '#858585',
-            'editorLineNumber.activeForeground': '#c6c6c6',
+            'editor.background': '#0d1117',
+            'editor.foreground': '#e6edf3',
+            'editorLineNumber.foreground': '#6e7681',
+            'editorLineNumber.activeForeground': '#e6edf3',
             'editor.selectionBackground': '#264f78',
-            'editor.lineHighlightBackground': '#2a2a2a',
-            'editorCursor.foreground': '#aeafad',
-            'editorIndentGuide.background': '#404040',
-            'editorIndentGuide.activeBackground': '#707070',
+            'editor.inactiveSelectionBackground': '#3a3d41',
+            'editor.lineHighlightBackground': '#161b22',
+            'editor.lineHighlightBorder': '#00000000',
+            'editorCursor.foreground': '#58a6ff',
+            'editorIndentGuide.background1': '#21262d',
+            'editorIndentGuide.activeBackground1': '#484f58',
             'editorBracketHighlight.foreground1': '#FFD700',
             'editorBracketHighlight.foreground2': '#DA70D6',
-            'editorBracketHighlight.foreground3': '#179FFF'
+            'editorBracketHighlight.foreground3': '#179FFF',
+            'editorBracketHighlight.foreground4': '#4EC9B0',
+            'editorBracketMatch.background': '#515c7a40',
+            'editorBracketMatch.border': '#888888',
+            'editorGutter.background': '#0d1117',
+            'editorWidget.background': '#161b22',
+            'editorSuggestWidget.background': '#161b22',
+            'editorSuggestWidget.border': '#30363d'
           }
         });
         monaco.editor.setTheme('fb-vscode-dark');
 
+        const isMobile = window.innerWidth <= 768;
         editor = monaco.editor.create(host, {
-          value: '// Load a file to start editing\n// HTML / CSS / JS — syntax berwarna seperti VS Code\n',
+          value: '// Load a file — syntax berwarna (JS / HTML / CSS / JSON)\nfunction hello() {\n  return "Frostbyte";\n}\n',
           language: 'javascript',
           theme: 'fb-vscode-dark',
-          fontSize: 14,
-          lineHeight: 22,
-          fontFamily: "'Cascadia Code', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', monospace",
+          fontSize: isMobile ? 13 : 14,
+          lineHeight: isMobile ? 20 : 22,
+          fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', monospace",
           fontLigatures: true,
-          minimap: { enabled: window.innerWidth > 1100 },
+          minimap: { enabled: !isMobile && window.innerWidth > 1100 },
           scrollBeyondLastLine: false,
-          wordWrap: window.innerWidth <= 768 ? 'off' : 'on',
+          wordWrap: 'on',
           automaticLayout: true,
           largeFileOptimizations: true,
-          maxTokenizationLineLength: 20000,
+          maxTokenizationLineLength: 100000,
           formatOnPaste: false,
           autoClosingBrackets: 'always',
           autoClosingQuotes: 'always',
           autoIndent: 'full',
-          renderWhitespace: 'none',
-          renderLineHighlight: window.innerWidth <= 768 ? 'none' : 'line',
+          renderWhitespace: 'selection',
+          renderLineHighlight: 'all',
           lineNumbers: 'on',
-          glyphMargin: false,
-          folding: window.innerWidth > 768,
-          matchBrackets: window.innerWidth > 768 ? 'always' : 'never',
-          bracketPairColorization: { enabled: window.innerWidth > 768 },
+          lineNumbersMinChars: 3,
+          glyphMargin: true,
+          folding: true,
+          foldingHighlight: true,
+          showFoldingControls: isMobile ? 'always' : 'mouseover',
+          matchBrackets: 'always',
+          bracketPairColorization: { enabled: true, independentColorPoolPerBracketType: true },
           guides: {
-            bracketPairs: window.innerWidth > 768,
-            indentation: window.innerWidth > 768
+            bracketPairs: true,
+            bracketPairsHorizontal: true,
+            indentation: true,
+            highlightActiveIndentation: true
           },
-          padding: { top: 8 },
+          padding: { top: 10, bottom: 10 },
           smoothScrolling: true,
           cursorBlinking: 'smooth',
-          mouseWheelZoom: true
+          cursorSmoothCaretAnimation: 'on',
+          mouseWheelZoom: true,
+          linkedEditing: true,
+          colorDecorators: true,
+          semanticHighlighting: { enabled: true },
+          occurrencesHighlight: 'singleFile',
+          selectionHighlight: true,
+          renderControlCharacters: false,
+          stickyScroll: { enabled: !isMobile },
+          scrollbar: {
+            verticalScrollbarSize: isMobile ? 8 : 12,
+            horizontalScrollbarSize: isMobile ? 8 : 12
+          }
         });
 
         editor.onDidChangeCursorPosition(e => {
@@ -4108,23 +4161,15 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           if (col) col.textContent = e.position.column;
         });
 
-        // Jika user sudah buka file sebelum Monaco siap
+        // Pending file: pakai language agar tokenizer warna aktif
         if (window.__pendingEditorContent) {
           try {
             const p = window.__pendingEditorContent;
-            if (p.language && window.monaco) {
-              const oldModel = editor.getModel();
-              const newModel = monaco.editor.createModel(p.content || '', p.language);
-              editor.setModel(newModel);
-              if (oldModel) try { oldModel.dispose(); } catch (_) {}
-              monaco.editor.setTheme('fb-vscode-dark');
-            } else {
-              editor.setValue(p.content || '');
-            }
-            sizeMonacoHost();
-            editor.focus();
-          } catch (err) { console.warn(err); }
-          window.__pendingEditorContent = null;
+            const model = monaco.editor.createModel(p.content || '', p.language || 'javascript');
+            editor.setModel(model);
+            monaco.editor.setTheme('fb-vscode-dark');
+            window.__pendingEditorContent = null;
+          } catch (_) {}
         }
         sizeMonacoHost();
         setTimeout(sizeMonacoHost, 100);
@@ -4624,6 +4669,15 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
               try { oldModel.dispose(); } catch (_) {}
             }
             monaco.editor.setTheme('fb-vscode-dark');
+            try {
+              editor.updateOptions({
+                bracketPairColorization: { enabled: true },
+                guides: { indentation: true, bracketPairs: true },
+                matchBrackets: 'always',
+                renderLineHighlight: 'all',
+                lineNumbers: 'on'
+              });
+            } catch (_) {}
           } else {
             editor.setValue(textContent);
           }
