@@ -1163,7 +1163,7 @@ export default {
           }
 
           const ct = response.headers()["content-type"] || "";
-          let name = safe(new URL(u).pathname.split("/").pop() || "index");
+          let name = safe((new URL(u).pathname.split("/").pop() || "index").split("?")[0]);
           if (!/\.[a-z0-9]{1,8}$/i.test(name)) {
             if (ct.includes("javascript")) name += ".js";
             else if (ct.includes("css")) name += ".css";
