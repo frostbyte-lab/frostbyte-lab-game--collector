@@ -38,9 +38,12 @@ export async function fillMissingAssets(
   for (let pass = 1; pass <= PASSES; pass++) {
     const texts = [];
     for (const [key, data] of Object.entries(zipFiles)) {
-      if (!/\.(html?|js|mjs|css)$/i.test(key) && key !== "index.html") continue;
+      // Static recursive: HTML/CSS/JS + JSON (config/atlas/map sering berisi URL asset)
+      if (!/\.(html?|js|mjs|css|json)$/i.test(key) && key !== "index.html") continue;
       try {
-        texts.push(new TextDecoder().decode(data));
+        const t = new TextDecoder().decode(data);
+        if (t.length > 1_500_000) continue;
+        texts.push(t);
         report.scanned++;
       } catch {}
     }
@@ -69,7 +72,13 @@ export async function fillMissingAssets(
         if (!res.ok) {
           report.failed++;
           passReport.failed++;
-          report.stillMissing.push({ url: u, error: "status " + res.status, pass });
+          report.stillMissing.push({
+            url: u,
+            error: "status " + res.status,
+            collectStatus: "DOWNLOAD_FAILED",
+            note: "DOWNLOAD_FAILED ≠ API",
+            pass
+          });
           continue;
         }
         const buffer = new Uint8Array(await res.arrayBuffer());

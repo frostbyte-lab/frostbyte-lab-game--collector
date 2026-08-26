@@ -19,6 +19,8 @@ import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
 import { mapAssetRelations } from "./analyze/relations.js";
 import { fillMissingAssets } from "./collect/fill-missing.js";
+import { postCollectAudit, formatCollectAuditSummary } from "./collect/post-audit.js";
+import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
 import {
   MAX_SINGLE_FILE,
@@ -361,7 +363,7 @@ export default {
           inputs: {
             url: gameUrl,
             wait_seconds: waitSeconds,
-            auto_spins: String(body.auto_spins ?? body.autoSpins ?? "3"),
+            auto_spins: String(body.auto_spins ?? body.autoSpins ?? "0"),
             auto_history: String(body.auto_history ?? body.autoHistory ?? "1"),
             spin_delay_ms: String(body.spin_delay_ms ?? body.spinDelayMs ?? "2200"),
             seed_zip: String(body.seed_zip ?? body.seedZip ?? "")
@@ -1028,7 +1030,8 @@ export default {
 
     // Collect options (process 4)
     const waitSeconds = Math.min(60, Math.max(3, Number(body.wait_seconds || body.waitSeconds || 12) || 12));
-    const autoSpins = Math.min(15, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 3) || 0));
+    // Spin = Interaction Discovery (opsional), default 0 — bukan syarat collect
+    const autoSpins = Math.min(15, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 0) || 0));
     const spinDelayMs = Math.min(8000, Math.max(500, Number(body.spin_delay_ms ?? body.spinDelayMs ?? 2200) || 2200));
 
     const id = crypto.randomUUID();
@@ -1110,9 +1113,29 @@ export default {
           const u = response.url();
           if (seen.has(u) || isExcluded(u)) return;
           if (u.startsWith("data:") || u.startsWith("blob:")) return;
-          seen.add(u);
 
-          if (response.status() >= 400) return;
+          // Gagal download: catat sebagai DOWNLOAD_FAILED — BUKAN API
+          if (response.status() >= 400) {
+            if (!seen.has(u)) {
+              seen.add(u);
+              const fail = markDownloadFailed(u, response.status(), "http " + response.status());
+              manifest.push({
+                url: u,
+                type,
+                status: response.status(),
+                httpStatus: response.status(),
+                localPath: null,
+                size: 0,
+                contentType: response.headers()["content-type"] || "",
+                category: "game",
+                classifyReason: fail.reason,
+                collectStatus: STRICT_STATUS.DOWNLOAD_FAILED,
+                strictStatus: STRICT_STATUS.DOWNLOAD_FAILED
+              });
+            }
+            return;
+          }
+          seen.add(u);
 
           const buffer = await response.body();
           if (!buffer || buffer.byteLength === 0) return;
@@ -1196,7 +1219,9 @@ export default {
             contentType: ct,
             category: classified.category,
             subCategory: slot.sub || null,
-            classifyReason: classified.reason + (slot.reason ? "+" + slot.reason : "")
+            classifyReason: classified.reason + (slot.reason ? "+" + slot.reason : ""),
+            collectStatus: STRICT_STATUS.DOWNLOADED,
+            strictStatus: classified.status || STRICT_STATUS.ASSET
           };
           if (apiMeta) {
             entry.apiKind = apiMeta.kind;
@@ -1346,9 +1371,9 @@ export default {
         }
       } catch {}
 
-      // Auto-spins (capture API spin/balance) — process 4
+      // Interaction Discovery (opsional) — spin/play hanya jika user minta auto_spins > 0
       if (autoSpins > 0 && !(await shouldStop())) {
-        await report(36, "spins", "Auto-spin x" + autoSpins + " (delay " + spinDelayMs + "ms)...", {
+        await report(36, "interaction", "Interaction Discovery: auto-spin x" + autoSpins + " (bukan syarat collect)...", {
           files: manifest.length
         });
         for (let i = 0; i < autoSpins; i++) {
@@ -1422,8 +1447,8 @@ export default {
           id,
           env,
           selectAllowed,
-          40,
-          2
+          50,
+          3
         );
         await report(
           68,
@@ -1460,6 +1485,27 @@ export default {
       await report(72, "rewrite", "Smart path rewrite + frame-buster...", { files: manifest.length });
       // Smart offline packaging: path rewrite + frame-buster neutralize
       const smart = smartPackage(zipFiles, manifest);
+
+      // Post-collect audit: http(s) tersisa → unresolved asset ≠ API
+      let collectAudit = null;
+      try {
+        await report(76, "audit", "Post-collect scan URL eksternal...", { files: manifest.length });
+        collectAudit = postCollectAudit(zipFiles, manifest, seen, target.href);
+        zipFiles["collect-audit.json"] = strToU8(JSON.stringify(collectAudit, null, 2));
+        await report(
+          78,
+          "audit",
+          "Audit: unresolved " +
+            (collectAudit.byStatus?.unresolvedAssets || 0) +
+            " · API " +
+            (collectAudit.byStatus?.apis || 0) +
+            " · fail " +
+            (collectAudit.byStatus?.downloadFailed || 0),
+          { files: manifest.length }
+        );
+      } catch (e) {
+        collectAudit = { error: String(e.message || e) };
+      }
 
       await report(80, "analyze", "Analisis slot (symbols/paytable/audio/engine)...", { files: manifest.length });
       // Poin 2+3: analisis isi JSON/config + deteksi engine
@@ -1566,15 +1612,31 @@ export default {
       const apiCount = manifest.filter(r => r.category === "api").length;
       const serverCount = manifest.filter(r => r.category === "server").length;
 
+      const failCount = manifest.filter(
+        (r) => r.collectStatus === STRICT_STATUS.DOWNLOAD_FAILED || r.strictStatus === STRICT_STATUS.DOWNLOAD_FAILED
+      ).length;
       const manifestData = {
         target: target.href,
         collectedAt: new Date().toISOString(),
         totalFiles: manifest.length,
-        totals: { game: gameCount, api: apiCount, server: serverCount },
+        totals: {
+          game: gameCount,
+          api: apiCount,
+          server: serverCount,
+          downloadFailed: failCount
+        },
         smartRewrite: smart,
         autoFill: fillReport,
+        collectAudit: collectAudit
+          ? {
+              ok: collectAudit.ok,
+              byStatus: collectAudit.byStatus,
+              unresolvedSample: (collectAudit.unresolvedAssets || []).slice(0, 20)
+            }
+          : null,
         analysisSummary: analysis?.summary || null,
-        note: "Asset game di assets/ (sub-folder slot). API/server di server/. Lihat KETERANGAN.md + analisis.json.",
+        note:
+          "Klasifikasi: Content-Type dulu (CDN+image=ASSET). DOWNLOAD_FAILED ≠ API. Spin=Interaction Discovery opsional. Lihat collect-audit.json.",
         resources: manifest
       };
       zipFiles["manifest.json"] = strToU8(JSON.stringify(manifestData, null, 2));
@@ -1659,21 +1721,30 @@ export default {
       zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
 Target: ${target.href}
 Tanggal: ${new Date().toISOString()}
-Total: ${manifest.length} file (game: ${gameCount} · api: ${apiCount} · server: ${serverCount})
+Total: ${manifest.length} file (game: ${gameCount} · api: ${apiCount} · server: ${serverCount} · downloadFailed: ${failCount})
 Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
 Engine: ${analysis?.engine?.engine ?? "unknown"} (${analysis?.engine?.confidence ?? "none"})
 Analisis: paytable=${analysis?.summary?.paytableHits ?? 0} · symbols=${analysis?.summary?.symbolCount ?? 0} · features=${analysis?.summary?.featureHits ?? 0} · atlas=${analysis?.summary?.atlasCount ?? 0}
+Collect audit OK: ${collectAudit && collectAudit.ok ? "YES" : "NO / partial"} · unresolved assets: ${collectAudit?.byStatus?.unresolvedAssets ?? "?"}
+
+## Klasifikasi
+- Content-Type & ekstensi → **ASSET** (CDN image/audio = asset, bukan API)
+- Path session/spin/balance → **API** (terpisah di server/)
+- HTTP gagal → **DOWNLOAD_FAILED** (bukan API)
+- Auto-spin = Interaction Discovery opsional (default off)
 
 ## Pemisahan otomatis
 - \`assets/\` — asset game (symbols, reels, ui, audio, config, ...)
-- \`server/api/\` — snapshot response API (terpisah dari game)
-- \`analisis.json\` — hasil parsing paytable / symbol / feature / atlas (Poin 2)
-- \`KETERANGAN.md\` — deskripsi host, endpoint, kategori + sub-folder
+- \`server/api/\` — snapshot response API
+- \`collect-audit.json\` — post-collect scan http(s) tersisa
+- \`api-map.json\` · \`analisis.json\` · \`KETERANGAN.md\`
+
+${formatCollectAuditSummary(collectAudit)}
 
 ## Cara pakai
-1. Baca **KETERANGAN.md** dan **analisis.json** dulu
-2. Extract ZIP → \`npx serve .\` atau load di Workspace Game Collector Pro
-3. Preview / Auto Repair / Online Hybrid
+1. Baca **collect-audit.json** + **KETERANGAN.md**
+2. Load ZIP di Workspace → Scan Error / AI Repair / Sandbox
+3. Hybrid jika API masih butuh server live
 
 > API di folder server/ hanya snapshot saat collect, bukan backend live.
 `);
