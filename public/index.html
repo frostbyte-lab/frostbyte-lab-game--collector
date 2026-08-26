@@ -2198,56 +2198,96 @@
     }
 
 
-    /* ===== Mobile Editor Toolbar (profesional) ===== */
+    /* ===== Mobile Editor Toolbar (IDE-style) ===== */
     .editor-mobile-toolbar {
       display: none;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding: 8px 10px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
+      align-items: stretch;
+      gap: 4px;
+      padding: 6px 8px;
+      background: linear-gradient(180deg, rgba(30, 36, 44, 0.98), rgba(22, 27, 34, 0.98));
+      border-bottom: 1px solid rgba(94, 225, 192, 0.12);
       position: sticky;
       top: 0;
       z-index: 20;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      flex-wrap: nowrap;
     }
+    .editor-mobile-toolbar::-webkit-scrollbar { display: none; }
     @media (max-width: 900px) {
       .editor-mobile-toolbar {
         display: flex;
       }
     }
+    .editor-mobile-toolbar .mt-group {
+      display: inline-flex;
+      align-items: stretch;
+      gap: 4px;
+      flex: 0 0 auto;
+    }
     .editor-mobile-toolbar .mt-btn {
-      flex: 1 1 auto;
-      min-width: 64px;
-      min-height: 40px;
-      padding: 8px 10px;
-      font-size: 12px;
+      flex: 0 0 auto;
+      min-width: 52px;
+      min-height: 44px;
+      padding: 6px 8px;
+      font-size: 10px;
       font-weight: 600;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--bg-secondary);
-      color: var(--text);
+      letter-spacing: 0.02em;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(15, 20, 28, 0.9);
+      color: #c8d0da;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      line-height: 1.1;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+    }
+    .editor-mobile-toolbar .mt-btn svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+      flex-shrink: 0;
+      opacity: 0.95;
+    }
+    .editor-mobile-toolbar .mt-btn span {
+      display: block;
+      max-width: 64px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .editor-mobile-toolbar .mt-btn:active {
-      opacity: 0.75;
-      transform: scale(0.97);
+      transform: scale(0.96);
+      background: rgba(94, 225, 192, 0.12);
     }
     .editor-mobile-toolbar .mt-btn.primary {
-      background: rgba(94, 225, 192, 0.18);
-      border-color: var(--accent);
-      color: var(--accent);
+      background: rgba(94, 225, 192, 0.14);
+      border-color: rgba(94, 225, 192, 0.45);
+      color: #5ee1c0;
+    }
+    .editor-mobile-toolbar .mt-btn.primary:active {
+      background: rgba(94, 225, 192, 0.22);
     }
     .editor-mobile-toolbar .mt-btn.danger {
-      border-color: rgba(255, 107, 94, 0.4);
-      color: #ff8a7a;
+      border-color: rgba(255, 107, 94, 0.35);
+      color: #ff9b8c;
+      background: rgba(255, 107, 94, 0.08);
     }
     .editor-mobile-toolbar .mt-sep {
       width: 1px;
-      background: var(--border);
-      margin: 4px 2px;
+      min-width: 1px;
+      background: rgba(255, 255, 255, 0.1);
+      margin: 8px 4px;
       align-self: stretch;
+      flex: 0 0 1px;
     }
 
     .editor-actions {
@@ -3065,6 +3105,30 @@
       <path d="M6 3h8l4 4v14H6V3Z"></path>
       <path d="M14 3v5h5M9 12h6M9 16h4"></path>
     </symbol>
+    
+    <symbol id="icon-select-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 3H5a2 2 0 0 0-2 2v4"/><path d="M15 3h4a2 2 0 0 1 2 2v4"/><path d="M9 21H5a2 2 0 0 1-2-2v-4"/><path d="M15 21h4a2 2 0 0 0 2-2v-4"/>
+      <path d="M8 8h8v8H8z"/>
+    </symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </symbol>
+    <symbol id="icon-cut" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88"/><path d="M14.47 14.48 20 20"/><path d="M8.12 8.12 12 12"/>
+    </symbol>
+    <symbol id="icon-paste" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/>
+    </symbol>
+    <symbol id="icon-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 7"/>
+    </symbol>
+    <symbol id="icon-replace" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 3h5v5"/><path d="M21 3 12 12"/><path d="M8 21H3v-5"/><path d="M3 21l9-9"/>
+    </symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+    </symbol>
+
     <symbol id="icon-save" viewBox="0 0 24 24">
       <path d="M5 3h12l3 3v15H5V3Z"></path>
       <path d="M8 3v6h8V3M8 21v-7h8v7"></path>
@@ -3628,16 +3692,36 @@
 
 
           <!-- Mobile Editor Toolbar -->
-          <div class="editor-mobile-toolbar" id="editor-mobile-toolbar">
-            <button type="button" class="mt-btn" onclick="edSelectAll()" title="Select All">Select</button>
-            <button type="button" class="mt-btn" onclick="edCopy()" title="Copy">Copy</button>
-            <button type="button" class="mt-btn" onclick="edCut()" title="Cut">Cut</button>
-            <button type="button" class="mt-btn" onclick="edPaste()" title="Paste">Paste</button>
-            <span class="mt-sep"></span>
-            <button type="button" class="mt-btn" onclick="edUndo()" title="Undo">Undo</button>
-            <button type="button" class="mt-btn primary" onclick="saveFile()" title="Save">Save</button>
-            <button type="button" class="mt-btn primary" onclick="triggerReplaceFile()" title="Ganti file ini">Replace</button>
-            <button type="button" class="mt-btn danger" onclick="edDeleteFile()" title="Hapus file">Del</button>
+          <div class="editor-mobile-toolbar" id="editor-mobile-toolbar" role="toolbar" aria-label="Editor tools">
+            <div class="mt-group" role="group" aria-label="Edit">
+              <button type="button" class="mt-btn" onclick="edSelectAll()" title="Select All">
+                <svg aria-hidden="true"><use href="#icon-select-all"></use></svg><span>Select</span>
+              </button>
+              <button type="button" class="mt-btn" onclick="edCopy()" title="Copy">
+                <svg aria-hidden="true"><use href="#icon-copy"></use></svg><span>Copy</span>
+              </button>
+              <button type="button" class="mt-btn" onclick="edCut()" title="Cut">
+                <svg aria-hidden="true"><use href="#icon-cut"></use></svg><span>Cut</span>
+              </button>
+              <button type="button" class="mt-btn" onclick="edPaste()" title="Paste">
+                <svg aria-hidden="true"><use href="#icon-paste"></use></svg><span>Paste</span>
+              </button>
+              <button type="button" class="mt-btn" onclick="edUndo()" title="Undo">
+                <svg aria-hidden="true"><use href="#icon-undo"></use></svg><span>Undo</span>
+              </button>
+            </div>
+            <span class="mt-sep" aria-hidden="true"></span>
+            <div class="mt-group" role="group" aria-label="File">
+              <button type="button" class="mt-btn primary" onclick="saveFile()" title="Save">
+                <svg aria-hidden="true"><use href="#icon-save"></use></svg><span>Save</span>
+              </button>
+              <button type="button" class="mt-btn primary" onclick="triggerReplaceFile()" title="Ganti file ini">
+                <svg aria-hidden="true"><use href="#icon-replace"></use></svg><span>Replace</span>
+              </button>
+              <button type="button" class="mt-btn danger" onclick="edDeleteFile()" title="Hapus file">
+                <svg aria-hidden="true"><use href="#icon-trash"></use></svg><span>Delete</span>
+              </button>
+            </div>
           </div>
           <input type="file" id="replace-file-input" accept=".html,.htm,.js,.css,.json,.txt,.xml,.svg,.md" style="display:none" />
 
