@@ -7768,6 +7768,71 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           const toks = base.match(/[a-f0-9]{8,}/gi) || [];
           toks.forEach(function (tok) { previewAssetNames[tok] = previewAssetMap[p]; previewAssetNames[tok.toLowerCase()] = previewAssetMap[p]; });
         });
+        // Alias /shared/HASH/... dari api-map + manifest → blob lokal (fix G1002)
+        async function gcEnrichAssetAliases() {
+          function addAlias(key, localPath) {
+            if (!key || !localPath) return;
+            var lp = String(localPath).replace(/^\/+/, '');
+            var blob = previewAssetMap[lp] || previewAssetMap[localPath];
+            if (!blob) return;
+            var k = String(key).split('?')[0].split('#')[0];
+            previewAssetMap[k] = blob;
+            previewAssetMap[k.replace(/^\/+/, '')] = blob;
+            if (k.charAt(0) !== '/') previewAssetMap['/' + k] = blob;
+            var base = k.split('/').pop();
+            if (base) previewAssetNames[base] = blob;
+            var toks = k.match(/[a-f0-9]{8,}/gi) || [];
+            for (var ti = 0; ti < toks.length; ti++) {
+              previewAssetNames[toks[ti].toLowerCase()] = blob;
+            }
+          }
+          var tryFiles = ['offline-asset-map.json', 'api-map.json', 'manifest.json'];
+          for (var fi = 0; fi < tryFiles.length; fi++) {
+            var fp = tryFiles[fi];
+            var real = zipFileMap[fp] ? fp : null;
+            if (!real) {
+              var keys = Object.keys(zipFileMap || {});
+              for (var ki = 0; ki < keys.length; ki++) {
+                if (keys[ki] === fp || keys[ki].endsWith('/' + fp)) { real = keys[ki]; break; }
+              }
+            }
+            if (!real) continue;
+            try {
+              var raw = openFiles.has(real) ? openFiles.get(real) : await zipFileMap[real].async('string');
+              var data = JSON.parse(raw);
+              if (data && !data.byKind && !data.resources && !data.endpoints && typeof data === 'object') {
+                Object.keys(data).forEach(function (url) {
+                  addAlias(url, data[url]);
+                  try { addAlias(new URL(url).pathname, data[url]); } catch (e1) {}
+                });
+              }
+              if (data.byKind) {
+                Object.keys(data.byKind).forEach(function (kind) {
+                  (data.byKind[kind] || []).forEach(function (it) {
+                    if (!it || !it.path) return;
+                    addAlias(it.path, it.path);
+                    if (it.url) {
+                      addAlias(it.url, it.path);
+                      try { addAlias(new URL(it.url).pathname, it.path); } catch (e2) {}
+                    }
+                  });
+                });
+              }
+              if (Array.isArray(data.resources)) {
+                data.resources.forEach(function (r) {
+                  var local = r.localPath || r.path;
+                  if (!local) return;
+                  addAlias(local, local);
+                  if (r.url) {
+                    addAlias(r.url, local);
+                    try { addAlias(new URL(r.url).pathname, local); } catch (e3) {}
+                  }
+                });
+              }
+            } catch (e) {}
+          }
+        }
+        await gcEnrichAssetAliases();
         const previewBaseUrl = window.location.origin + '/';
         const sandboxMode = activePreviewMode !== 'web';
         const hybridMode = Boolean(window.__gcHybridPreview);
@@ -7994,6 +8059,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       }
       // Hash-token match: 996b5422dd from CDN path → 0004-996b5422dd.cee54.js
       var tokens = bareLow.match(/[a-f0-9]{8,}/g) || [];
+      // juga token dari full path: /shared/984721902a/index.json
+      var pathToks = noSlash.toLowerCase().match(/[a-f0-9]{8,}/g) || [];
+      for (var pti = 0; pti < pathToks.length; pti++) {
+        if (tokens.indexOf(pathToks[pti]) < 0) tokens.push(pathToks[pti]);
+      }
+
       for (var ti = 0; ti < tokens.length; ti++) {
         var tok = tokens[ti];
         for (var nj = 0; nj < nameKeys.length; nj++) {
@@ -8020,22 +8091,29 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
   }
   function gcSafeUrl(u){
     if (typeof u !== 'string' || !u) return u;
-    // Perbaiki host rusak https://api./path
-    if (/^https?:\\/\\/api\\.\\//i.test(u) || /^https?:\\/\\/api\\.\\//i.test(u)) {
-      var rest = u.replace(/^https?:\\/\\/api\\.?/i, '');
+    // Host rusak: https://api./path atau https://api.
+    if (/^https?:\\/\\/api\\.(\\/|$)/i.test(u) || /^https?:\\/\\/api\\.$/i.test(u)) {
+      var rest = u.replace(/^https?:\\/\\/api\\.?/i, '') || '/';
+      if (/what-is-my-ip/i.test(rest) || /what-is-my-ip/i.test(u)) return '/sandbox/what-is-my-ip';
       return rest.charAt(0) === '/' ? rest : '/' + rest;
     }
-    if (/^https?:\\/\\/api\\.\\w*\\/what-is-my-ip/i.test(u) || /what-is-my-ip/i.test(u)) {
-      return '/sandbox/what-is-my-ip';
-    }
+    if (/what-is-my-ip/i.test(u)) return '/sandbox/what-is-my-ip';
+    try {
+      if (/^https?:\\/\\/api\\.eajzzxhro\\.com/i.test(u)) {
+        var p = new URL(u).pathname || '/';
+        if (/what-is-my-ip/i.test(p)) return '/sandbox/what-is-my-ip';
+        return p;
+      }
+    } catch (e0) {}
     try {
       if (/^https?:/i.test(u)) { new URL(u); }
     } catch (e) {
-      return '/__gc_invalid__';
+      if (/what-is-my-ip/i.test(u)) return '/sandbox/what-is-my-ip';
+      return '/sandbox/mock-empty';
     }
     return u;
   }
-  function isApiLike(u){
+function isApiLike(u){
     var s = String(u || '').toLowerCase();
     return /\\/api\\/|\\/game\\/(init|session|balance|bet|spin|result|history)|gamewallet|verifysession|game-api|game-proxy|\\/spin\\b|\\/bet\\b|\\/balance\\b|\\/session\\b|graphql|\\/v1\\/|\\/v2\\//i.test(s) || /what-is-my-ip|\/shared\/[^?#]+index\.json/i.test(s);
   }
