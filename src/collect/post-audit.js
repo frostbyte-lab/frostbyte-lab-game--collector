@@ -1,6 +1,6 @@
 /**
  * Post-collect audit: scan ulang http(s) di paket → klasifikasi
- * unresolved static asset vs API vs tracking.
+ * Target offline asset: https static asset remaining = 0
  */
 import { isExcluded, classifyResource, STRICT_STATUS } from "../classify/resource.js";
 import { extractReferencedUrls } from "./urls.js";
@@ -10,6 +10,14 @@ function decodeText(data) {
     return new TextDecoder().decode(data);
   } catch {
     return "";
+  }
+}
+
+function basename(u) {
+  try {
+    return new URL(u).pathname.split("/").pop() || "";
+  } catch {
+    return String(u || "").split("?")[0].split("/").pop() || "";
   }
 }
 
@@ -28,15 +36,23 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
     tracking: [],
     ignored: [],
     rewrittenOk: 0,
+    httpsAssetRemaining: 0,
     byStatus: {}
   };
 
   const knownLocal = new Set();
+  const knownBare = new Set();
   for (const r of manifest || []) {
     if (r.url) knownLocal.add(r.url);
-    if (r.localPath) knownLocal.add(r.localPath);
+    if (r.localPath) {
+      knownLocal.add(r.localPath);
+      knownBare.add(String(r.localPath).split("/").pop());
+    }
   }
-  for (const k of Object.keys(zipFiles || {})) knownLocal.add(k);
+  for (const k of Object.keys(zipFiles || {})) {
+    knownLocal.add(k);
+    knownBare.add(k.split("/").pop());
+  }
 
   const textKeys = Object.keys(zipFiles || {}).filter(
     (k) =>
@@ -52,7 +68,6 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
     if (!text || text.length > 2_000_000) continue;
     report.scannedFiles++;
 
-    // Relative + absolute via extractor
     try {
       for (const u of extractReferencedUrls(text, baseUrl || "https://local.invalid/")) {
         if (/^https?:\/\//i.test(u)) external.add(u);
@@ -61,7 +76,6 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
       /* ignore */
     }
 
-    // Raw absolute still in source after rewrite
     const re = /https?:\/\/[^\s"'`<>)\\]+/gi;
     let m;
     while ((m = re.exec(text)) !== null) {
@@ -82,23 +96,27 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
       report.tracking.push({ url: u, status: STRICT_STATUS.TRACKING });
       continue;
     }
-    // Already collected?
-    if (seen && seen.has(u)) {
-      report.rewrittenOk++;
-      continue;
-    }
-    const inManifest = (manifest || []).some((r) => r.url === u);
-    if (inManifest) {
+
+    const bare = basename(u);
+    const collected =
+      (seen && seen.has(u)) ||
+      knownLocal.has(u) ||
+      (bare && knownBare.has(bare)) ||
+      (manifest || []).some((r) => {
+        if (!r.url) return false;
+        if (r.url === u) return true;
+        try {
+          return new URL(r.url).pathname === new URL(u).pathname;
+        } catch {
+          return false;
+        }
+      });
+
+    if (collected) {
       report.rewrittenOk++;
       continue;
     }
 
-    let pathname = "";
-    try {
-      pathname = new URL(u).pathname;
-    } catch {
-      /* ignore */
-    }
     const classified = classifyResource(u, "fetch", "", "");
     const item = {
       url: u.slice(0, 400),
@@ -110,7 +128,8 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
     if (
       classified.status === STRICT_STATUS.API ||
       classified.status === STRICT_STATUS.SOCKET ||
-      classified.category === "api"
+      classified.category === "api" ||
+      /\/web-api\/|\/game-api\/|\/api\/|api\./i.test(u)
     ) {
       report.apis.push(item);
     } else if (classified.status === STRICT_STATUS.TRACKING) {
@@ -118,12 +137,10 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
     } else if (classified.status === STRICT_STATUS.SVG_NAMESPACE) {
       report.ignored.push(item);
     } else {
-      // Static asset still pointing online = unresolved
       report.unresolvedAssets.push(item);
     }
   }
 
-  // Count download failures from manifest
   const failed = (manifest || []).filter(
     (r) =>
       r.collectStatus === STRICT_STATUS.DOWNLOAD_FAILED ||
@@ -137,8 +154,10 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
     note: "DOWNLOAD_FAILED ≠ API"
   }));
 
+  report.httpsAssetRemaining = report.unresolvedAssets.length;
   report.byStatus = {
     unresolvedAssets: report.unresolvedAssets.length,
+    httpsAssetRemaining: report.httpsAssetRemaining,
     apis: report.apis.length,
     tracking: report.tracking.length,
     downloadFailed: report.downloadFailed.length,
@@ -146,26 +165,27 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
     alreadyCollected: report.rewrittenOk
   };
 
-  report.ok =
-    report.unresolvedAssets.length === 0 && report.downloadFailed.length === 0;
+  // Offline asset OK = 0 unresolved static https (API may remain for hybrid)
+  report.ok = report.httpsAssetRemaining === 0;
+  report.offlineAssetReady = report.ok;
+  report.hybridSuggested = report.apis.length > 0;
 
   return report;
 }
 
-/**
- * Build human-readable collect report section
- */
 export function formatCollectAuditSummary(audit) {
   if (!audit) return "";
   const lines = [
     "## Post-collect audit",
     `- Scanned text files: ${audit.scannedFiles}`,
     `- External URLs found in sources: ${audit.externalFound}`,
+    `- HTTPS static asset remaining: ${audit.httpsAssetRemaining ?? audit.byStatus?.unresolvedAssets ?? 0}`,
     `- Unresolved static assets: ${audit.byStatus?.unresolvedAssets ?? 0}`,
-    `- API/backend left online: ${audit.byStatus?.apis ?? 0}`,
+    `- API/backend (hybrid OK): ${audit.byStatus?.apis ?? 0}`,
     `- Tracking skipped: ${audit.byStatus?.tracking ?? 0}`,
     `- Download failed (≠ API): ${audit.byStatus?.downloadFailed ?? 0}`,
-    `- Audit OK (0 unresolved asset): ${audit.ok ? "YES" : "NO"}`
+    `- Offline asset ready (https asset = 0): ${audit.offlineAssetReady || audit.ok ? "YES" : "NO"}`,
+    `- Hybrid suggested: ${audit.hybridSuggested ? "YES" : "NO"}`
   ];
   if (audit.unresolvedAssets?.length) {
     lines.push("", "### Unresolved assets (sample)");

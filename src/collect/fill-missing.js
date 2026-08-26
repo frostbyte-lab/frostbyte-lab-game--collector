@@ -71,7 +71,17 @@ export async function fillMissingAssets(
     for (const t of texts) {
       for (const u of extractReferencedUrls(t, targetHref)) needed.add(u);
     }
-    const missing = [...needed].filter((u) => !seen.has(u) && !isExcluded(u));
+    let missing = [...needed].filter((u) => !seen.has(u) && !isExcluded(u));
+    // Prioritas CDN asset host (public.*/static.*) yang tertulis di JS — sering miss di runtime singkat
+    const prio = (u) => {
+      const s = String(u).toLowerCase();
+      if (/public\./i.test(s) && /\.(png|jpe?g|gif|webp|svg|js|css|json|mp3|ogg|woff)/i.test(s)) return 0;
+      if (/static\./i.test(s) && /\.(png|jpe?g|gif|webp|svg|js|css|json|mp3|ogg|woff)/i.test(s)) return 1;
+      if (/\.(png|jpe?g|gif|webp|mp3|ogg|woff2?)/i.test(s)) return 2;
+      if (/\.(js|mjs|css)/i.test(s)) return 3;
+      return 4;
+    };
+    missing.sort((a, b) => prio(a) - prio(b));
     if (pass === 1) report.missingFound = missing.length;
 
     const passReport = { pass, attempted: 0, fetched: 0, failed: 0, skipped: 0 };

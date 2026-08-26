@@ -107,13 +107,22 @@ export function buildApiMap(manifest = [], zipFiles = null) {
   for (const r of manifest || []) {
     if (!r) continue;
     const cat = r.category || "";
+    const urlL = String(r.url || "").toLowerCase();
+    const pathL = String(r.localPath || "").toLowerCase();
+    // Juga tangkap snapshot yang tersimpan di assets/ tapi URL-nya API (session/balance/spin)
+    const looksApiUrl =
+      /\/web-api\/|\/game-api\/|\/api\/|verifysession|gamewallet|gameinfo|\/spin|\/balance|\/session/i.test(urlL) ||
+      /api\./i.test(urlL);
     const isApi =
       cat === "api" ||
       cat === "server" ||
       r.type === "xhr" ||
       r.type === "fetch" ||
-      /server\/api/i.test(r.localPath || "");
+      /server\/api/i.test(pathL) ||
+      looksApiUrl;
     if (!isApi) continue;
+    // Skip pure static CDN images even if type xhr (edge)
+    if (/\.(png|jpe?g|gif|webp|mp3|ogg|woff2?)(\?|$)/i.test(urlL) && !looksApiUrl) continue;
 
     const url = r.url || "";
     const path = pathnameOf(url);
@@ -169,15 +178,26 @@ export function buildApiMap(manifest = [], zipFiles = null) {
     hasSnapshot: ep.hasSnapshot
   }));
 
+  const withSnap = endpoints.filter((e) => e.hasSnapshot).length;
+  const byKind = {};
+  for (const ep of endpoints) {
+    byKind[ep.kind] = (byKind[ep.kind] || 0) + 1;
+  }
   return {
     version: 1,
     generatedAt: new Date().toISOString(),
     note:
-      "Peta endpoint API dari collect. Sandbox memakai snapshot bila ada, else mockTemplate per kind.",
+      "Peta endpoint API dari collect. Sandbox: snapshot > mockTemplate. Hybrid online: biarkan network untuk path ini.",
+    hybrid: {
+      mode: "snapshot-or-mock",
+      tip: "Preview Hybrid = asset lokal + API network; Sandbox = snapshot/mock dari map ini"
+    },
     totals: {
       endpoints: endpoints.length,
-      withSnapshot: endpoints.filter((e) => e.hasSnapshot).length
+      withSnapshot: withSnap,
+      byKind
     },
+    byKind,
     endpoints,
     routes
   };

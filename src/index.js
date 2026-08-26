@@ -1567,8 +1567,19 @@ export default {
       } catch {}
 
       await report(72, "rewrite", "Smart path rewrite + frame-buster...", { files: manifest.length });
-      // Smart offline packaging: path rewrite + frame-buster neutralize
-      const smart = smartPackage(zipFiles, manifest);
+      // Smart offline packaging: path rewrite (signed URL → lokal) + frame-buster
+      let smart = smartPackage(zipFiles, manifest);
+      // Pass 2 rewrite if recovery menambah file baru
+      if (recoveryReport && recoveryReport.recovered > 0) {
+        const smart2 = smartPackage(zipFiles, manifest);
+        smart = {
+          ...smart,
+          rewritten: (smart.rewritten || 0) + (smart2.rewritten || 0),
+          urlHits: (smart.urlHits || 0) + (smart2.urlHits || 0),
+          neutralized: (smart.neutralized || 0) + (smart2.neutralized || 0),
+          recoveryRewritePass: true
+        };
+      }
 
       // Post-collect audit: http(s) tersisa → unresolved asset ≠ API
       let collectAudit = null;
@@ -1579,8 +1590,9 @@ export default {
         await report(
           78,
           "audit",
-          "Audit: unresolved " +
-            (collectAudit.byStatus?.unresolvedAssets || 0) +
+          "Audit: https-asset " +
+            (collectAudit.httpsAssetRemaining ?? collectAudit.byStatus?.unresolvedAssets ?? 0) +
+            (collectAudit.offlineAssetReady || collectAudit.ok ? " (OK=0)" : "") +
             " · API " +
             (collectAudit.byStatus?.apis || 0) +
             " · fail " +
