@@ -20,6 +20,11 @@ import { analyzeDependencies } from "./analyze/dependency.js";
 import { mapAssetRelations } from "./analyze/relations.js";
 import { fillMissingAssets } from "./collect/fill-missing.js";
 import { postCollectAudit, formatCollectAuditSummary } from "./collect/post-audit.js";
+import { runRecoveryEngine } from "./collect/recovery.js";
+import { buildDependencyQueue, queueReport } from "./collect/queue.js";
+import { staticAnalyzeHtml, staticAnalyzeZip } from "./collect/static-scan.js";
+import { buildUrlMap, formatStatusReport } from "./collect/url-map.js";
+import { sha256 } from "./offline/strict-collector.js";
 import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
 import {
@@ -1033,6 +1038,11 @@ export default {
     // Spin = Interaction Discovery (opsional), default 0 — bukan syarat collect
     const autoSpins = Math.min(15, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 0) || 0));
     const spinDelayMs = Math.min(8000, Math.max(500, Number(body.spin_delay_ms ?? body.spinDelayMs ?? 2200) || 2200));
+    // collectMode: static | runtime | full (default)
+    const collectMode = String(body.mode || body.collect_mode || body.collectMode || "full").toLowerCase();
+    const modeStatic = collectMode === "static";
+    const modeRuntime = collectMode === "runtime" || collectMode === "full" || !modeStatic;
+    const modeFull = collectMode === "full" || (!modeStatic && collectMode !== "runtime");
 
     const id = crypto.randomUUID();
     const progressId = String(body.progressId || body.progress_id || id).slice(0, 80);
@@ -1075,6 +1085,7 @@ export default {
     const manifest = [];
     const seen = new Set();
     const zipFiles = {};
+    const runtimeBodies = new Map(); // url -> body for Recovery Engine
     const recentCapture = [];
     let lastCaptureReport = 0;
     const expectedRefs = new Set(); // skema/referensi yang ditemukan di HTML/JS
@@ -1209,6 +1220,7 @@ export default {
           }
 
           zipFiles[localPath] = new Uint8Array(buffer);
+          try { runtimeBodies.set(u, new Uint8Array(buffer)); } catch (_) {}
           sizeState.rawBytes += buffer.byteLength;
           const entry = {
             url: u,
@@ -1318,7 +1330,9 @@ export default {
           const keywords = [
             "play", "start", "mulai", "continue", "lanjut", "main", "go", "enter",
             "tap to play", "click to play", "klik untuk main", "start game", "play now",
-            "mulai game", "lanjutkan", "ok", "yes", "accept", "agree"
+            "mulai game", "lanjutkan", "ok", "yes", "accept", "agree",
+            "menu", "next", "lanjut", "close", "tutup", "skip", "demo", "loading",
+            "tap", "press", "mulai bermain", "lets go", "let's go"
           ];
           const candidates = [];
           const all = document.querySelectorAll("button, a, div, span, input[type=button], [role=button], .btn, .button");
@@ -1337,7 +1351,7 @@ export default {
             const rb = b.getBoundingClientRect();
             return (rb.width * rb.height) - (ra.width * ra.height);
           });
-          for (const el of candidates.slice(0, 3)) {
+          for (const el of candidates.slice(0, 6)) {
             try {
               el.click();
               await new Promise(r => setTimeout(r, 800));
@@ -1465,6 +1479,74 @@ export default {
         );
       } catch (e) {
         fillReport.error = String(e.message || e);
+      }
+
+      // Static re-scan + dependency queue (honest remaining)
+      let staticReport = { urls: 0, swScripts: [], wasm: [] };
+      let queueInfo = null;
+      try {
+        const st = staticAnalyzeZip(zipFiles, target.href);
+        staticReport = {
+          urls: (st.urls || []).length,
+          swScripts: st.swScripts || [],
+          wasm: st.wasm || []
+        };
+        // Enqueue SW / WASM / static URLs not yet seen
+        for (const u of [...(st.urls || []), ...(st.swScripts || []), ...(st.wasm || [])]) {
+          if (u && !seen.has(u)) {
+            // leave for recovery/fill honesty via queue
+          }
+        }
+        const q = buildDependencyQueue(zipFiles, seen, target.href, st.urls || []);
+        queueInfo = queueReport(q.pending, seen, fillReport.fetched || 0, fillReport.failed || 0);
+      } catch (e) {
+        queueInfo = { error: String(e.message || e) };
+      }
+
+      // Recovery Engine — coba pulihkan stillMissing sebelum session resume
+      let recoveryReport = { recovered: 0, failed: 0, stillMissing: [], methods: {} };
+      try {
+        const failedList = [
+          ...(fillReport.stillMissing || []),
+          ...((queueInfo && queueInfo.stillPending) || [])
+        ];
+        if (failedList.length) {
+          await report(70, "recovery", "Recovery Engine: coba pulihkan asset gagal...", {
+            files: manifest.length
+          });
+          const hashIndex = new Map();
+          for (const [path, data] of Object.entries(zipFiles || {})) {
+            if (!data || typeof data === "string") continue;
+            try {
+              const h = sha256(data instanceof Uint8Array ? data : new Uint8Array(data));
+              if (h && !hashIndex.has(h)) hashIndex.set(h, path);
+            } catch (_) {}
+          }
+          recoveryReport = await runRecoveryEngine(failedList, {
+            seen,
+            zipFiles,
+            manifest,
+            baseHref: target.href,
+            runtimeBodies,
+            hashIndex,
+            maxRecover: 50
+          });
+          // stillMissing jujur = recovery sisa
+          fillReport.stillMissing = recoveryReport.stillMissing || [];
+          await report(
+            71,
+            "recovery",
+            "Recovery: +" +
+              (recoveryReport.recovered || 0) +
+              " · gagal " +
+              (recoveryReport.failed || 0) +
+              " · sisa " +
+              ((recoveryReport.stillMissing || []).length),
+            { files: manifest.length }
+          );
+        }
+      } catch (e) {
+        recoveryReport.error = String(e.message || e);
       }
 
       // Simpan session resume jika masih ada missing (A.6)
@@ -1658,7 +1740,27 @@ export default {
       zipFiles["analisis.json"] = strToU8(JSON.stringify(analysis, null, 2));
       if (deps) zipFiles["dependency.json"] = strToU8(JSON.stringify(deps, null, 2));
       if (relations) zipFiles["relations.json"] = strToU8(JSON.stringify(relations, null, 2));
-      zipFiles["kelengkapan.json"] = strToU8(JSON.stringify({
+            // URL map + status report (ultimate collector report engine)
+      try {
+        const urlMapBuilt = buildUrlMap(manifest);
+        zipFiles["url-map.json"] = strToU8(JSON.stringify(urlMapBuilt, null, 2));
+        const statusReport = formatStatusReport({
+          fillReport,
+          recoveryReport,
+          queueInfo,
+          audit: typeof collectAudit !== "undefined" ? collectAudit : null,
+          urlMap: urlMapBuilt
+        });
+        statusReport.static = staticReport;
+        statusReport.mode = typeof collectMode !== "undefined" ? collectMode : "full";
+        zipFiles["collect-status.json"] = strToU8(JSON.stringify(statusReport, null, 2));
+      } catch (e) {
+        try {
+          zipFiles["collect-status.json"] = strToU8(JSON.stringify({ error: String(e.message || e) }));
+        } catch (_) {}
+      }
+
+zipFiles["kelengkapan.json"] = strToU8(JSON.stringify({
         autoFill: fillReport,
         summary: {
           referencedMissing: fillReport.missingFound,
