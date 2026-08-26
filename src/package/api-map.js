@@ -27,8 +27,8 @@ function kindFromEntry(r) {
 
 function mockTemplateForKind(kind) {
   const balance = 100000;
-  const session = { id: "sandbox-local", ok: true, si: "sandbox-local" };
-  // Bentuk respons multi-provider (umum di slot Asia): dt/err + data nested
+  const session = { id: "sandbox-local", ok: true, si: "sandbox-local", tk: "sandbox-token" };
+  // Multi-provider (PG Soft / Asia aggregator): dt + err + nested data + flat keys
   const wrap = (data) => ({
     ok: true,
     mock: true,
@@ -37,8 +37,11 @@ function mockTemplateForKind(kind) {
     error: 0,
     code: 0,
     status: "ok",
+    success: true,
+    message: "ok",
     dt: data,
-    data,
+    data: { ...data },
+    result: data,
     ...data
   });
 
@@ -55,44 +58,66 @@ function mockTemplateForKind(kind) {
       return wrap({
         win,
         winAmount: win,
+        totalWin: win,
         balance,
         bl: balance,
         credit: balance,
         symbols,
         reels: symbols,
         rl: symbols,
+        orl: symbols,
         si: session.si,
+        tk: session.tk,
         roundId: "r-" + Date.now(),
-        ct: Date.now()
+        ct: Date.now(),
+        st: 1,
+        nst: 1,
+        ctw: win
       });
     }
     case "balance":
-      return wrap({ balance, bl: balance, credit: balance, currency: "IDR" });
+      return wrap({
+        balance,
+        bl: balance,
+        credit: balance,
+        currency: "IDR",
+        tb: balance,
+        cb: balance
+      });
     case "session":
     case "auth":
       return wrap({
         session,
+        si: session.si,
+        tk: session.tk,
         token: "sandbox-token",
         accessToken: "sandbox-token",
         balance,
         bl: balance,
-        playerId: "p-sandbox"
+        playerId: "p-sandbox",
+        uid: "p-sandbox",
+        geu: "",
+        lau: ""
       });
     case "init":
     case "launch":
       return wrap({
         session,
+        si: session.si,
+        tk: session.tk,
         balance,
         bl: balance,
         config: { rtp: 96, lines: 20, betLevels: [100, 200, 500, 1000] },
         gameInfo: { name: "sandbox-game", offline: true },
-        symbols: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        symbols: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        wt: "C",
+        fb: null
       });
     case "history":
     case "result":
-      return wrap({ items: [], list: [], balance, bl: balance });
+      return wrap({ items: [], list: [], balance, bl: balance, hist: [] });
     default:
-      return wrap({ balance, session });
+      return wrap({ balance, bl: balance, session, si: session.si, tk: session.tk });
   }
 }
 
@@ -143,7 +168,7 @@ export function buildApiMap(manifest = [], zipFiles = null) {
             : new TextDecoder().decode(raw.slice ? raw.slice(0, 120000) : raw);
         const t = text.trim();
         if (t.startsWith("{") || t.startsWith("[")) {
-          snapshot = JSON.parse(t.length > 100000 ? t.slice(0, 100000) : t);
+          snapshot = JSON.parse(t.length > 200000 ? t.slice(0, 200000) : t);
         }
       } catch {
         /* ignore */
@@ -162,9 +187,11 @@ export function buildApiMap(manifest = [], zipFiles = null) {
       fields: r.apiFields || null,
       topKeys: r.apiTopKeys || null,
       hasSnapshot: Boolean(snapshot),
-      // Snapshot dipangkas agar api-map.json tidak membengkak
+      // Snapshot lebih dalam (session/init perlu field lengkap)
       snapshot: snapshot && typeof snapshot === "object"
-        ? (Array.isArray(snapshot) ? snapshot.slice(0, 20) : Object.fromEntries(Object.entries(snapshot).slice(0, 40)))
+        ? (Array.isArray(snapshot)
+            ? snapshot.slice(0, 50)
+            : Object.fromEntries(Object.entries(snapshot).slice(0, 80)))
         : null,
       mockTemplate: mockTemplateForKind(kind)
     });

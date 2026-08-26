@@ -16,6 +16,7 @@ import { buildApiMap } from "./package/api-map.js";
 import { handleAssetProxy } from "./lib/asset-proxy.js";
 import { smartPackage } from "./package/smart-rewrite.js";
 import { applyHybridCdnFix } from "./package/hybrid-cdn-fix.js";
+import { buildOfflineSuperReport, injectOfflineBootstrap, ensureCriticalApiMocks } from "./package/offline-engine.js";
 import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
 import { mapAssetRelations } from "./analyze/relations.js";
@@ -1772,14 +1773,42 @@ export default {
       zipFiles["manifest.json"] = strToU8(JSON.stringify(manifestData, null, 2));
       zipFiles["keterangan.json"] = strToU8(JSON.stringify(ket.json, null, 2));
       // api-map.json — peta endpoint + snapshot untuk Sandbox mock (Sprint process 2)
+      let apiMapFinal = null;
       try {
-        const apiMap = buildApiMap(manifest, zipFiles);
+        let apiMap = buildApiMap(manifest, zipFiles);
+        apiMap = ensureCriticalApiMocks(apiMap);
+        apiMapFinal = apiMap;
         zipFiles["api-map.json"] = strToU8(JSON.stringify(apiMap, null, 2));
       } catch (e) {
-        zipFiles["api-map.json"] = strToU8(JSON.stringify({
-          version: 1,
+        apiMapFinal = ensureCriticalApiMocks({
+          version: 2,
           error: String(e && e.message || e),
           endpoints: []
+        });
+        zipFiles["api-map.json"] = strToU8(JSON.stringify(apiMapFinal, null, 2));
+      }
+
+      // Offline Super Engine — skor + bootstrap di index.html
+      try {
+        const superRep = buildOfflineSuperReport({
+          zipFiles,
+          manifest,
+          apiMap: apiMapFinal,
+          hybrid: hybridReport,
+          collectAudit
+        });
+        zipFiles["offline-super.json"] = strToU8(JSON.stringify(superRep, null, 2));
+        if (zipFiles["index.html"]) {
+          try {
+            let html = new TextDecoder().decode(zipFiles["index.html"]);
+            html = injectOfflineBootstrap(html, superRep);
+            zipFiles["index.html"] = strToU8(html);
+          } catch (_) {}
+        }
+      } catch (e) {
+        zipFiles["offline-super.json"] = strToU8(JSON.stringify({
+          error: String(e && e.message || e),
+          version: 2
         }, null, 2));
       }
       zipFiles["KETERANGAN.md"] = strToU8(ket.md);

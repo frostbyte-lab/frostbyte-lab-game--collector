@@ -8608,7 +8608,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
   }
 function isApiLike(u){
     var s = String(u || '').toLowerCase();
-    return /\\/api\\/|\\/game\\/(init|session|balance|bet|spin|result|history)|gamewallet|verifysession|game-api|game-proxy|\\/spin\\b|\\/bet\\b|\\/balance\\b|\\/session\\b|graphql|\\/v1\\/|\\/v2\\//i.test(s) || /what-is-my-ip|\/shared\/[^?#]+index\.json/i.test(s);
+    // Signed CDN / static media = ASSET, never API
+    if (/\\.(png|jpe?g|gif|webp|svg|mp3|ogg|woff2?|css|js)(\\?|#|$)/i.test(s)) return false;
+    if (/eajzzxhro\\.com\\/.*\\.(png|jpe?g)/i.test(s)) return false;
+    return /\\/api\\/|\\/game\\/(init|session|balance|bet|spin|result|history)|gamewallet|verifysession|game-api|game-proxy|\\/spin\\b|\\/bet\\b|\\/balance\\b|\\/session\\b|graphql|\\/v1\\/|\\/v2\\//i.test(s) || /what-is-my-ip|\\/shared\\/[^?#]+index\\.json/i.test(s);
   }
   function isExternalHttp(u){
     try {
