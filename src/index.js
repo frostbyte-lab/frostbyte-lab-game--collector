@@ -370,7 +370,7 @@ export default {
           inputs: {
             url: gameUrl,
             wait_seconds: waitSeconds,
-            auto_spins: String(body.auto_spins ?? body.autoSpins ?? "0"),
+            auto_spins: String(body.auto_spins ?? body.autoSpins ?? "3"),
             auto_history: String(body.auto_history ?? body.autoHistory ?? "1"),
             spin_delay_ms: String(body.spin_delay_ms ?? body.spinDelayMs ?? "2200"),
             seed_zip: String(body.seed_zip ?? body.seedZip ?? "")
@@ -1036,9 +1036,9 @@ export default {
     );
 
     // Collect options (process 4)
-    const waitSeconds = Math.min(60, Math.max(3, Number(body.wait_seconds || body.waitSeconds || 12) || 12));
-    // Spin = Interaction Discovery (opsional), default 0 — bukan syarat collect
-    const autoSpins = Math.min(15, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 0) || 0));
+    const waitSeconds = Math.min(60, Math.max(3, Number(body.wait_seconds || body.waitSeconds || 20) || 20));
+    // Spin = Interaction Discovery — Rumus Offline Super v3: default 3
+    const autoSpins = Math.min(15, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 3) || 3));
     const spinDelayMs = Math.min(8000, Math.max(500, Number(body.spin_delay_ms ?? body.spinDelayMs ?? 2200) || 2200));
     // collectMode: static | runtime | full (default)
     const collectMode = String(body.mode || body.collect_mode || body.collectMode || "full").toLowerCase();
@@ -1463,8 +1463,8 @@ export default {
           id,
           env,
           selectAllowed,
-          80,
-          4
+          150,
+          5
         );
         await report(
           68,

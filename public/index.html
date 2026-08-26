@@ -3113,7 +3113,7 @@
           <div class="collect-options" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 4px;">
             <div>
               <label for="collect-wait" style="font-size:12px;color:var(--text-muted);">Wait after load (detik)</label>
-              <input id="collect-wait" type="number" min="3" max="60" value="15" title="Waktu tunggu setelah halaman load agar asset/API sempat jalan">
+              <input id="collect-wait" type="number" min="3" max="60" value="20" title="Waktu tunggu setelah halaman load agar asset/API sempat jalan">
             </div>
             <div>
               <label for="collect-spins" style="font-size:12px;color:var(--text-muted);">Auto-spins (opsional)</label>
@@ -9636,7 +9636,27 @@ function isApiLike(u){
         } catch (_) {}
         var fileN = (rep && rep.fileCount) || Object.keys(zipFileMap || {}).length;
         var apiOk = rep && rep.items && rep.items.some(function (it) { return it.id === 'apimap' && it.ok; });
-        step(1, 'Kelengkapan ~' + ((rep && rep.pct) || 0) + '% · ' + fileN + ' file' + (apiOk ? ' · api-map OK' : ' · api-map lemah'), true);
+        var superLine = '';
+        try {
+          var sp = Object.keys(zipFileMap || {}).find(function (k) { return /(^|\/)offline-super\.json$/i.test(k); });
+          if (sp && zipFileMap[sp]) {
+            var sj = JSON.parse(await zipFileMap[sp].async('string'));
+            superLine =
+              ' · Super v' + (sj.version || '?') + ' score ' + (sj.score != null ? sj.score : '?') +
+              '/' + (sj.grade || '?') +
+              ' session=' + (sj.has_real_session ? 'REAL' : 'no') +
+              ' spin=' + (sj.has_real_spin ? 'REAL' : 'no');
+            if (typeof appendLog === 'function') {
+              appendLog(
+                'Offline Super: score ' + sj.score + ' grade ' + sj.grade +
+                ' · snapshot ' + (sj.snapshot_quality || '?') +
+                (sj.blockers && sj.blockers.length ? ' · blocker: ' + sj.blockers[0] : ''),
+                sj.score >= 75 ? 'ok' : 'warn'
+              );
+            }
+          }
+        } catch (_) {}
+        step(1, 'Kelengkapan ~' + ((rep && rep.pct) || 0) + '% · ' + fileN + ' file' + (apiOk ? ' · api-map OK' : ' · api-map lemah') + superLine, true);
 
         // —— 2. Analisa Game ——
         setLoading(true, 'Pipeline Offline', '2/6 Analisa Game…');
@@ -10931,7 +10951,7 @@ function isApiLike(u){
     // ========== Collect via Cloudflare (Playwright) ==========
     // Semua status & unduhan tetap di web ini — tidak buka tab GitHub.
     function gcCollectOptions() {
-      const wait = String(Math.min(60, Math.max(3, Number(document.getElementById('collect-wait')?.value) || 15)));
+      const wait = String(Math.min(60, Math.max(3, Number(document.getElementById('collect-wait')?.value) || 20)));
       const spins = String(Math.min(15, Math.max(0, Number(document.getElementById('collect-spins')?.value) || 0)));
       const spinDelay = String(Math.min(8000, Math.max(500, Number(document.getElementById('collect-spin-delay')?.value) || 2200)));
       const history = String(document.getElementById('collect-history')?.value === '0' ? '0' : '1');

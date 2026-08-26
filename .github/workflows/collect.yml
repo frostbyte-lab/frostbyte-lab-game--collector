@@ -10,10 +10,10 @@ on:
       wait_seconds:
         description: "Waktu tunggu setelah load (detik)"
         required: false
-        default: "12"
+        default: "20"
         type: string
       auto_spins:
-        description: "Jumlah auto-spin setelah Play (0 = skip)"
+        description: "Jumlah auto-spin setelah Play (Rumus v3: minimal 3)"
         required: false
         default: "3"
         type: string

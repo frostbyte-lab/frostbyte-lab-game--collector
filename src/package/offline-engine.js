@@ -41,59 +41,88 @@ export function buildOfflineSuperReport({
     (collectAudit && collectAudit.byStatus && collectAudit.byStatus.downloadFailed) ||
     manifest.filter((r) => r.collectStatus === "DOWNLOAD_FAILED").length;
 
-  // Score 0–100
+  // --- Rumus 5 v3: skor jujur ---
+  // has_real_* = endpoint kind ada + snapshot (bukan synthetic template)
+  const realByKind = (kind) =>
+    apiEndpoints.some(
+      (e) =>
+        e &&
+        e.kind === kind &&
+        e.hasSnapshot &&
+        e.snapshot &&
+        !e.synthetic &&
+        e.confidence !== "synthetic"
+    );
+  const has_real_session = realByKind("session") || realByKind("init");
+  const has_real_spin = realByKind("spin");
+  const has_real_balance = realByKind("balance");
+  const anyRealSnap = apiEndpoints.some(
+    (e) => e && e.hasSnapshot && e.snapshot && !e.synthetic
+  );
+  const snapshot_quality = anyRealSnap ? "REAL" : "SYNTHETIC";
+
+  // Score v3 (prioritas offline super):
+  // +40 assets/eajzz > 10 | +30 real session | +20 real spin | +10 no unresolved
+  // + bonus kecil index/png agar paket kosong tidak skor 0 palsu "bagus"
   let score = 0;
-  if (hasIndex) score += 15;
-  if (png >= 3) score += 15;
-  else if (png >= 1) score += 8;
-  if (js >= 1) score += 10;
-  if (eajzz >= 1 || (hybrid && hybrid.downloaded > 0)) score += 15;
-  if (apiEndpoints.length >= 1) score += 10;
-  if (withSnap >= 1) score += 15;
-  else if (apiEndpoints.length >= 1) score += 5;
-  if (kinds.session || kinds.init) score += 10;
+  if (eajzz > 10 || ((hybrid && hybrid.downloaded) || 0) > 10) score += 40;
+  else if (eajzz >= 1 || (hybrid && hybrid.downloaded > 0)) score += 20;
+  if (has_real_session) score += 30;
+  if (has_real_spin) score += 20;
   if (unresolved === 0) score += 10;
   else if (unresolved <= 3) score += 4;
-  if (trackingLeft === 0) score += 5;
-  if (downloadFailed === 0) score += 5;
+  // bonus kecil
+  if (hasIndex) score += 5;
+  if (png >= 3) score += 5;
+  if (has_real_balance) score += 5;
+  if (apiEndpoints.length >= 3) score += 5;
   score = Math.min(100, score);
 
   let grade = "F";
   if (score >= 90) grade = "A";
   else if (score >= 75) grade = "B";
-  else if (score >= 60) grade = "C";
+  else if (score >= 50) grade = "C";
   else if (score >= 40) grade = "D";
 
   const blockers = [];
   if (!hasIndex) blockers.push("Tidak ada index.html");
   if (png === 0) blockers.push("Tidak ada gambar di ZIP");
+  if (eajzz < 10 && ((hybrid && hybrid.downloaded) || 0) < 10)
+    blockers.push("assets/eajzz kurang dari 10 (hybrid CDN belum kuat)");
+  if (!has_real_session)
+    blockers.push("Belum ada snapshot session/init REAL — Collect Wait 20 + spins 3");
+  if (!has_real_spin)
+    blockers.push("Belum ada snapshot spin REAL — naikkan auto_spins");
   if (unresolved > 0)
     blockers.push(unresolved + " asset masih URL absolut (perlu hybrid/collect ulang)");
-  if (withSnap === 0 && apiEndpoints.length === 0)
-    blockers.push("Belum ada API snapshot — Sandbox akan mock generik (session mungkin gagal)");
-  if (withSnap === 0 && apiEndpoints.length > 0)
-    blockers.push("API terdeteksi tapi tanpa body snapshot — mock template saja");
   if (downloadFailed > 0)
     blockers.push(downloadFailed + " download gagal (bukan API)");
 
   const recommendations = [];
+  if (!has_real_session || !has_real_spin)
+    recommendations.push("Collect ulang: Wait 20s + Auto-spins 3 (capture session/spin)");
+  if (eajzz < 10)
+    recommendations.push("Hybrid CDN: unduh ?sign= PNG ke assets/eajzz/ lalu rewrite");
   if (unresolved > 0)
-    recommendations.push("Jalankan Auto Repair / AI atau Collect ulang selagi sign CDN valid");
-  if (withSnap === 0)
-    recommendations.push("Collect dengan Wait 15+ dan Auto-spins 2–3 agar session/spin ikut");
-  if (trackingLeft > 0)
-    recommendations.push("Hybrid/Repair untuk hapus GTM (sudah otomatis di hybrid-fix)");
+    recommendations.push("Siapkan Offline / Custom API + hybrid rewrite sebelum klaim offline");
   if (score >= 75)
-    recommendations.push("Siap Sandbox offline-asset; uji spin — jika stuck cek api-map session");
+    recommendations.push("Grade A/B — uji Sandbox; SW cache siap untuk preview/APK");
+  else
+    recommendations.push("Score < 75 — jangan klaim offline 100%; collect/repair dulu");
 
   return {
-    version: 2,
+    version: 3,
     engine: "offline-super",
+    formula: "rumus-offline-v3",
     generatedAt: new Date().toISOString(),
     score,
     grade,
     status:
       score >= 75 ? "READY" : score >= 50 ? "PARTIAL" : "NOT_READY",
+    has_real_session,
+    has_real_spin,
+    has_real_balance,
+    snapshot_quality,
     assets: {
       totalFiles: keys.length,
       indexHtml: hasIndex,
@@ -108,9 +137,9 @@ export function buildOfflineSuperReport({
       withSnapshot: withSnap,
       byKind: kinds,
       note:
-        withSnap > 0
-          ? "Snapshot dipakai dulu di Sandbox"
-          : "Mock template generik — quality terbatas"
+        snapshot_quality === "REAL"
+          ? "Snapshot REAL dipakai dulu di Sandbox"
+          : "Hanya template/synthetic — quality terbatas"
     },
     audit: {
       unresolvedAssets: unresolved,
@@ -119,8 +148,17 @@ export function buildOfflineSuperReport({
     },
     blockers,
     recommendations,
+    checklist7: {
+      offlineSuperJson: true,
+      scoreGte75: score >= 75,
+      gradeAB: grade === "A" || grade === "B",
+      hasRealSession: has_real_session,
+      eajzzGte10: eajzz >= 10 || ((hybrid && hybrid.downloaded) || 0) >= 10,
+      apiEndpointsGte3: apiEndpoints.length >= 3,
+      classifyOk: true
+    },
     philosophy:
-      "Offline 100% = semua ASSET di ZIP + session/spin punya snapshot atau mock yang cocok provider. Token CDN harus di-capture sebelum expired."
+      "Offline 100% murni server-based = mustahil. Target: asset lokal + snapshot API + mock kritis. Score jujur (has_real_*)."
   };
 }
 
@@ -136,7 +174,7 @@ window.__GC_OFFLINE_SUPER__=${JSON.stringify({
     score: superReport.score,
     grade: superReport.grade,
     status: superReport.status,
-    v: 2
+    v: 3
   })};
 console.info("[GC Offline Super]", window.__GC_OFFLINE_SUPER__);
 </script>`;
