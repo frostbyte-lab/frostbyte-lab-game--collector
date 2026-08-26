@@ -101,6 +101,8 @@ function buildBareMap(urlMap) {
 /**
  * Resolve any URL-like string to localPath using map.
  * Handles different ?sign= query than collected URL.
+ * Input:  https://static.eajzzxhro.com/104/xxx.png?sign=...
+ * Output: assets/.../xxx.png (if mapped)
  */
 export function resolveToLocal(raw, urlMap, bareMap) {
   if (!raw || typeof raw !== "string") return null;
@@ -111,6 +113,7 @@ export function resolveToLocal(raw, urlMap, bareMap) {
   const clean = val.split("#")[0];
   if (urlMap.has(clean)) return urlMap.get(clean);
 
+  // Strip ALL query (signed tokens differ per session)
   const noQuery = clean.split("?")[0];
   if (urlMap.has(noQuery)) return urlMap.get(noQuery);
 
@@ -120,9 +123,11 @@ export function resolveToLocal(raw, urlMap, bareMap) {
     if (/^https?:/i.test(clean) || clean.startsWith("//")) {
       const abs = clean.startsWith("//") ? "https:" + clean : clean;
       const uu = new URL(abs);
+      // Drop search entirely for matching
+      const originPath = uu.origin + uu.pathname;
       const candidates = [
         uu.href,
-        uu.origin + uu.pathname,
+        originPath,
         uu.pathname,
         uu.pathname.slice(1),
         uu.pathname.split("/").filter(Boolean).slice(-2).join("/"),
@@ -132,6 +137,10 @@ export function resolveToLocal(raw, urlMap, bareMap) {
       for (const c of candidates) {
         if (c && urlMap.has(c)) return urlMap.get(c);
         if (c && bareMap.has(c)) return bareMap.get(c);
+        // bare without ?sign
+        const c0 = String(c).split("?")[0];
+        if (c0 && bareMap.has(c0)) return bareMap.get(c0);
+        if (c0 && urlMap.has(c0)) return urlMap.get(c0);
       }
     } else {
       // relative / absolute path
@@ -298,14 +307,65 @@ export function rewriteContent(text, urlMap, isHtml, opts = {}) {
 /**
  * Package-wide smart rewrite
  */
+/**
+ * Index basename → path in zip (for signed CDN force-rewrite).
+ */
+function buildZipBasenameIndex(zipFiles) {
+  const byBase = new Map();
+  for (const p of Object.keys(zipFiles || {})) {
+    if (/^BACKUP\//i.test(p)) continue;
+    const base = p.split("/").pop() || "";
+    if (!base || base.length < 3) continue;
+    // strip collector prefix "0042-"
+    const bare = base.replace(/^\d{3,5}-/, "");
+    if (!byBase.has(base.toLowerCase())) byBase.set(base.toLowerCase(), p);
+    if (bare !== base && !byBase.has(bare.toLowerCase())) byBase.set(bare.toLowerCase(), p);
+  }
+  return byBase;
+}
+
+/** Force rewrite remaining signed CDN URLs by basename match in ZIP */
+function forceSignedCdnRewrite(text, byBase) {
+  let n = 0;
+  const out = String(text).replace(
+    /(?:https?:)?\/\/(?:static\.)?[a-z0-9.-]+\/[^\s"'<>)\\]*\.(?:png|jpe?g|gif|webp|svg|mp3|ogg|woff2?|json|atlas)(?:\?[^\s"'<>)\\]*)?/gi,
+    (match) => {
+      let url = match;
+      let trail = "";
+      while (/[.,;:)]$/.test(url)) {
+        trail = url.slice(-1) + trail;
+        url = url.slice(0, -1);
+      }
+      try {
+        const pathOnly = url.split("?")[0];
+        const base = pathOnly.split("/").pop() || "";
+        if (!base) return match;
+        const local =
+          byBase.get(base.toLowerCase()) ||
+          byBase.get(base.replace(/^\d{3,5}-/, "").toLowerCase());
+        if (local) {
+          n++;
+          return local + trail;
+        }
+      } catch {
+        /* keep */
+      }
+      return match;
+    }
+  );
+  return { text: out, count: n };
+}
+
 export function smartPackage(zipFiles, manifest) {
   const urlMap = buildUrlToLocalMap(manifest);
   const bareMap = buildBareMap(urlMap);
+  const zipBase = buildZipBasenameIndex(zipFiles);
   const result = {
     rewritten: 0,
     neutralized: 0,
     sourceMapsStripped: 0,
     urlHits: 0,
+    signedCdnHits: 0,
     mapSize: urlMap.size
   };
 
@@ -326,6 +386,10 @@ export function smartPackage(zipFiles, manifest) {
         const rw = rewriteContent(text, urlMap, isHtml, { passes: 3 });
         text = rw.text;
         result.urlHits += rw.urlHits || 0;
+        const forced = forceSignedCdnRewrite(text, zipBase);
+        text = forced.text;
+        result.signedCdnHits += forced.count || 0;
+        result.urlHits += forced.count || 0;
       }
 
       if (isJs || isHtml) {
@@ -347,7 +411,15 @@ export function smartPackage(zipFiles, manifest) {
           let touched = false;
           const walk = (obj) => {
             if (typeof obj === "string") {
-              const local = resolveToLocal(obj, urlMap, bareMap);
+              let local = resolveToLocal(obj, urlMap, bareMap);
+              if (!local && /^https?:\/\//i.test(obj)) {
+                try {
+                  const base = new URL(obj).pathname.split("/").pop() || "";
+                  local = zipBase.get(base.toLowerCase()) || null;
+                } catch {
+                  /* */
+                }
+              }
               if (local) {
                 touched = true;
                 return local;

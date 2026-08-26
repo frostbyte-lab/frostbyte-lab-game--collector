@@ -76,8 +76,11 @@ export async function handleAssetProxy(request, url) {
       headers: {
         "User-Agent":
           request.headers.get("User-Agent") ||
-          "Mozilla/5.0 (compatible; GameCollectorPro-AssetProxy/1.0)",
-        Accept: request.headers.get("Accept") || "*/*",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: request.headers.get("Accept") || "image/avif,image/webp,image/*,*/*;q=0.8",
+        // Banyak CDN signed butuh Referer dari origin game
+        Referer: request.headers.get("Referer") || target.origin + "/",
+        Origin: target.origin,
         Referer: target.origin + "/"
       }
     });

@@ -52,6 +52,31 @@ const SVG_NS = /^https?:\/\/www\.w3\.org\/2000\/svg/i;
 const ASSET_EXT =
   /\.(png|jpe?g|gif|webp|avif|svg|ico|bmp|woff2?|ttf|otf|mp3|ogg|wav|m4a|aac|mp4|webm|wasm|atlas|css|js|mjs)(\?|#|$)/i;
 
+/** CDN static known PG / game asset hosts — always ASSET if path is media */
+const SIGNED_CDN_HOSTS = [
+  /static\.eajzzxhro\.com/i,
+  /static\.[a-z0-9-]+\.com/i,
+  /cdn\.[a-z0-9-]+\./i,
+  /assets\.[a-z0-9-]+\./i,
+  /img\.[a-z0-9-]+\./i,
+  /media\.[a-z0-9-]+\./i
+];
+
+function isSignedAssetUrl(url, pathname) {
+  const u = String(url || "");
+  // ?sign= / ?Signature= / ?token= on media path = signed CDN asset, NEVER API
+  if (
+    /[?&](sign|signature|sig|token|Expires|X-Amz-Signature)=/i.test(u) &&
+    ASSET_EXT.test(pathname || u)
+  ) {
+    return true;
+  }
+  if (SIGNED_CDN_HOSTS.some((re) => re.test(u)) && ASSET_EXT.test(pathname || u)) {
+    return true;
+  }
+  return false;
+}
+
 const API_PATH_HINTS = [
   "/api/",
   "/v1/",
@@ -132,6 +157,15 @@ export function classifyResource(url, type, contentType, bodyText) {
       category: "server",
       reason: "tracking",
       status: STRICT_STATUS.TRACKING
+    };
+  }
+
+  // 0) Signed CDN / static media — GAME ASSET (bukan API meski ada ?sign=)
+  if (isSignedAssetUrl(u, pathname)) {
+    return {
+      category: "game",
+      reason: "signed-cdn-asset",
+      status: STRICT_STATUS.ASSET
     };
   }
 
