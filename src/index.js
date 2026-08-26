@@ -15,6 +15,7 @@ import { buildKeterangan } from "./package/keterangan.js";
 import { buildApiMap } from "./package/api-map.js";
 import { handleAssetProxy } from "./lib/asset-proxy.js";
 import { smartPackage } from "./package/smart-rewrite.js";
+import { applyHybridCdnFix } from "./package/hybrid-cdn-fix.js";
 import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
 import { mapAssetRelations } from "./analyze/relations.js";
@@ -1579,6 +1580,39 @@ export default {
           neutralized: (smart.neutralized || 0) + (smart2.neutralized || 0),
           recoveryRewritePass: true
         };
+      }
+
+      // Opsi 2 HYBRID: hapus tracking, download signed CDN → assets/eajzz/, rewrite
+      let hybridReport = null;
+      try {
+        await report(74, "hybrid", "Hybrid CDN fix (tracking off + lokal asset)...", { files: manifest.length });
+        hybridReport = await applyHybridCdnFix(zipFiles, manifest, {
+          baseUrl: target.href,
+          assetDir: "assets/eajzz"
+        });
+        // Rewrite lagi setelah file baru masuk
+        if (hybridReport.downloaded > 0) {
+          const smart3 = smartPackage(zipFiles, manifest);
+          smart = {
+            ...smart,
+            rewritten: (smart.rewritten || 0) + (smart3.rewritten || 0),
+            urlHits: (smart.urlHits || 0) + (smart3.urlHits || 0),
+            hybridDownloaded: hybridReport.downloaded,
+            trackingRemoved: hybridReport.trackingRemoved
+          };
+        } else {
+          smart.hybridDownloaded = hybridReport.downloaded || 0;
+          smart.trackingRemoved = hybridReport.trackingRemoved || 0;
+        }
+        zipFiles["hybrid-fix.json"] = strToU8(JSON.stringify(hybridReport, null, 2));
+        await report(
+          75,
+          "hybrid",
+          "Hybrid: +" + (hybridReport.downloaded || 0) + " CDN · tracking -" + (hybridReport.trackingRemoved || 0) + " · fail " + ((hybridReport.failed || []).length),
+          { files: Object.keys(zipFiles).length }
+        );
+      } catch (e) {
+        hybridReport = { error: String(e.message || e) };
       }
 
       // Post-collect audit: http(s) tersisa → unresolved asset ≠ API

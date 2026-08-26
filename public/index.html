@@ -6888,15 +6888,20 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           || /googletagmanager|google-analytics/i.test(host)) {
         return { url: u, host: host, kind: 'TRACKING', status: 'TRACKING', action: 'REMOVE' };
       }
-      const isApi = /\/api\/|\/game\/|spin|bet|balance|session|wallet|verifysession|gamedata|launch|auth|token|wss?:\/\//i.test(low)
-        || /graphql|socket\.io|xhr|ajax/i.test(low);
+      // Signed CDN image/audio = ASSET (bukan API meski ada ?sign= / token)
+      const isSignedCdnAsset = (/[?&](sign|signature|sig)=/i.test(low) || /eajzzxhro\.com|static\./i.test(host))
+        && /\.(png|jpe?g|gif|webp|svg|mp3|ogg|woff2?)(\?|#|$)/i.test(low);
+      if (isSignedCdnAsset) {
+        return { url: u, host: host, kind: 'ASSET', status: 'ASSET', base: base, pathname: pathname, action: 'COLLECT', note: 'signed-cdn' };
+      }
+      const isApi = /\/api\/|\/game\/|spin|bet|balance|session|wallet|verifysession|gamedata|launch|auth|wss?:\/\//i.test(low)
+        || /graphql|socket\.io/i.test(low);
       const isAsset = /\.(js|mjs|css|png|jpe?g|gif|webp|svg|avif|mp3|ogg|wav|mp4|webm|woff2?|ttf|otf|json|wasm|atlas|bin|data)(\?|#|$)/i.test(low)
         || /\/assets?\/|\/static\/|\/cdn\/|\/res\/|\/img\/|\/fonts?\//i.test(low);
       let kind = 'UNKNOWN';
       let status = 'UNKNOWN';
-      if (isApi && !isAsset) { kind = 'API/backend'; status = 'API'; }
-      else if (isAsset && !isApi) { kind = 'ASSET'; status = 'ASSET'; }
-      else if (isApi && isAsset) { kind = 'campuran (API+asset)'; status = 'API'; }
+      if (isAsset) { kind = 'ASSET'; status = 'ASSET'; }
+      else if (isApi) { kind = 'API/backend'; status = 'API'; }
       else if (/fonts\.googleapis|gstatic/i.test(low)) { kind = 'font eksternal'; status = 'ASSET'; }
       return { url: u, host: host, kind: kind, status: status, base: base, pathname: pathname, action: status === 'ASSET' ? 'COLLECT' : (status === 'API' ? 'BACKEND' : 'REVIEW') };
     }
@@ -8926,9 +8931,9 @@ function isApiLike(u){
         } catch (_) {}
         base = base.replace(/[^\w.\-]+/g, '_') || 'asset.bin';
         if (!/\.[a-z0-9]{1,8}$/i.test(base)) base += '.png';
-        const localPath = 'assets/images/' + base;
+        const localPath = 'assets/eajzz/' + base;
         // skip if path already exists
-        if (zipFileMap[localPath] || zipFileMap['assets/' + base]) {
+        if (zipFileMap[localPath] || zipFileMap['assets/images/' + base] || zipFileMap['assets/' + base]) {
           skipped++;
           details.push('SKIP exists: ' + localPath);
           continue;
@@ -9009,7 +9014,7 @@ function isApiLike(u){
       // Pass A: unduh ASSET CDN yang belum ada di ZIP (6 PNG signed, dll.)
       let fetchReport = { fetched: 0, failed: 0, details: [] };
       try {
-        fetchReport = await gcStrictFetchMissingAssets(16);
+        fetchReport = await gcStrictFetchMissingAssets(24);
         if (fetchReport.fetched) {
           appendLog('Strict download: ' + fetchReport.fetched + ' asset → ZIP', 'ok');
         }
