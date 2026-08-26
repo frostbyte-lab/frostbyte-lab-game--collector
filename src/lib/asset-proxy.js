@@ -69,19 +69,35 @@ export async function handleAssetProxy(request, url) {
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
+    // PG Soft / signed CDN: butuh Referer & Origin game, bukan origin proxy
+    const host = String(target.hostname || "").toLowerCase();
+    const isPgSoftCdn =
+      /pgsoft|pg-soft|eajzzxhro|static\.[a-z0-9-]+\.(com|net|io)/i.test(host) ||
+      /\?sign=/i.test(target.href);
+    const pgOrigin = "https://m.pgsoft-games.com";
+    const referer =
+      request.headers.get("X-GC-Referer") ||
+      (isPgSoftCdn ? pgOrigin + "/" : null) ||
+      request.headers.get("Referer") ||
+      target.origin + "/";
+    const originHdr = isPgSoftCdn ? pgOrigin : target.origin;
+    const ua =
+      isPgSoftCdn
+        ? "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+        : request.headers.get("User-Agent") ||
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
     const upstream = await fetch(target.href, {
       method: request.method === "HEAD" ? "HEAD" : "GET",
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "User-Agent":
-          request.headers.get("User-Agent") ||
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: request.headers.get("Accept") || "image/avif,image/webp,image/*,*/*;q=0.8",
-        // Banyak CDN signed butuh Referer dari origin game
-        Referer: request.headers.get("Referer") || target.origin + "/",
-        Origin: target.origin,
-        Referer: target.origin + "/"
+        "User-Agent": ua,
+        Accept:
+          request.headers.get("Accept") ||
+          "image/avif,image/webp,image/apng,image/png,image/*,*/*;q=0.8",
+        Referer: referer,
+        Origin: originHdr
       }
     });
 
@@ -108,7 +124,8 @@ export async function handleAssetProxy(request, url) {
     headers.set("X-GC-Proxy", "1");
     headers.set("X-GC-Proxy-URL", target.href.slice(0, 500));
     // Same-origin for the app; allow embed from our own pages
-    headers.set("Access-Control-Allow-Origin", url.origin);
+    headers.set("Access-Control-Allow-Origin", "*");
+    headers.set("X-GC-Proxy-Referer", referer.slice(0, 120));
     headers.set("Cross-Origin-Resource-Policy", "cross-origin");
 
     if (request.method === "HEAD") {
