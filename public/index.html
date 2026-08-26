@@ -7368,6 +7368,59 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
 
     /** Service Worker helpers — cache ZIP assets di /__gc__/ untuk preview offline (process 5) */
+
+    function gcSetHybridPolicy(mode, extra) {
+      return new Promise(function (resolve) {
+        if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+          resolve({ ok: false, error: 'no-sw' });
+          return;
+        }
+        extra = extra || {};
+        var channel = new MessageChannel();
+        var t = setTimeout(function () { resolve({ ok: false, error: 'timeout' }); }, 8000);
+        channel.port1.onmessage = function (ev) {
+          clearTimeout(t);
+          resolve(ev.data || { ok: false });
+        };
+        try {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'SET_HYBRID_POLICY',
+            mode: mode === 'offline' ? 'offline' : 'hybrid',
+            apiPatterns: extra.apiPatterns || undefined,
+            allowHosts: extra.allowHosts || undefined
+          }, [channel.port2]);
+        } catch (e) {
+          clearTimeout(t);
+          resolve({ ok: false, error: String(e.message || e) });
+        }
+      });
+    }
+
+    async function gcBuildApiPatternsFromZip() {
+      var patterns = ['/api/', '/v1/', '/v2/', '/graphql', '/session', '/spin', '/bet', '/balance', '/wallet', '/auth', '/login'];
+      try {
+        var names = Object.keys(zipFileMap || {});
+        var mapPath = names.find(function (n) { return /(^|\/)api-map\.json$/i.test(n); });
+        if (mapPath && zipFileMap[mapPath]) {
+          var raw = await zipFileMap[mapPath].async('string');
+          var j = JSON.parse(raw);
+          var eps = j.endpoints || j.apis || j.routes || [];
+          if (Array.isArray(eps)) {
+            eps.forEach(function (ep) {
+              var u = typeof ep === 'string' ? ep : (ep && (ep.url || ep.path || ep.endpoint));
+              if (!u) return;
+              try {
+                var path = u.startsWith('http') ? new URL(u).pathname : String(u);
+                if (path && path.length > 1 && patterns.indexOf(path) < 0) patterns.push(path);
+              } catch (_) {}
+            });
+          }
+        }
+      } catch (_) {}
+      return patterns;
+    }
+
+
     function gcSwReady() {
       return !!(navigator.serviceWorker && navigator.serviceWorker.controller);
     }
@@ -7626,7 +7679,18 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       }
       releasePreviewAssets();
       if (typeof closeHostingPage === 'function') closeHostingPage();
-      if (isHybrid) appendLog('Preview Hybrid: asset eksternal via /api/asset-proxy (same-origin)', 'ok');
+      if (isHybrid) appendLog('Preview Hybrid: asset lokal (/__gc__) + network API diizinkan', 'ok');
+      else appendLog('Preview Offline-leaning: SW policy offline untuk API-like request', 'ok');
+
+      // Service Worker hybrid / offline policy (bukan collect)
+      try {
+        var patterns = await gcBuildApiPatternsFromZip();
+        var pol = await gcSetHybridPolicy(isHybrid ? 'hybrid' : 'offline', { apiPatterns: patterns });
+        if (pol && pol.ok) appendLog('SW policy: ' + (isHybrid ? 'hybrid' : 'offline') + ' · API patterns ' + patterns.length, 'ok');
+        else appendLog('SW policy: belum aktif (register SW / hard refresh)', 'warn');
+      } catch (e) {
+        appendLog('SW policy: ' + (e && e.message ? e.message : e), 'warn');
+      }
 
       // Masuk mode preview split (tetap di Workspace, tidak pindah tab browser)
       const pm = document.getElementById('preview-mode');
@@ -10975,7 +11039,7 @@ function isApiLike(u){
         });
         window.addEventListener('appinstalled', () => { deferredInstall = null; if (installButton) installButton.hidden = true; showUpdateNote('Game Collector Pro sudah terpasang di HP.'); });
         if (!('serviceWorker' in navigator)) return;
-        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => {
+        navigator.serviceWorker.register('/sw.js?v=6', { updateViaCache: 'none' }).then((registration) => {
           const hadController = Boolean(navigator.serviceWorker.controller);
           let reloading = false;
           navigator.serviceWorker.addEventListener('controllerchange', () => {
