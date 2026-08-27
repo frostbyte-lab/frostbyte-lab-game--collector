@@ -9913,6 +9913,152 @@ function isApiLike(u){
       return { fetched: fetched, failed: failed, skipped: skipped, remaining: Math.max(0, need.length - fetched - failed - skipped), details: details, needCount: need.length };
     }
 
+
+    /** Rename massal path UUID/hash → nama profesional (img-/api-/js-) + update referensi teks */
+    async function gcProfessionalRenameInZip() {
+      if (!currentZip || !zipFileMap) return { renamed: 0, map: {} };
+      const paths = Object.keys(zipFileMap).filter(function (p) {
+        return p && !/^BACKUP\//i.test(p) && !/\/$/.test(p);
+      });
+      const renameMap = {}; // oldPath -> newPath
+      const used = new Set(paths.map(function (p) { return p.toLowerCase(); }));
+
+      function shortHash(s, n) {
+        var h = 2166136261;
+        s = String(s || '');
+        for (var i = 0; i < s.length; i++) {
+          h ^= s.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return (h >>> 0).toString(16).padStart(8, '0').slice(0, n || 8);
+      }
+      function isUglyName(base) {
+        if (!base) return true;
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i.test(base)) return true;
+        if (/^\d{4}-[0-9a-f]{8}-[0-9a-f]{4}/i.test(base)) return true;
+        if (/^\d{4}-[0-9a-f]{20,}/i.test(base)) return true;
+        if (base.length > 52 && !/\.(png|jpe?g|gif|webp|js|css|json|html)$/i.test(base)) return true;
+        return false;
+      }
+      function roleFrom(path, base) {
+        var low = (path + ' ' + base).toLowerCase();
+        if (/balance|wallet|credit/.test(low)) return 'api-balance';
+        if (/session|verifysession|auth/.test(low)) return 'api-session';
+        if (/spin|bet|wager/.test(low)) return 'api-spin';
+        if (/gameinfo|gamedata|init|launch/.test(low)) return 'api-init';
+        if (/getbyresources|resources/.test(low)) return 'api-resources';
+        if (/\.(png|jpe?g|gif|webp|svg|avif)$/i.test(base)) return 'img';
+        if (/\.(js|mjs)$/i.test(base)) return 'js';
+        if (/\.css$/i.test(base)) return 'css';
+        if (/\.json$/i.test(base)) return 'data';
+        if (/\.html?$/i.test(base)) return 'html';
+        if (/\.(mp3|ogg|wav)$/i.test(base)) return 'media';
+        if (path.indexOf('assets/images') >= 0) return 'img';
+        if (path.indexOf('assets/js') >= 0) return 'js';
+        if (path.indexOf('server/api') >= 0 || path.indexOf('assets/data') >= 0) return 'data';
+        return 'asset';
+      }
+      function extOf(base) {
+        var m = /\.([a-z0-9]{1,8})$/i.exec(base);
+        return m ? m[1].toLowerCase() : 'bin';
+      }
+
+      paths.forEach(function (oldPath, idx) {
+        var parts = oldPath.split('/');
+        var base = parts.pop() || oldPath;
+        if (!isUglyName(base)) return;
+        var dir = parts.join('/');
+        var role = roleFrom(oldPath, base);
+        var ext = extOf(base);
+        if (ext === 'bin' && role.indexOf('api') === 0) ext = 'json';
+        if (ext === 'bin' && role === 'img') ext = 'png';
+        var seq = String(idx + 1).padStart(4, '0');
+        // preserve leading 4-digit seq if present
+        var seqM = /^(\d{4})-/.exec(base);
+        if (seqM) seq = seqM[1];
+        var nice = seq + '-' + role + '-' + shortHash(oldPath, 8) + '.' + ext;
+        var newPath = (dir ? dir + '/' : '') + nice;
+        var n = 0;
+        while (used.has(newPath.toLowerCase()) && newPath !== oldPath) {
+          n++;
+          nice = seq + '-' + role + '-' + shortHash(oldPath + n, 8) + '.' + ext;
+          newPath = (dir ? dir + '/' : '') + nice;
+        }
+        if (newPath === oldPath) return;
+        renameMap[oldPath] = newPath;
+        used.add(newPath.toLowerCase());
+        used.delete(oldPath.toLowerCase());
+      });
+
+      var keys = Object.keys(renameMap);
+      if (!keys.length) return { renamed: 0, map: {} };
+
+      // Pindahkan binary di JSZip
+      for (var i = 0; i < keys.length; i++) {
+        var from = keys[i];
+        var to = renameMap[from];
+        try {
+          var entry = zipFileMap[from];
+          if (!entry) continue;
+          var buf = await entry.async('uint8array');
+          currentZip.file(to, buf);
+          try { currentZip.remove(from); } catch (_) {}
+          delete zipFileMap[from];
+          zipFileMap[to] = currentZip.file(to);
+          if (openFiles.has(from)) {
+            openFiles.set(to, openFiles.get(from));
+            openFiles.delete(from);
+          }
+          if (currentFile === from) currentFile = to;
+        } catch (e) {
+          appendLog('Rename gagal ' + from + ': ' + (e && e.message || e), 'warn');
+        }
+      }
+
+      // Update referensi di teks (path lama → path baru + basename)
+      var textPaths = Object.keys(zipFileMap).filter(function (p) {
+        return /\.(html?|css|js|mjs|json)$/i.test(p);
+      });
+      var refChanges = 0;
+      for (var j = 0; j < textPaths.length; j++) {
+        var tp = textPaths[j];
+        var code;
+        try {
+          code = openFiles.has(tp) ? openFiles.get(tp) : await zipFileMap[tp].async('string');
+        } catch (_) { continue; }
+        var next = code;
+        keys.forEach(function (from) {
+          var to = renameMap[from];
+          if (next.indexOf(from) >= 0) {
+            next = next.split(from).join(to);
+            refChanges++;
+          }
+          var fromBase = from.split('/').pop();
+          var toBase = to.split('/').pop();
+          if (fromBase && toBase && fromBase !== toBase && next.indexOf(fromBase) >= 0) {
+            // only replace whole basename-ish occurrences
+            next = next.split(fromBase).join(toBase);
+            refChanges++;
+          }
+        });
+        if (next !== code) {
+          openFiles.set(tp, next);
+          currentZip.file(tp, next);
+          zipFileMap[tp] = currentZip.file(tp);
+          if (currentFile === tp && editor) {
+            try { editor.setValue(next); } catch (_) {}
+          }
+        }
+      }
+
+      try {
+        if (typeof renderFileTree === 'function') renderFileTree(Object.keys(zipFileMap));
+      } catch (_) {}
+
+      return { renamed: keys.length, map: renameMap, refChanges: refChanges };
+    }
+    window.gcProfessionalRenameInZip = gcProfessionalRenameInZip;
+
     async function runAutoRepair() {
       if (!currentZip) {
         appendLog('Auto Repair: load ZIP dulu.', 'warn');
@@ -9933,6 +10079,18 @@ function isApiLike(u){
         });
       } catch (fe) {
         appendLog('Strict download skip: ' + (fe && fe.message || fe), 'warn');
+      }
+
+      // Pass A2: rename UUID/hash → nama profesional
+      let renameReport = { renamed: 0 };
+      try {
+        setLoading(true, 'Auto Repair', 'Rename profesional (UUID → img/api/js)…');
+        renameReport = await gcProfessionalRenameInZip();
+        if (renameReport.renamed) {
+          appendLog('Rename profesional: ' + renameReport.renamed + ' file · ref ' + (renameReport.refChanges || 0), 'ok');
+        }
+      } catch (re) {
+        appendLog('Rename skip: ' + (re && re.message || re), 'warn');
       }
 
       setLoading(true, 'Auto Repair', 'Rewrite path lokal…');
@@ -10036,7 +10194,7 @@ function isApiLike(u){
 
         setLoading(false);
         appendLog(
-          'Auto Repair Strict: ' + totalChanges + ' patch · unduh ' + (fetchReport.fetched || 0) + ' · file ' + filesTouched.length + ' · skor ' + score.score + '/100',
+          'Auto Repair Strict: ' + totalChanges + ' patch · unduh ' + (fetchReport.fetched || 0) + ' · rename ' + (renameReport.renamed || 0) + ' · file ' + filesTouched.length + ' · skor ' + score.score + '/100',
           totalChanges || fetchReport.fetched ? 'ok' : 'warn'
         );
         detailLines.slice(0, 10).forEach(function (l) { appendLog(l, 'ok'); });
