@@ -1910,6 +1910,36 @@
       color: #fff;
     }
 
+    
+    .file-tree-item .ft-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      padding: 1px 5px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      margin-left: 4px;
+      text-transform: uppercase;
+    }
+    .ft-badge.img { background: #4c1d95; color: #e9d5ff; }
+    .ft-badge.js { background: #713f12; color: #fde68a; }
+    .ft-badge.css { background: #1e3a5f; color: #93c5fd; }
+    .ft-badge.json { background: #3f3f46; color: #fef08a; }
+    .ft-badge.api { background: #7f1d1d; color: #fecaca; }
+    .ft-badge.html { background: #7c2d12; color: #fed7aa; }
+    .file-tree-item .file-tree-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 58%;
+    }
+    .file-tree-item.scan-error::after {
+      content: attr(data-err-label);
+    }
+    .file-tree-item.scan-error:not([data-err-label])::after {
+      content: 'ERROR';
+    }
+
     .file-tree-item.scan-error {
       border-left: 3px solid #f87171 !important;
       background: rgba(248, 113, 113, 0.12) !important;
@@ -4432,6 +4462,25 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       return !bin.has(ext);
     }).concat(['dockerfile','makefile','cmake','gradle','properties','env','gitignore','editorconfig','eslintrc','prettierrc','babelrc']);
 
+    
+    function explorerDisplayName(fullPath) {
+      const name = (fullPath || '').split('/').pop() || fullPath || '';
+      // strip leading 0001- for cleaner UI; keep full path in title
+      const clean = name.replace(/^\d{4}-/, '');
+      return clean.length > 36 ? clean.slice(0, 34) + '…' : clean;
+    }
+    function explorerTypeBadge(name) {
+      const n = (name || '').toLowerCase();
+      if (/api-|balance|session|spin|verifysession|getbyresources/.test(n) || n.endsWith('.json') && /api|balance|session|spin|resource/i.test(n))
+        return '<span class="ft-badge api">API</span>';
+      if (/\.png|\.jpe?g|\.gif|\.webp|\.svg/.test(n)) return '<span class="ft-badge img">IMG</span>';
+      if (/\.js$/.test(n)) return '<span class="ft-badge js">JS</span>';
+      if (/\.css$/.test(n)) return '<span class="ft-badge css">CSS</span>';
+      if (/\.json$/.test(n)) return '<span class="ft-badge json">JSON</span>';
+      if (/\.html?$/.test(n)) return '<span class="ft-badge html">HTML</span>';
+      return '';
+    }
+
     function fileIconHTML(name) {
       const ext = name.split('.').pop().toLowerCase();
       const colors = {
@@ -4654,10 +4703,19 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             ? `<button type="button" class="file-tree-action-v" title="Opsi perbaiki file error" aria-label="Perbaiki">V</button>`
             : `<button type="button" class="file-tree-delete" title="Delete file permanently" aria-label="Delete file permanently">${deleteIconHTML()}</button>`;
           const addBtn = `<button type="button" class="file-tree-add" title="Tambah file di folder ini" aria-label="Tambah file">+</button>`;
-          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span>` + addBtn + actionBtn;
-          fileEl.querySelector('.file-tree-name').textContent = name;
+          const disp = explorerDisplayName(name);
+          const badge = explorerTypeBadge(name);
+          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span>` + badge + addBtn + actionBtn;
+          fileEl.querySelector('.file-tree-name').textContent = disp;
+          fileEl.title = entry.__path + (isErr && window.__gcScanErrorMeta && window.__gcScanErrorMeta[entry.__path]
+            ? '\n⚠ ' + window.__gcScanErrorMeta[entry.__path]
+            : '');
           fileEl.style.paddingLeft = (8 + depth * 14) + 'px';
           fileEl.dataset.path = entry.__path;
+          if (isErr && window.__gcScanErrorMeta && window.__gcScanErrorMeta[entry.__path]) {
+            const lab = String(window.__gcScanErrorMeta[entry.__path]).slice(0, 18);
+            fileEl.setAttribute('data-err-label', lab);
+          }
 
           const actEl = fileEl.querySelector('.file-tree-action-v, .file-tree-delete');
           if (actEl) {
@@ -7189,6 +7247,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           if (entry) files.push(entry);
         }
         window.__gcScanErrorPaths = new Set(files);
+        window.__gcScanErrorMeta = window.__gcScanErrorMeta || {};
+        files.forEach(function (f) {
+          window.__gcScanErrorMeta[f] = window.__gcScanErrorMeta[f] || 'URL absolut / offline break';
+        });
         if (window.__gcLastScan) window.__gcLastScan.files = files;
 
         try {
@@ -10190,13 +10252,19 @@ function isApiLike(u){
         try {
           var errSet = new Set();
           var warnSet = new Set();
+          window.__gcScanErrorMeta = {};
           (report.files || []).forEach(function (f) {
             var cat = String(f.category || f.status || '').toUpperCase();
             var act = String(f.action || '').toUpperCase();
             var p = f.path || f.file;
             if (!p) return;
-            if (cat === 'TRACKING' || act === 'REMOVE') errSet.add(p);
-            else if (cat === 'BACKEND_API' || cat === 'API' || act === 'REPLACE' || cat === 'EXTERNAL' || act === 'REVIEW') warnSet.add(p);
+            if (cat === 'TRACKING' || act === 'REMOVE') {
+              errSet.add(p);
+              window.__gcScanErrorMeta[p] = 'TRACKING · hapus';
+            } else if (cat === 'BACKEND_API' || cat === 'API' || act === 'REPLACE' || cat === 'EXTERNAL' || act === 'REVIEW') {
+              warnSet.add(p);
+              window.__gcScanErrorMeta[p] = (cat || act || 'REVIEW').slice(0, 18);
+            }
           });
           window.__gcScanErrorPaths = errSet;
           window.__gcScanWarnPaths = warnSet;

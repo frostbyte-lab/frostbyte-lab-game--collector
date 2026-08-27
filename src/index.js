@@ -21,7 +21,7 @@ import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
 import { mapAssetRelations } from "./analyze/relations.js";
 import { fillMissingAssets } from "./collect/fill-missing.js";
-import { normalizeResourceUrl, preferredAssetDir } from "./collect/normalize.js";
+import { normalizeResourceUrl, preferredAssetDir, professionalFileName } from "./collect/normalize.js";
 import { postCollectAudit, formatCollectAuditSummary } from "./collect/post-audit.js";
 import { runRecoveryEngine } from "./collect/recovery.js";
 import { buildDependencyQueue, queueReport } from "./collect/queue.js";
@@ -1263,7 +1263,8 @@ export default {
           }
 
           const norm = normalizeResourceUrl(u);
-          if (norm.basename) name = norm.basename;
+          const pro = professionalFileName(u, type, ct, manifest.length);
+          name = pro.name; // sudah include seq + nama profesional
           const isAssetCat = ["game", "script", "style", "data"].includes(classified.category);
           const slot = isAssetCat
             ? classifySlotSubfolder(u, type, ct)
@@ -1282,7 +1283,10 @@ export default {
             return;
           }
 
-          const localPath = `${folder}/${String(manifest.length + 1).padStart(4, "0")}-${name}`;
+          // name dari professionalFileName sudah 0001-role-hash.ext
+          const localPath = name.startsWith(String(manifest.length + 1).padStart(4, "0"))
+            ? `${folder}/${name}`
+            : `${folder}/${String(manifest.length + 1).padStart(4, "0")}-${name}`;
           const r2Key = `${id}/${localPath}`;
 
           // Poin 4: semantik API
