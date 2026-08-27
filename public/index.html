@@ -3703,7 +3703,7 @@
             </div>
             <div class="file-panel-footer-row footer-ai">
               <button type="button" class="btn btn-success btn-sm footer-ai-main" id="btn-ai-zip-repair" onclick="runAiZipRepair()" title="AI perbaiki ZIP lalu auto Sandbox">AI</button>
-              <button type="button" class="btn btn-secondary btn-sm" id="btn-strict-offline" onclick="runStrictOfflineMode()" title="Strict Offline: unduh CDN + rewrite + skor">Strict</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-strict-offline" onclick="runStrictOfflineMode()" title="Offline Seal: reuse ZIP + unduh + rewrite sekali jalan">Seal</button>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-deteksi-ai" onclick="runDeteksiAI()" title="Lacak file error dari Scan">Deteksi</button>
               <button type="button" class="btn btn-secondary btn-sm footer-more" onclick="autoCustomApiSdk()" title="Custom API path">API</button>
             </div>
@@ -9844,6 +9844,321 @@ function isApiLike(u){
     }
     window.gcForceRewriteSignedCdn = gcForceRewriteSignedCdn;
 
+
+    /* ========== OFFLINE SEAL (sekali jalan, minim collect ulang) ========== */
+    var GC_IDB_NAME = 'gc-cdn-cache-v1';
+    var GC_IDB_STORE = 'assets';
+
+    function gcIdbOpen() {
+      return new Promise(function (resolve, reject) {
+        if (!window.indexedDB) return resolve(null);
+        try {
+          var req = indexedDB.open(GC_IDB_NAME, 1);
+          req.onupgradeneeded = function () {
+            var db = req.result;
+            if (!db.objectStoreNames.contains(GC_IDB_STORE)) db.createObjectStore(GC_IDB_STORE);
+          };
+          req.onsuccess = function () { resolve(req.result); };
+          req.onerror = function () { resolve(null); };
+        } catch (e) { resolve(null); }
+      });
+    }
+    async function gcIdbGet(key) {
+      var db = await gcIdbOpen();
+      if (!db) return null;
+      return new Promise(function (resolve) {
+        try {
+          var tx = db.transaction(GC_IDB_STORE, 'readonly');
+          var r = tx.objectStore(GC_IDB_STORE).get(key);
+          r.onsuccess = function () { resolve(r.result || null); };
+          r.onerror = function () { resolve(null); };
+        } catch (e) { resolve(null); }
+      });
+    }
+    async function gcIdbPut(key, buf, meta) {
+      var db = await gcIdbOpen();
+      if (!db) return;
+      return new Promise(function (resolve) {
+        try {
+          var tx = db.transaction(GC_IDB_STORE, 'readwrite');
+          tx.objectStore(GC_IDB_STORE).put({ buf: buf, meta: meta || {}, at: Date.now() }, key);
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function () { resolve(); };
+        } catch (e) { resolve(); }
+      });
+    }
+
+    function gcBasenameFromUrl(url) {
+      try {
+        var b = decodeURIComponent(new URL(url).pathname.split('/').pop() || 'asset.bin');
+        return b.split('?')[0].replace(/[^\w.\-]+/g, '_') || 'asset.bin';
+      } catch (e) {
+        return 'asset.bin';
+      }
+    }
+
+    /** Cari file lokal di ZIP yang cocok basename / token hash CDN */
+    function gcFindLocalByBasename(base, index) {
+      if (!base) return null;
+      index = index || (typeof gcBuildLocalAssetIndex === 'function' ? gcBuildLocalAssetIndex() : { byBase: {} });
+      var byBase = index.byBase || index;
+      var low = base.toLowerCase();
+      if (byBase[low] && byBase[low].length) return byBase[low][0];
+      // token: 39949c54de dari 39949c54de.346f3.png
+      var tokens = low.match(/[a-f0-9]{8,}/g) || [];
+      var paths = Object.keys(zipFileMap || {});
+      for (var t = 0; t < tokens.length; t++) {
+        var tok = tokens[t];
+        for (var i = 0; i < paths.length; i++) {
+          var p = paths[i];
+          if (p.toLowerCase().indexOf(tok) >= 0 && /\\.(png|jpe?g|gif|webp|js|css|json|mp3|ogg)$/i.test(p)) {
+            return p;
+          }
+        }
+      }
+      // ends with base
+      for (var j = 0; j < paths.length; j++) {
+        if (paths[j].toLowerCase().split('/').pop() === low) return paths[j];
+        if (paths[j].toLowerCase().endsWith('/' + low)) return paths[j];
+      }
+      return null;
+    }
+
+    async function gcFetchAssetStrategies(url) {
+      var base = gcBasenameFromUrl(url);
+      var attempts = [];
+      // 1) IndexedDB cache
+      try {
+        var cached = await gcIdbGet(base);
+        if (cached && cached.buf && cached.buf.byteLength > 200) {
+          return { ok: true, buf: cached.buf, via: 'idb-cache', base: base };
+        }
+      } catch (_) {}
+
+      var noq = url.split('?')[0];
+      var list = [url];
+      if (noq !== url) list.push(noq);
+      // alternate host variants
+      try {
+        var u = new URL(url);
+        if (/eajzzxhro/i.test(u.hostname)) {
+          list.push('https://static.eajzzxhro.com' + u.pathname + (u.search || ''));
+          list.push('https://static.eajzzxhro.com' + u.pathname);
+        }
+      } catch (_) {}
+
+      for (var i = 0; i < list.length; i++) {
+        var target = list[i];
+        // Worker proxy
+        try {
+          var proxyUrl = '/api/asset-proxy?url=' + encodeURIComponent(target);
+          var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          var timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (_) {} }, 20000) : null;
+          var res = await fetch(proxyUrl, {
+            method: 'GET',
+            signal: ctrl ? ctrl.signal : undefined,
+            headers: { 'X-GC-Referer': 'https://m.eajzzxhro.com/', Accept: 'image/*,*/*' }
+          });
+          if (timer) clearTimeout(timer);
+          if (res && res.ok) {
+            var ct = (res.headers.get('content-type') || '').toLowerCase();
+            if (!ct.includes('text/html') && !ct.includes('application/json')) {
+              var buf = await res.arrayBuffer();
+              if (buf && buf.byteLength >= 200) {
+                await gcIdbPut(base, buf, { url: target, via: 'proxy' });
+                return { ok: true, buf: buf, via: 'proxy', base: base, url: target };
+              }
+            }
+          }
+          attempts.push('proxy ' + (res ? res.status : 'err'));
+        } catch (e) {
+          attempts.push('proxy fail');
+        }
+        // direct
+        try {
+          var res2 = await fetch(target, { method: 'GET', mode: 'cors', credentials: 'omit', headers: { Accept: 'image/*,*/*' } });
+          if (res2 && res2.ok) {
+            var buf2 = await res2.arrayBuffer();
+            if (buf2 && buf2.byteLength >= 200) {
+              await gcIdbPut(base, buf2, { url: target, via: 'direct' });
+              return { ok: true, buf: buf2, via: 'direct', base: base, url: target };
+            }
+          }
+          attempts.push('direct ' + (res2 ? res2.status : 'err'));
+        } catch (e2) {
+          attempts.push('direct fail');
+        }
+      }
+      return { ok: false, base: base, attempts: attempts };
+    }
+
+    /**
+     * Offline Seal — satu siklus lengkap agar tidak bolak-balik collect.
+     * 1) Pakai file yang SUDAH di ZIP (basename/token)
+     * 2) Cache IDB
+     * 3) Multi-strategi unduh
+     * 4) Force rewrite + hapus GTM
+     */
+    async function gcOfflineSeal() {
+      if (!currentZip || !zipFileMap) {
+        appendLog('Offline Seal: load ZIP dulu.', 'warn');
+        return { ok: false, reason: 'no-zip' };
+      }
+      setLoading(true, 'Offline Seal', 'Scan URL absolut…');
+      window.__gcLastDownloadMap = window.__gcLastDownloadMap || {};
+      var index = typeof gcBuildLocalAssetIndex === 'function' ? gcBuildLocalAssetIndex() : { byBase: {} };
+      var textPaths = Object.keys(zipFileMap).filter(function (p) {
+        return /\\.(html?|css|js|mjs)$/i.test(p) && !/^BACKUP\\//i.test(p);
+      });
+      var needUrls = [];
+      var seen = Object.create(null);
+      for (var i = 0; i < textPaths.length; i++) {
+        var code = '';
+        try {
+          code = openFiles.has(textPaths[i]) ? openFiles.get(textPaths[i]) : await zipFileMap[textPaths[i]].async('string');
+        } catch (_) { continue; }
+        var urls = typeof extractAbsoluteUrls === 'function' ? extractAbsoluteUrls(code) : [];
+        urls.forEach(function (u) {
+          var c = u.status ? u : (typeof classifyAbsoluteUrl === 'function' ? classifyAbsoluteUrl(u.url || u) : null);
+          if (!c) return;
+          if (c.status === 'TRACKING' || c.status === 'SVG_NAMESPACE' || c.status === 'API' || c.status === 'SOCKET') return;
+          if (c.status !== 'ASSET' && c.kind !== 'ASSET' && c.kind !== 'asset') return;
+          var url = c.url || u.url || u;
+          if (seen[url]) return;
+          seen[url] = 1;
+          needUrls.push(url);
+        });
+      }
+      // hard eajzz from any open index
+      for (var hi = 0; hi < textPaths.length; hi++) {
+        if (!/index\\.html?/i.test(textPaths[hi])) continue;
+        try {
+          var hc = openFiles.has(textPaths[hi]) ? openFiles.get(textPaths[hi]) : await zipFileMap[textPaths[hi]].async('string');
+          var re = /https?:\\/\\/static\\.eajzzxhro\\.com\\/[^\\s"'<>]+/gi;
+          var m;
+          while ((m = re.exec(hc))) {
+            if (!seen[m[0]]) { seen[m[0]] = 1; needUrls.push(m[0]); }
+          }
+        } catch (_) {}
+      }
+
+      appendLog('Offline Seal: ' + needUrls.length + ' ASSET absolut ditarget', needUrls.length ? 'warn' : 'ok');
+      var resolved = 0, downloaded = 0, reused = 0, failed = 0;
+      var details = [];
+
+      for (var n = 0; n < needUrls.length; n++) {
+        var url = needUrls[n];
+        var base = gcBasenameFromUrl(url);
+        setLoading(true, 'Offline Seal', (n + 1) + '/' + needUrls.length + ' · ' + base);
+        // A) sudah ada di ZIP?
+        var local = gcFindLocalByBasename(base, index);
+        if (!local) {
+          local = zipFileMap['assets/eajzz/' + base] ? 'assets/eajzz/' + base : null;
+        }
+        if (local) {
+          window.__gcLastDownloadMap[url] = local;
+          try { window.__gcLastDownloadMap[url.split('?')[0]] = local; } catch (_) {}
+          reused++;
+          resolved++;
+          details.push('REUSE ' + base + ' → ' + local);
+          continue;
+        }
+        // B) unduh multi-strategi
+        var got = await gcFetchAssetStrategies(url);
+        if (got.ok && got.buf) {
+          var localPath = 'assets/eajzz/' + (got.base || base);
+          if (!/\\.[a-z0-9]{1,8}$/i.test(localPath)) localPath += '.png';
+          currentZip.file(localPath, got.buf);
+          zipFileMap[localPath] = currentZip.file(localPath);
+          window.__gcLastDownloadMap[url] = localPath;
+          try { window.__gcLastDownloadMap[url.split('?')[0]] = localPath; } catch (_) {}
+          downloaded++;
+          resolved++;
+          details.push('GET ' + base + ' via ' + got.via + ' → ' + localPath);
+          // refresh index
+          index = typeof gcBuildLocalAssetIndex === 'function' ? gcBuildLocalAssetIndex() : index;
+        } else {
+          failed++;
+          details.push('FAIL ' + base + ' (' + (got.attempts || []).join(', ') + ')');
+        }
+      }
+
+      // C) Force rewrite semua teks
+      setLoading(true, 'Offline Seal', 'Rewrite + hapus tracking…');
+      var dmap = window.__gcLastDownloadMap || {};
+      var patch = 0;
+      for (var ti = 0; ti < textPaths.length; ti++) {
+        var path = textPaths[ti];
+        var src;
+        try {
+          src = openFiles.has(path) ? openFiles.get(path) : await zipFileMap[path].async('string');
+        } catch (_) { continue; }
+        var fr = typeof gcForceRewriteSignedCdn === 'function' ? gcForceRewriteSignedCdn(src, dmap) : { code: src, changes: 0 };
+        // generic basename rewrite for any reused local
+        var out = fr.code || src;
+        Object.keys(dmap).forEach(function (u) {
+          var loc = dmap[u];
+          if (out.indexOf(u) >= 0) { out = out.split(u).join(loc); patch++; }
+          var amp = u.replace(/&/g, '&amp;');
+          if (amp !== u && out.indexOf(amp) >= 0) { out = out.split(amp).join(loc); patch++; }
+        });
+        // tracking strip
+        var tr = 0;
+        out = out.replace(/<script\\b[^>]*\\bsrc\\s*=\\s*["'][^"']*(?:googletagmanager|google-analytics|gtag\\/js|gtm\\.js)[^"']*["'][^>]*>\\s*<\\/script>/gi, function () {
+          tr++; return '<!-- GC: GTM removed -->';
+        });
+        out = out.replace(/https?:\\/\\/www\\.googletagmanager\\.com\\/[^"'\\s>]*/gi, function () { tr++; return ''; });
+        if (out !== src) {
+          openFiles.set(path, out);
+          currentZip.file(path, out);
+          zipFileMap[path] = currentZip.file(path);
+          patch += (fr.changes || 0) + tr;
+          if (currentFile === path && editor) {
+            try { editor.setValue(out); } catch (_) {}
+          }
+        }
+      }
+
+      var report = {
+        mode: 'offline-seal',
+        at: new Date().toISOString(),
+        targeted: needUrls.length,
+        resolved: resolved,
+        downloaded: downloaded,
+        reused: reused,
+        failed: failed,
+        patches: patch,
+        details: details.slice(0, 40)
+      };
+      try {
+        var js = JSON.stringify(report, null, 2);
+        currentZip.file('offline-seal.json', js);
+        zipFileMap['offline-seal.json'] = currentZip.file('offline-seal.json');
+        openFiles.set('offline-seal.json', js);
+      } catch (_) {}
+
+      try {
+        if (typeof renderFileTree === 'function') renderFileTree(Object.keys(zipFileMap));
+      } catch (_) {}
+
+      setLoading(false);
+      var ok = failed === 0 || resolved > 0;
+      appendLog(
+        'Offline Seal: resolve ' + resolved + '/' + needUrls.length +
+          ' (unduh ' + downloaded + ', reuse ' + reused + ', gagal ' + failed + ', patch ' + patch + ')',
+        failed && !resolved ? 'err' : (failed ? 'warn' : 'ok')
+      );
+      details.slice(0, 12).forEach(function (d) {
+        appendLog('  ' + d, /FAIL/.test(d) ? 'err' : 'ok');
+      });
+      if (failed && !downloaded && !reused) {
+        appendLog('Seal: token CDN mungkin mati. Buka game online sekali → Collect, ATAU Save As PNG ke assets/eajzz/', 'warn');
+      }
+      return report;
+    }
+    window.gcOfflineSeal = gcOfflineSeal;
+
+
     async function gcStrictFetchMissingAssets(maxFetch) {
       maxFetch = maxFetch || 12;
       if (!currentZip || !zipFileMap) return { fetched: 0, failed: 0, skipped: 0, details: [] };
@@ -10152,9 +10467,19 @@ function isApiLike(u){
         return;
       }
       const scopeAll = window.__gcAutoRepairAll !== false;
-      setLoading(true, 'Auto Repair', 'Strict: hapus tracking + unduh asset missing…');
+      setLoading(true, 'Auto Repair', 'Offline Seal (sekali jalan)…');
 
-      // Pass A: unduh ASSET CDN yang belum ada di ZIP (6 PNG signed, dll.)
+      // Pass 0: Offline Seal — reuse ZIP + IDB + multi-fetch + rewrite (hindari collect ulang)
+      let sealReport = { resolved: 0, downloaded: 0, failed: 0 };
+      try {
+        if (typeof gcOfflineSeal === 'function') {
+          sealReport = await gcOfflineSeal() || sealReport;
+        }
+      } catch (se) {
+        appendLog('Offline Seal: ' + (se && se.message || se), 'warn');
+      }
+
+      // Pass A: unduh sisa (cadangan)
       let fetchReport = { fetched: 0, failed: 0, details: [] };
       try {
         fetchReport = await gcStrictFetchMissingAssets(80);
@@ -10370,8 +10695,9 @@ function isApiLike(u){
         appendLog('Strict Offline: load ZIP dulu.', 'warn');
         return;
       }
-      setLoading(true, 'Strict Offline', 'Unduh asset + rewrite + skor…');
+      setLoading(true, 'Strict Offline', 'Offline Seal + skor…');
       try {
+        if (typeof gcOfflineSeal === 'function') await gcOfflineSeal();
         window.__gcAutoRepairAll = true;
         window.__gcAutoRepairSilent = true;
         if (typeof runAutoRepair === 'function') await runAutoRepair();
