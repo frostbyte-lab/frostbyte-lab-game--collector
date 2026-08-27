@@ -35,7 +35,8 @@ import {
   MAX_RAW_TOTAL,
   MAX_ZIP_RESPONSE,
   tooLargeResponse,
-  sumZipFilesBytes
+  sumZipFilesBytes,
+  resolveLimits
 } from "./collect/limits.js";
 import { resumeFetchMissing } from "./collect/resume.js";
 import {
@@ -355,7 +356,7 @@ export default {
         return Response.json({ error: "JSON tidak valid" }, { status: 400 });
       }
       const gameUrl = String(body.url || "").trim();
-      const waitSeconds = String(body.wait_seconds || "8");
+      const waitSeconds = String(body.wait_seconds || "22");
       try {
         const u = new URL(gameUrl);
         if (!["http:", "https:"].includes(u.protocol)) throw 0;
@@ -1038,8 +1039,11 @@ export default {
 
     // Collect options (process 4)
     // Offline-first (catatan proses baru): Wait 22s, spins 6
-    const waitSeconds = Math.min(60, Math.max(3, Number(body.wait_seconds || body.waitSeconds || 22) || 22));
-    const autoSpins = Math.min(15, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 6) || 6));
+    const unlimited = !!(body.unlimited || body.no_limit || body.noLimit || body.mode === "unlimited");
+    const limits = resolveLimits(env, { unlimited });
+    const waitSeconds = Math.min(limits.maxWaitSec || 120, Math.max(3, Number(body.wait_seconds || body.waitSeconds || 22) || 22));
+    const autoSpins = Math.min(limits.maxSpins || 30, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 6) || 6));
+
     const spinDelayMs = Math.min(8000, Math.max(500, Number(body.spin_delay_ms ?? body.spinDelayMs ?? 2200) || 2200));
     // collectMode: static | runtime | full (default)
     const collectMode = String(body.mode || body.collect_mode || body.collectMode || "full").toLowerCase();
@@ -1048,6 +1052,12 @@ export default {
     const modeFull = collectMode === "full" || (!modeStatic && collectMode !== "runtime");
 
     const id = crypto.randomUUID();
+    const limSingle = (typeof limits !== "undefined" && limits.maxSingleFile) || MAX_SINGLE_FILE;
+    const limRaw = (typeof limits !== "undefined" && limits.maxRawTotal) || MAX_RAW_TOTAL;
+    const limZip = (typeof limits !== "undefined" && limits.maxZipResponse) || MAX_ZIP_RESPONSE;
+    const fillPerPass = (typeof limits !== "undefined" && limits.fillPerPass) || 250;
+    const fillPasses = (typeof limits !== "undefined" && limits.fillPasses) || 8;
+
     const progressId = String(body.progressId || body.progress_id || id).slice(0, 80);
     await clearStop(env, progressId);
     const report = async (pct, phase, label, extra = {}) => {
@@ -1150,8 +1160,8 @@ export default {
               } else {
                 buffer = await response.body();
               }
-              if (!buffer || !buffer.byteLength || buffer.byteLength > MAX_SINGLE_FILE) return;
-              if (sizeState.rawBytes + buffer.byteLength > MAX_RAW_TOTAL) return;
+              if (!buffer || !buffer.byteLength || buffer.byteLength > limSingle) return;
+              if (sizeState.rawBytes + buffer.byteLength > limRaw) return;
               let ext = "bin";
               if (/png/i.test(ctBlob)) ext = "png";
               else if (/jpe?g/i.test(ctBlob)) ext = "jpg";
@@ -1208,12 +1218,12 @@ export default {
           if (!buffer || buffer.byteLength === 0) return;
 
           // Guard: skip file terlalu besar (tanpa R2)
-          if (buffer.byteLength > MAX_SINGLE_FILE) {
+          if (buffer.byteLength > limSingle) {
             sizeState.skippedLarge++;
             return;
           }
           // Guard: stop menampung jika total raw sudah melewati batas
-          if (sizeState.rawBytes + buffer.byteLength > MAX_RAW_TOTAL) {
+          if (sizeState.rawBytes + buffer.byteLength > limRaw) {
             sizeState.stoppedForSize = true;
             return;
           }
@@ -1386,7 +1396,7 @@ export default {
       // Tunggu sesuai wait_seconds (UI) kecuali user Stop
       if (!(await shouldStop())) {
         await report(24, "wait", "Menunggu network settle (" + waitSeconds + "s)...", { files: manifest.length });
-        await page.waitForTimeout(Math.min(waitSeconds * 1000, 60000));
+        await page.waitForTimeout(Math.min(waitSeconds * 1000, ((typeof limits !== "undefined" && limits.maxWaitSec) || 120) * 1000));
       } else {
         await report(50, "stopping", "Stop — lanjut packing...", { files: manifest.length, stopRequested: true });
       }
@@ -1533,8 +1543,8 @@ export default {
           id,
           env,
           selectAllowed,
-          150,
-          5
+          fillPerPass,
+          fillPasses
         );
         await report(
           68,

@@ -1,17 +1,66 @@
 /**
- * Batas aman Worker tanpa R2.
- * Memory Worker ~128MB → ZIP di memory harus jauh di bawah itu.
- * GitHub Actions dipakai untuk paket yang lebih besar.
+ * Batas platform Worker + mode unlimited (R2 / GitHub Actions).
+ * Unlimited produk ≠ infinite RAM satu request.
  */
 
-/** Max ukuran 1 file resource (bytes) */
-export const MAX_SINGLE_FILE = 18 * 1024 * 1024; // 18 MB
+export const MAX_SINGLE_FILE = 32 * 1024 * 1024;
+export const MAX_RAW_TOTAL = 56 * 1024 * 1024;
+export const MAX_ZIP_RESPONSE = 28 * 1024 * 1024;
 
-/** Max total raw buffer sebelum zip (bytes) */
-export const MAX_RAW_TOTAL = 38 * 1024 * 1024; // 38 MB
+export const UNLIMITED = {
+  maxSingleFile: 80 * 1024 * 1024,
+  maxRawTotal: 120 * 1024 * 1024,
+  maxZipResponse: 50 * 1024 * 1024,
+  fillPerPass: 400,
+  fillPasses: 10,
+  maxWaitSec: 180,
+  maxSpins: 50
+};
 
-/** Max ukuran ZIP response (bytes) */
-export const MAX_ZIP_RESPONSE = 22 * 1024 * 1024; // 22 MB
+export const MAX_FILL_PER_PASS = 250;
+export const MAX_FILL_PASSES = 8;
+export const MAX_FILL_PER_PASS_CAP = 400;
+export const MAX_FILL_PASSES_CAP = 12;
+
+export function resolveLimits(env, opts = {}) {
+  const unlimited = !!(opts.unlimited || opts.noLimit || opts.mode === "unlimited");
+  const hasR2 = !!(env && env.COLLECTOR_BUCKET);
+  if (unlimited && hasR2) {
+    return {
+      mode: "unlimited-r2",
+      maxSingleFile: UNLIMITED.maxSingleFile,
+      maxRawTotal: UNLIMITED.maxRawTotal,
+      maxZipResponse: UNLIMITED.maxZipResponse,
+      fillPerPass: UNLIMITED.fillPerPass,
+      fillPasses: UNLIMITED.fillPasses,
+      maxWaitSec: UNLIMITED.maxWaitSec,
+      maxSpins: UNLIMITED.maxSpins
+    };
+  }
+  if (unlimited) {
+    return {
+      mode: "unlimited-worker",
+      maxSingleFile: 40 * 1024 * 1024,
+      maxRawTotal: 72 * 1024 * 1024,
+      maxZipResponse: 32 * 1024 * 1024,
+      fillPerPass: 300,
+      fillPasses: 8,
+      maxWaitSec: UNLIMITED.maxWaitSec,
+      maxSpins: UNLIMITED.maxSpins,
+      preferGithubOnOverflow: true
+    };
+  }
+  return {
+    mode: "standard",
+    maxSingleFile: MAX_SINGLE_FILE,
+    maxRawTotal: MAX_RAW_TOTAL,
+    maxZipResponse: MAX_ZIP_RESPONSE,
+    fillPerPass: MAX_FILL_PER_PASS,
+    fillPasses: MAX_FILL_PASSES,
+    maxWaitSec: 120,
+    maxSpins: 30
+  };
+}
 
 export function tooLargeResponse(extra = {}) {
   return Response.json(
@@ -20,8 +69,7 @@ export function tooLargeResponse(extra = {}) {
       error: "TOO_LARGE",
       code: "TOO_LARGE",
       message:
-        "Paket terlalu besar untuk dikirim lewat Worker (batas aman tanpa R2 ~20–25 MB ZIP). " +
-        "Gunakan tombol Collect via GitHub Actions untuk game besar.",
+        "Paket melebihi kapasitas Worker. Aktifkan R2 atau Collect via GitHub Actions (mode unlimited).",
       suggest: "github-actions",
       limits: {
         maxSingleFileMB: Math.round(MAX_SINGLE_FILE / 1024 / 1024),
@@ -30,17 +78,10 @@ export function tooLargeResponse(extra = {}) {
       },
       ...extra
     },
-    {
-      status: 413,
-      headers: {
-        "X-GC-Error": "TOO_LARGE",
-        "X-GC-Suggest": "github-actions"
-      }
-    }
+    { status: 413, headers: { "X-GC-Error": "TOO_LARGE", "X-GC-Suggest": "github-actions" } }
   );
 }
 
-/** Hitung total byte object zipFiles (Uint8Array / string encoded) */
 export function sumZipFilesBytes(zipFiles) {
   let total = 0;
   for (const data of Object.values(zipFiles || {})) {
@@ -50,14 +91,3 @@ export function sumZipFilesBytes(zipFiles) {
   }
   return total;
 }
-
-/** Auto-fill: max URL attempts per pass (Worker-safe) */
-/** Offline-first: fill lebih dalam (signed CDN + nested refs) */
-export const MAX_FILL_PER_PASS = 150;
-
-/** Auto-fill: max recursive scan passes */
-export const MAX_FILL_PASSES = 5;
-
-/** Hard ceiling so caller cannot explode memory */
-export const MAX_FILL_PER_PASS_CAP = 180;
-export const MAX_FILL_PASSES_CAP = 6;
