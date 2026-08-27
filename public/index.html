@@ -3249,6 +3249,10 @@
             </div>
           </div>
           <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">Offline-first: Wait <b>22</b>s · Auto-spins <b>6</b> (session+CDN). Tracking dibuang di Collect. ZIP besar → GitHub Actions.</p>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:0 0 12px;cursor:pointer;">
+            <input type="checkbox" id="collect-strict-offline" checked style="width:16px;height:16px;">
+            <span><b>Strict Offline</b> — setelah Collect/Load: unduh CDN sisa + rewrite + skor (siap Sandbox)</span>
+          </label>
           
           <div class="collect-actions">
             <button class="btn btn-primary" onclick="runCollect()">
@@ -3665,6 +3669,7 @@
             </div>
             <div class="file-panel-footer-row footer-ai">
               <button type="button" class="btn btn-success btn-sm footer-ai-main" id="btn-ai-zip-repair" onclick="runAiZipRepair()" title="AI perbaiki ZIP lalu auto Sandbox">AI</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-strict-offline" onclick="runStrictOfflineMode()" title="Strict Offline: unduh CDN + rewrite + skor">Strict</button>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-deteksi-ai" onclick="runDeteksiAI()" title="Lacak file error dari Scan">Deteksi</button>
               <button type="button" class="btn btn-secondary btn-sm footer-more" onclick="autoCustomApiSdk()" title="Custom API path">API</button>
             </div>
@@ -8471,7 +8476,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (btn) btn.click();
       } catch (_) {}
       try {
-        if (typeof appendLog === 'function') appendLog('Saran: jalankan Collect via GitHub dengan Auto-spin agar api-map.json terisi.', 'warn');
+        if (typeof appendLog === 'function') appendLog('Saran: jalankan Collect via GitHub dengan Auto-spin (default 6) agar api-map.json terisi.', 'warn');
       } catch (_) {}
     }
     function gcPreviewSuggestDetect() {
@@ -9354,7 +9359,7 @@ function isApiLike(u){
               title: 'Preview tampak stuck',
               body: 'Setelah beberapa detik, Sandbox belum READY. Sering karena api-map kosong atau request eksternal.',
               reasons: [
-                'Collect ulang (GitHub) dengan Auto-spin agar API tertangkap.',
+                'Collect ulang (GitHub) dengan Auto-spin (default 6) agar API tertangkap.',
                 'Pastikan api-map.json punya endpoints + snapshot (bukan []).',
                 'Custom API: set base URL ke domain hosting kamu.',
                 'Coba Hybrid jika asset masih di CDN asal.',
@@ -9379,7 +9384,7 @@ function isApiLike(u){
               title: 'API map kosong',
               body: 'Sandbox tidak menemukan api-map.json berisi endpoint. Game sering stuck di layar loading/jaringan sibuk.',
               reasons: [
-                'Collect ulang dengan Auto-spin aktif agar request /spin, /balance, /session tertangkap.',
+                'Collect ulang dengan Auto-spin 6 agar request /spin, /balance, /session tertangkap.',
                 'Pastikan artifact ZIP memuat api-map.json (bukan hanya asset gambar).',
                 'Atau Activity → Secret Code untuk template api-map (masih perlu data API asli).',
                 'Lalu Custom API untuk rewrite base URL ke domain hosting kamu.'
@@ -9433,7 +9438,7 @@ function isApiLike(u){
                       title: 'Preview network ' + st,
                       body: 'Sandbox mendeteksi request eksternal/terblokir. Game mungkin stuck atau fitur online tidak jalan.',
                       reasons: [
-                        'Collect ulang dengan Auto-spin agar api-map.json berisi snapshot.',
+                        'Collect ulang dengan Auto-spin (default 6) agar api-map.json berisi snapshot.',
                         'Pastikan asset lokal lengkap (tidak banyak NET external/blocked).',
                         'Custom API: set base URL ke domain hosting kamu.',
                         'Coba mode Hybrid jika asset masih di CDN asal.'
@@ -9996,6 +10001,48 @@ function isApiLike(u){
     }
     window.gcComputeOfflineScore = gcComputeOfflineScore;
     window.gcStrictFetchMissingAssets = gcStrictFetchMissingAssets;
+    
+    async function runStrictOfflineMode() {
+      if (!currentZip) {
+        appendLog('Strict Offline: load ZIP dulu.', 'warn');
+        return;
+      }
+      setLoading(true, 'Strict Offline', 'Unduh asset + rewrite + skor…');
+      try {
+        window.__gcAutoRepairAll = true;
+        window.__gcAutoRepairSilent = true;
+        if (typeof runAutoRepair === 'function') await runAutoRepair();
+        let score = null;
+        if (typeof gcComputeOfflineScore === 'function') score = await gcComputeOfflineScore();
+        const report = {
+          mode: 'strict-offline',
+          at: new Date().toISOString(),
+          score: score,
+          note: 'Strict Offline: tracking strip + CDN lokal + path rewrite'
+        };
+        const js = JSON.stringify(report, null, 2);
+        openFiles.set('strict-offline.json', js);
+        if (currentZip) {
+          currentZip.file('strict-offline.json', js);
+          zipFileMap['strict-offline.json'] = currentZip.file('strict-offline.json');
+        }
+        setLoading(false);
+        appendLog(
+          'Strict Offline selesai' + (score ? ' · skor ' + score.score + '/100 (' + (score.grade || '') + ')' : ''),
+          'ok'
+        );
+        if (typeof renderFileTree === 'function') {
+          try { renderFileTree(Object.keys(zipFileMap)); } catch (_) {}
+        }
+      } catch (e) {
+        setLoading(false);
+        appendLog('Strict Offline gagal: ' + (e && e.message || e), 'err');
+      } finally {
+        window.__gcAutoRepairSilent = false;
+      }
+    }
+    window.runStrictOfflineMode = runStrictOfflineMode;
+
     window.runAutoRepair = runAutoRepair;
 
 
@@ -11364,7 +11411,7 @@ function isApiLike(u){
       if (ul) {
         const tips = suggestions && suggestions.length ? suggestions : [
           'Resume missing untuk melengkapi referensi.',
-          'Collect via GitHub dengan auto_spins agar API spin ikut.',
+          'Collect via GitHub (wait 22, spins 6) agar API spin ikut.',
           'Buka Workspace → cek kelengkapan.json.'
         ];
         ul.innerHTML = tips.map(function (t) { return '<li>' + t + '</li>'; }).join('');

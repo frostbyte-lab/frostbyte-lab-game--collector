@@ -108,6 +108,13 @@ export function shouldIncludeResource({ category, sub, folder, allowed }) {
   if (category === "api") {
     return allowed.has("api") || allowed.has("server");
   }
+  // script/style/data = asset frontend
+  if (category === "script" || category === "style" || category === "data") {
+    if (allowed.has("frontend") || allowed.has("engine") || allowed.has(category)) return true;
+    if (category === "script" && (allowed.has("js") || allowed.has("assets/js"))) return true;
+    if (category === "style" && (allowed.has("css") || allowed.has("assets/css"))) return true;
+    if (category === "data" && (allowed.has("config") || allowed.has("assets/data"))) return true;
+  }
 
   const subKey = (sub || "").toLowerCase();
   if (subKey && allowed.has(subKey)) return true;

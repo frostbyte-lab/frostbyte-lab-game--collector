@@ -160,6 +160,11 @@ export function classifySlotSubfolder(url, type, contentType = "") {
  * sub: hasil classifySlotSubfolder (hanya dipakai untuk game)
  */
 export function folderOf(type, category, sub = null) {
+  // Offline-first enum: script | style | data
+  if (category === "script") return "assets/js";
+  if (category === "style") return "assets/css";
+  if (category === "data") return "assets/data";
+
   if (category === "api" || category === "server") {
     return ({
       document: "server/html",

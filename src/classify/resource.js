@@ -178,8 +178,11 @@ export function classifyResource(url, type, contentType, bodyText) {
     };
   }
 
-  // 2) Browser resource type
-  if (["image", "media", "font", "stylesheet"].includes(type)) {
+  // 2) Browser resource type — SCRIPT / STYLE terpisah (offline-first enum)
+  if (type === "stylesheet") {
+    return { category: "style", reason: "static-type:stylesheet", status: STRICT_STATUS.ASSET };
+  }
+  if (["image", "media", "font"].includes(type)) {
     return {
       category: "game",
       reason: "static-type:" + type,
@@ -187,7 +190,10 @@ export function classifyResource(url, type, contentType, bodyText) {
     };
   }
 
-  // 3) Extension (CDN tanpa ekstensi di path tetap bisa lewat CT di atas)
+  // 3) Extension
+  if (/\.json(\?|#|$)/i.test(pathname) && !API_PATH_HINTS.some((h) => pathname.includes(h))) {
+    return { category: "data", reason: "json-data", status: STRICT_STATUS.ASSET };
+  }
   if (ASSET_EXT.test(pathname)) {
     return {
       category: "game",
@@ -215,7 +221,7 @@ export function classifyResource(url, type, contentType, bodyText) {
       };
     }
     return {
-      category: "game",
+      category: "script",
       reason: "script-bundle",
       status: STRICT_STATUS.ASSET
     };
@@ -227,6 +233,18 @@ export function classifyResource(url, type, contentType, bodyText) {
       reason: "document",
       status: STRICT_STATUS.ASSET
     };
+  }
+
+  // JSON / config data (xhr sering JSON)
+  if (
+    (type === "xhr" || type === "fetch") &&
+    (ct.includes("json") || /\.json(\?|$)/i.test(pathname)) &&
+    !API_PATH_HINTS.some((h) => pathname.includes(h))
+  ) {
+    // non-API JSON (atlas, locale, config static)
+    if (!API_ACTION_HINTS.test(pathname) && ASSET_EXT.test(pathname + ".json")) {
+      /* fall through */
+    }
   }
 
   // API: path + (opsional) JSON body — BUKAN host api.* saja

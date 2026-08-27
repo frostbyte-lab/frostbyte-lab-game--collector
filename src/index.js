@@ -1126,7 +1126,60 @@ export default {
 
           const u = response.url();
           if (seen.has(u) || isExcluded(u)) return;
-          if (u.startsWith("data:") || u.startsWith("blob:")) return;
+
+          // data: / blob: — coba simpan binary lokal (offline-first)
+          const isBlobOrData = u.startsWith("blob:") || u.startsWith("data:");
+          if (isBlobOrData) {
+            try {
+              if (seen.has(u)) return;
+              seen.add(u);
+              let buffer = null;
+              let ctBlob = response.headers()["content-type"] || "";
+              if (u.startsWith("data:")) {
+                const m = /^data:([^;,]+)?(;base64)?,(.*)$/i.exec(u);
+                if (!m) return;
+                ctBlob = m[1] || ctBlob || "application/octet-stream";
+                const payload = m[3] || "";
+                if (m[2]) {
+                  const bin = atob(payload);
+                  buffer = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++) buffer[i] = bin.charCodeAt(i);
+                } else {
+                  buffer = new TextEncoder().encode(decodeURIComponent(payload));
+                }
+              } else {
+                buffer = await response.body();
+              }
+              if (!buffer || !buffer.byteLength || buffer.byteLength > MAX_SINGLE_FILE) return;
+              if (sizeState.rawBytes + buffer.byteLength > MAX_RAW_TOTAL) return;
+              let ext = "bin";
+              if (/png/i.test(ctBlob)) ext = "png";
+              else if (/jpe?g/i.test(ctBlob)) ext = "jpg";
+              else if (/webp/i.test(ctBlob)) ext = "webp";
+              else if (/gif/i.test(ctBlob)) ext = "gif";
+              else if (/json/i.test(ctBlob)) ext = "json";
+              else if (/javascript/i.test(ctBlob)) ext = "js";
+              else if (/css/i.test(ctBlob)) ext = "css";
+              else if (/mp3|mpeg/i.test(ctBlob)) ext = "mp3";
+              else if (/ogg/i.test(ctBlob)) ext = "ogg";
+              const localPath = `assets/blob/${String(manifest.length + 1).padStart(4, "0")}-blob.${ext}`;
+              zipFiles[localPath] = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+              sizeState.rawBytes += zipFiles[localPath].byteLength;
+              manifest.push({
+                url: u.slice(0, 200),
+                type: type || "fetch",
+                status: 200,
+                localPath,
+                size: zipFiles[localPath].byteLength,
+                contentType: ctBlob,
+                category: "game",
+                classifyReason: u.startsWith("blob:") ? "blob-url" : "data-url",
+                collectStatus: STRICT_STATUS.DOWNLOADED,
+                strictStatus: STRICT_STATUS.ASSET
+              });
+            } catch (_) {}
+            return;
+          }
 
           // Gagal download: catat sebagai DOWNLOAD_FAILED — BUKAN API
           if (response.status() >= 400) {
@@ -1201,12 +1254,13 @@ export default {
 
           const norm = normalizeResourceUrl(u);
           if (norm.basename) name = norm.basename;
-          const slot = classified.category === "game"
+          const isAssetCat = ["game", "script", "style", "data"].includes(classified.category);
+          const slot = isAssetCat
             ? classifySlotSubfolder(u, type, ct)
             : { sub: null, reason: "" };
           let folder = folderOf(type, classified.category, slot.sub);
           const pref = preferredAssetDir(type, ct, norm.basename);
-          if (pref && classified.category === "game") folder = pref;
+          if (pref && isAssetCat) folder = pref;
 
           // Selective filter — skip resource di luar include/exclude
           if (!shouldIncludeResource({
@@ -1755,9 +1809,17 @@ export default {
 
       // Keterangan + pemisahan game vs API/server
       const ket = buildKeterangan(target.href, manifest, smart, analysis);
-      const gameCount = manifest.filter(r => r.category === "game").length;
+      const gameCount = manifest.filter(r => ["game", "script", "style", "data"].includes(r.category)).length;
       const apiCount = manifest.filter(r => r.category === "api").length;
       const serverCount = manifest.filter(r => r.category === "server").length;
+      const byCat = {
+        game: manifest.filter(r => r.category === "game").length,
+        script: manifest.filter(r => r.category === "script").length,
+        style: manifest.filter(r => r.category === "style").length,
+        data: manifest.filter(r => r.category === "data").length,
+        api: apiCount,
+        server: serverCount
+      };
 
       const failCount = manifest.filter(
         (r) => r.collectStatus === STRICT_STATUS.DOWNLOAD_FAILED || r.strictStatus === STRICT_STATUS.DOWNLOAD_FAILED
@@ -1768,6 +1830,7 @@ export default {
         totalFiles: manifest.length,
         totals: {
           game: gameCount,
+          byCategory: byCat,
           api: apiCount,
           server: serverCount,
           downloadFailed: failCount
@@ -2083,7 +2146,7 @@ ${formatCollectAuditSummary(collectAudit)}
         suggestions.push("Jalankan Resume missing untuk fetch sisa referensi (" + stillN + " URL).");
       }
       if (gameCount < 5) {
-        suggestions.push("Capture ulang dengan Collect via GitHub (auto_spins=3) agar spin/balance ikut tertangkap.");
+        suggestions.push("Capture ulang dengan Collect via GitHub (auto_spins=6, wait=22) agar session/spin + CDN ikut tertangkap.");
       }
       if ((apiCount || 0) === 0) {
         suggestions.push("Belum ada response API. Aktifkan Auto Spin / klik Spin di game lalu collect lagi.");

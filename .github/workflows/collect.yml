@@ -8,14 +8,14 @@ on:
         required: true
         type: string
       wait_seconds:
-        description: "Waktu tunggu setelah load (detik)"
+        description: "Waktu tunggu setelah load (detik) — offline-first 20–25"
         required: false
-        default: "20"
+        default: "22"
         type: string
       auto_spins:
-        description: "Jumlah auto-spin setelah Play (Rumus v3: minimal 3)"
+        description: "Auto-spin (offline-first default 6, session/spin snapshot)"
         required: false
-        default: "3"
+        default: "6"
         type: string
       auto_history:
         description: "Buka History sekali (1=ya, 0=tidak)"

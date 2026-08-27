@@ -10,8 +10,8 @@
  *
  * Env:
  *   TARGET_URL (wajib)
- *   WAIT_SECONDS     default 12
- *   AUTO_SPINS       default 3
+ *   WAIT_SECONDS     default 22 (offline-first)
+ *   AUTO_SPINS       default 6 (offline-first)
  *   AUTO_HISTORY     default 1
  *   SPIN_DELAY_MS    default 2200
  *   SEED_ZIP         optional path to seed ZIP
@@ -28,8 +28,8 @@ import {
 } from "./zip-aware-detect.js";
 
 const TARGET_URL = process.env.TARGET_URL;
-const WAIT_SECONDS = Math.max(5, parseInt(process.env.WAIT_SECONDS || "12", 10));
-const AUTO_SPINS = process.env.AUTO_SPINS || "3";
+const WAIT_SECONDS = Math.max(5, parseInt(process.env.WAIT_SECONDS || "22", 10));
+const AUTO_SPINS = process.env.AUTO_SPINS || "6";
 const AUTO_HISTORY = process.env.AUTO_HISTORY || "1";
 const SPIN_DELAY_MS = process.env.SPIN_DELAY_MS || "2200";
 
