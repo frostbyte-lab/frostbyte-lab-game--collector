@@ -2567,6 +2567,73 @@
     }
 
     /* ===== COLLECT PANEL ===== */
+
+    /* Alur Paste → Preview → Get data → Collect */
+    .gc-flow-steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0 0 14px;
+      padding: 0;
+    }
+    .gc-flow-step {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border, #333);
+      background: rgba(255,255,255,0.03);
+      font-size: 11px;
+      color: var(--text-muted, #889);
+    }
+    .gc-flow-step .n {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.08);
+      font-weight: 700;
+      font-size: 10px;
+    }
+    .gc-flow-step.active {
+      border-color: #3b82f6;
+      color: var(--text, #eee);
+      background: rgba(59,130,246,0.12);
+    }
+    .gc-flow-step.active .n { background: #3b82f6; color: #fff; }
+    .gc-flow-step.done {
+      border-color: #22c55e;
+      color: var(--text, #eee);
+    }
+    .gc-flow-step.done .n { background: #22c55e; color: #fff; }
+    .collect-actions-preview { display: flex; flex-wrap: wrap; gap: 8px; }
+    #gc-precollect-modal {
+      position: fixed; inset: 0; z-index: 12000;
+      background: rgba(0,0,0,0.72);
+      display: none; flex-direction: column;
+      padding: 12px;
+    }
+    #gc-precollect-modal.open { display: flex; }
+    #gc-precollect-modal .gc-pc-bar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      background: #111; color: #eee; padding: 10px 12px; border-radius: 10px 10px 0 0;
+    }
+    #gc-precollect-modal .gc-pc-bar strong { font-size: 13px; }
+    #gc-precollect-modal .gc-pc-bar span.hint { font-size: 11px; color: #9ab; flex: 1; min-width: 140px; }
+    #gc-precollect-modal .gc-pc-frame-wrap {
+      flex: 1; min-height: 0; background: #000; border-radius: 0 0 10px 10px;
+      overflow: hidden; position: relative;
+    }
+    #gc-precollect-modal iframe {
+      width: 100%; height: 100%; border: 0; background: #000;
+    }
+    #gc-precollect-modal .gc-pc-fallback {
+      position: absolute; inset: 0; display: none;
+      align-items: center; justify-content: center; text-align: center;
+      padding: 24px; color: #ccc; background: #0a0a0a;
+    }
+    #gc-precollect-modal .gc-pc-fallback.show { display: flex; flex-direction: column; gap: 12px; }
+
     #panel-collect.active {
       padding: 32px 24px;
       background: var(--bg);
@@ -3349,14 +3416,22 @@
           <label for="url">Game URL</label>
           <input id="url" type="url" placeholder="https://example.com/game">
 
+          <!-- Alur baru: Paste → Preview → ±10 spin → Get data → Collect -->
+          <div id="gc-flow-steps" class="gc-flow-steps" aria-label="Alur collect">
+            <div class="gc-flow-step active" data-step="1"><span class="n">1</span><span class="l">Paste URL</span></div>
+            <div class="gc-flow-step" data-step="2"><span class="n">2</span><span class="l">Preview + spin</span></div>
+            <div class="gc-flow-step" data-step="3"><span class="n">3</span><span class="l">Get data</span></div>
+            <div class="gc-flow-step" data-step="4"><span class="n">4</span><span class="l">Full Collect</span></div>
+          </div>
+
           <div class="collect-options" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 4px;">
             <div>
               <label for="collect-wait" style="font-size:12px;color:var(--text-muted);">Wait after load (detik)</label>
               <input id="collect-wait" type="number" min="3" max="180" value="22" title="Offline-first: 20–25s agar signed CDN + API sempat jalan">
             </div>
             <div>
-              <label for="collect-spins" style="font-size:12px;color:var(--text-muted);">Auto-spins (opsional)</label>
-              <input id="collect-spins" type="number" min="0" max="50" value="6" title="Offline-first default 6: capture session/spin snapshot">
+              <label for="collect-spins" style="font-size:12px;color:var(--text-muted);">Auto-spins (default 10)</label>
+              <input id="collect-spins" type="number" min="0" max="20" value="10" title="Jumlah spin otomatis saat full collect (±10 disarankan)">
             </div>
             <div>
               <label for="collect-spin-delay" style="font-size:12px;color:var(--text-muted);">Delay antar spin (ms)</label>
@@ -3370,18 +3445,22 @@
               </select>
             </div>
           </div>
-          <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">Offline-first: Wait <b>22</b>s · Auto-spins <b>6</b> (session+CDN). Tracking dibuang di Collect. ZIP besar → GitHub Actions.</p>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:0 0 8px;cursor:pointer;">
-            <input type="checkbox" id="collect-strict-offline" checked style="width:16px;height:16px;">
-            <span><b>Strict Offline</b> — unduh CDN sisa + rewrite + skor</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:0 0 12px;cursor:pointer;">
-            <input type="checkbox" id="collect-unlimited" style="width:16px;height:16px;">
-            <span><b>Unlimited</b> — fill/depth max (R2/GitHub untuk paket sangat besar)</span>
-          </label>
+          <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">
+            Alur: <b>Paste URL</b> → <b>Preview</b> (putar ±10× di jendela game) → <b>Get data</b> → <b>Full Collect</b>.
+            Preview di sini sebelum collect penuh. Auto-spins default 10.
+          </p>
+
+          <div class="collect-actions collect-actions-preview" style="margin-bottom:8px;">
+            <button type="button" class="btn btn-secondary" id="btn-preview-before-collect" onclick="openPreCollectPreview()" title="Buka preview game dulu, putar ±10×, baru full collect">
+              ▶ Preview Game
+            </button>
+            <button type="button" class="btn btn-secondary" id="btn-get-data-hint" onclick="markGetDataStep()" title="Tandai data sudah diamati, siap collect">
+              Get data ✓
+            </button>
+          </div>
           
-          <div class="collect-actions">
-            <button class="btn btn-primary" onclick="try{runCollect()}catch(e){alert('Collect error: '+e.message);console.error(e)}">
+          <div class="collect-actions" id="gc-full-collect-actions">
+            <button class="btn btn-primary" onclick="runCollect()">
               <span class="brand-icon" aria-hidden="true">
                 <svg viewBox="0 0 240 156" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
                   <path fill="#ffffff" d="M189.7 89.9c-1-3.4-3.9-5.9-7.4-6.4l-104-1.3c-.7 0-1.3-.4-1.6-1s-.4-1.3 0-1.9c.4-.7 1.1-1.1 1.8-1.2l104.9-1.3c12.4-.6 26-10.6 30.5-23.3l6-16.7c.3-.7.3-1.5.1-2.2C210.6 14 187.6 0 162 0c-23.6 0-43.8 12-55.9 30.2-8.4-6.3-19.2-9.6-30.8-8.5C54.5 23.4 38.9 39 36.3 58c-.7 4.9-.6 9.7.2 14.2C16 73.8 0 90.9 0 111.7c0 1.9.1 3.9.4 5.8.2 1.3 1.3 2.2 2.6 2.2h179.9c1.5 0 2.8-1 3.1-2.5l3.4-11.9c1.6-5.5 1.1-10.7.3-15.4z"/>
@@ -3413,11 +3492,11 @@
               </details>
               <details class="collect-help-item" open>
                 <summary>Alur offline (tanpa EDU)</summary>
-                <p>1) Set Wait; Auto-spins biarkan 0 untuk asset, atau 3–5 untuk API.<br>
-                2) ZIP terunduh → Workspace.<br>
-                3) Workspace: tombol <b>AI</b> / Scan Error / Deteksi AI.<br>
-                4) Sandbox memakai <code>api-map.json</code> + snapshot untuk mock lokal.<br>
-                5) Download ZIP → hosting manual di server kamu.</p>
+                <p>1) <b>Paste URL</b> game.<br>
+                2) Klik <b>Preview Game</b> → putar ±10× (lihat API/asset hidup).<br>
+                3) <b>Get data ✓</b> lalu <b>Full Collect</b> (Cloudflare atau GitHub, Auto-spins 10).<br>
+                4) ZIP → Workspace → Sandbox / Auto Repair.<br>
+                5) Download ZIP → hosting / EDU.</p>
               </details>
               <details class="collect-help-item">
                 <summary>Wait after load (detik)</summary>
@@ -12269,58 +12348,91 @@ function isApiLike(u){
     }
 
 
-    /** Pipeline status UI — seperti log remote step-by-step */
-    var GC_PIPE_STEPS = ['online', 'capture', 'zip', 'seal', 'scan', 'sandbox'];
-    function gcPipelineReset() {
-      var root = document.getElementById('gc-pipeline');
-      if (!root) return;
-      root.querySelectorAll('.gc-pipe-step').forEach(function (el) {
-        el.classList.remove('is-run', 'is-ok', 'is-err');
-        el.classList.add('is-pending');
-        var mark = el.querySelector('.gc-pipe-mark');
-        if (mark) mark.textContent = String(GC_PIPE_STEPS.indexOf(el.getAttribute('data-step')) + 1);
-      });
+    // ========== Pre-collect flow: Preview → Get data → Full Collect ==========
+    function gcSetFlowStep(n) {
+      try {
+        var steps = document.querySelectorAll('#gc-flow-steps .gc-flow-step');
+        steps.forEach(function (el) {
+          var s = Number(el.getAttribute('data-step') || 0);
+          el.classList.remove('active', 'done');
+          if (s < n) el.classList.add('done');
+          if (s === n) el.classList.add('active');
+        });
+      } catch (e) {}
     }
-    function gcPipelineSet(step, state, detail) {
-      var root = document.getElementById('gc-pipeline');
-      if (!root) return;
-      var idx = GC_PIPE_STEPS.indexOf(step);
-      root.querySelectorAll('.gc-pipe-step').forEach(function (el) {
-        var s = el.getAttribute('data-step');
-        var i = GC_PIPE_STEPS.indexOf(s);
-        var mark = el.querySelector('.gc-pipe-mark');
-        var det = el.querySelector('.gc-pipe-detail');
-        el.classList.remove('is-pending', 'is-run', 'is-ok', 'is-err');
-        if (i < idx) {
-          el.classList.add('is-ok');
-          if (mark) mark.textContent = '✓';
-        } else if (i === idx) {
-          el.classList.add(state === 'err' ? 'is-err' : (state === 'ok' ? 'is-ok' : 'is-run'));
-          if (mark) mark.textContent = state === 'ok' ? '✓' : (state === 'err' ? '!' : '…');
-          if (detail && det) det.textContent = detail;
-        } else {
-          el.classList.add('is-pending');
-          if (mark) mark.textContent = String(i + 1);
-        }
-      });
+    function gcGetCollectUrl() {
+      var el = document.getElementById('url');
+      return (el && el.value || '').trim();
     }
-    function gcPipelineAllOk(detail) {
-      GC_PIPE_STEPS.forEach(function (s, i) {
-        var el = document.querySelector('#gc-pipeline .gc-pipe-step[data-step="' + s + '"]');
-        if (!el) return;
-        el.classList.remove('is-pending', 'is-run', 'is-err');
-        el.classList.add('is-ok');
-        var mark = el.querySelector('.gc-pipe-mark');
-        if (mark) mark.textContent = '✓';
-        if (i === GC_PIPE_STEPS.length - 1 && detail) {
-          var det = el.querySelector('.gc-pipe-detail');
-          if (det) det.textContent = detail;
-        }
-      });
+    function openPreCollectPreview() {
+      var url = gcGetCollectUrl();
+      if (!url) {
+        alert('Tempel Game URL dulu (langkah 1).');
+        try { document.getElementById('url').focus(); } catch (e) {}
+        return;
+      }
+      try { new URL(url); } catch (e) {
+        alert('URL tidak valid.');
+        return;
+      }
+      gcSetFlowStep(2);
+      var modal = document.getElementById('gc-precollect-modal');
+      var iframe = document.getElementById('gc-precollect-iframe');
+      var fb = document.getElementById('gc-precollect-fallback');
+      if (fb) fb.classList.remove('show');
+      if (iframe) {
+        iframe.src = url;
+      }
+      if (modal) {
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+      try {
+        if (typeof appendLog === 'function') appendLog('Preview dibuka. Putar ±10× lalu Get data / Full Collect.', 'info');
+      } catch (e2) {}
     }
-    window.gcPipelineSet = gcPipelineSet;
-    window.gcPipelineReset = gcPipelineReset;
-    window.gcPipelineAllOk = gcPipelineAllOk;
+    function openPreCollectInTab() {
+      var url = gcGetCollectUrl();
+      if (!url) { alert('Tempel Game URL dulu.'); return; }
+      gcSetFlowStep(2);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      var fb = document.getElementById('gc-precollect-fallback');
+      if (fb) fb.classList.add('show');
+    }
+    function closePreCollectPreview(goCollect) {
+      var modal = document.getElementById('gc-precollect-modal');
+      var iframe = document.getElementById('gc-precollect-iframe');
+      if (iframe) iframe.src = 'about:blank';
+      if (modal) {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+      if (goCollect) {
+        markGetDataStep();
+        gcSetFlowStep(4);
+        try {
+          var act = document.getElementById('gc-full-collect-actions');
+          if (act) act.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) {}
+      }
+    }
+    function markGetDataStep() {
+      gcSetFlowStep(3);
+      try {
+        if (typeof appendLog === 'function') appendLog('Get data: siap Full Collect (Auto-spins ±10).', 'ok');
+      } catch (e) {}
+      var spins = document.getElementById('collect-spins');
+      if (spins && (!spins.value || Number(spins.value) < 5)) spins.value = '10';
+      setTimeout(function () { gcSetFlowStep(4); }, 600);
+    }
+    (function () {
+      var urlEl = document.getElementById('url');
+      if (urlEl) {
+        urlEl.addEventListener('input', function () {
+          if ((urlEl.value || '').trim()) gcSetFlowStep(1);
+        });
+      }
+    })();
 
 
     // ========== Collect via Cloudflare (Playwright) ==========
@@ -12336,6 +12448,7 @@ function isApiLike(u){
     }
 
     async function runCollect() {
+      try { gcSetFlowStep(4); } catch (_gc) {}
       const urlInput = document.getElementById('url');
       const statusEl = document.getElementById('status');
       const gameUrl = (urlInput && urlInput.value || '').trim();
@@ -12533,6 +12646,7 @@ function isApiLike(u){
     let _ghPollTimer = null;
 
     async function runGitHubCollect() {
+      try { gcSetFlowStep(4); } catch (_gc) {}
       const urlInput = document.getElementById('url');
       const statusEl = document.getElementById('status');
       const gameUrl = (urlInput && urlInput.value || '').trim();
@@ -13753,6 +13867,24 @@ function isApiLike(u){
   };
 })();
 </script>
+
+
+    <div id="gc-precollect-modal" aria-hidden="true">
+      <div class="gc-pc-bar">
+        <strong>Preview Game</strong>
+        <span class="hint">Putar ±10× di game, lalu tutup → Get data → Full Collect</span>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="openPreCollectInTab()">Buka tab baru</button>
+        <button type="button" class="btn btn-sm btn-success" onclick="closePreCollectPreview(true)">Selesai → Collect</button>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="closePreCollectPreview(false)">Tutup</button>
+      </div>
+      <div class="gc-pc-frame-wrap">
+        <iframe id="gc-precollect-iframe" title="Game preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock allow-presentation"></iframe>
+        <div class="gc-pc-fallback" id="gc-precollect-fallback">
+          <p>Game memblokir iframe. Pakai <b>Buka tab baru</b>, putar ±10×, lalu kembali.</p>
+          <button type="button" class="btn btn-primary" onclick="openPreCollectInTab()">Buka game di tab baru</button>
+        </div>
+      </div>
+    </div>
 
 </body>
 </html>
