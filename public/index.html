@@ -2722,17 +2722,109 @@
     }
 
     .status-box {
-      padding: 16px;
+      padding: 12px 14px;
       background: var(--bg-secondary);
       border-radius: 10px;
       border: 1px solid var(--border);
-      min-height: 110px;
+      min-height: 48px;
       font-family: 'Monaco', 'Menlo', monospace;
       font-size: 12px;
       color: var(--text-muted);
       white-space: pre-wrap;
       overflow-y: auto;
       line-height: 1.55;
+    }
+
+    /* Pipeline status (seperti log remote bash) */
+    .gc-pipeline {
+      margin-bottom: 12px;
+      padding: 14px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      font-family: ui-monospace, 'Cascadia Code', Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .gc-pipeline-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #8b949e;
+      margin-bottom: 10px;
+    }
+    .gc-pipe-step {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 6px 0;
+      border-left: 2px solid #21262d;
+      margin-left: 7px;
+      padding-left: 12px;
+      color: #6e7681;
+    }
+    .gc-pipe-step:last-child { border-left-color: transparent; }
+    .gc-pipe-step .gc-pipe-mark {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      margin-left: -22px;
+      margin-top: 1px;
+      border-radius: 50%;
+      background: #21262d;
+      border: 2px solid #30363d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 800;
+      color: #8b949e;
+    }
+    .gc-pipe-step.is-pending .gc-pipe-mark { border-color: #30363d; color: #6e7681; }
+    .gc-pipe-step.is-run {
+      color: #58a6ff;
+      border-left-color: #1f6feb;
+    }
+    .gc-pipe-step.is-run .gc-pipe-mark {
+      border-color: #58a6ff;
+      background: #0d419d;
+      color: #fff;
+      animation: gc-pipe-pulse 1s ease-in-out infinite;
+    }
+    .gc-pipe-step.is-ok {
+      color: #3fb950;
+      border-left-color: #238636;
+    }
+    .gc-pipe-step.is-ok .gc-pipe-mark {
+      border-color: #3fb950;
+      background: #238636;
+      color: #fff;
+    }
+    .gc-pipe-step.is-err {
+      color: #f85149;
+      border-left-color: #da3633;
+    }
+    .gc-pipe-step.is-err .gc-pipe-mark {
+      border-color: #f85149;
+      background: #da3633;
+      color: #fff;
+    }
+    .gc-pipe-step .gc-pipe-label { flex: 1; }
+    .gc-pipe-step .gc-pipe-label strong { color: inherit; font-weight: 650; }
+    .gc-pipe-step .gc-pipe-detail {
+      display: block;
+      font-size: 11px;
+      opacity: 0.85;
+      margin-top: 2px;
+      color: #8b949e;
+    }
+    .gc-pipe-step.is-run .gc-pipe-detail { color: #79c0ff; }
+    .gc-pipe-step.is-ok .gc-pipe-detail { color: #56d364; }
+    .gc-pipe-step.is-err .gc-pipe-detail { color: #ff7b72; }
+    @keyframes gc-pipe-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.45); }
+      50% { box-shadow: 0 0 0 6px rgba(88, 166, 255, 0); }
     }
 
     .feature-grid {
@@ -3364,7 +3456,34 @@
         </div>
 
         <div class="collect-card" style="padding: 16px;">
-          <div id="status" class="status-box">Status: Ready</div>
+          <div id="gc-pipeline" class="gc-pipeline" aria-live="polite">
+            <div class="gc-pipeline-title">Pipeline offline</div>
+            <div class="gc-pipe-step is-pending" data-step="online">
+              <span class="gc-pipe-mark">1</span>
+              <span class="gc-pipe-label"><strong>Game online</strong><span class="gc-pipe-detail">Sign CDN masih valid — siap capture</span></span>
+            </div>
+            <div class="gc-pipe-step is-pending" data-step="capture">
+              <span class="gc-pipe-mark">2</span>
+              <span class="gc-pipe-label"><strong>Capture</strong><span class="gc-pipe-detail">Wait + spins · unduh binary PNG/JS</span></span>
+            </div>
+            <div class="gc-pipe-step is-pending" data-step="zip">
+              <span class="gc-pipe-mark">3</span>
+              <span class="gc-pipe-label"><strong>ZIP paket</strong><span class="gc-pipe-detail">PNG biner + rewrite hybrid</span></span>
+            </div>
+            <div class="gc-pipe-step is-pending" data-step="seal">
+              <span class="gc-pipe-mark">4</span>
+              <span class="gc-pipe-label"><strong>Seal</strong><span class="gc-pipe-detail">Rewrite lokal + hapus GTM</span></span>
+            </div>
+            <div class="gc-pipe-step is-pending" data-step="scan">
+              <span class="gc-pipe-mark">5</span>
+              <span class="gc-pipe-label"><strong>Scan</strong><span class="gc-pipe-detail">Target: 0 ASSET absolut</span></span>
+            </div>
+            <div class="gc-pipe-step is-pending" data-step="sandbox">
+              <span class="gc-pipe-mark">6</span>
+              <span class="gc-pipe-label"><strong>Sandbox offline</strong><span class="gc-pipe-detail">Preview tanpa CDN live</span></span>
+            </div>
+          </div>
+          <div id="status" class="status-box">Status: Ready — tekan Capture untuk mulai pipeline</div>
           <div id="gc-collect-meta" class="gc-collect-meta hidden">
             <div class="gc-cm-row"><span>Kelengkapan</span><strong id="gc-cm-pct">0%</strong></div>
             <div class="gc-cm-bar"><i id="gc-cm-bar" style="width:0%"></i></div>
@@ -12149,6 +12268,61 @@ function isApiLike(u){
       }
     }
 
+
+    /** Pipeline status UI — seperti log remote step-by-step */
+    var GC_PIPE_STEPS = ['online', 'capture', 'zip', 'seal', 'scan', 'sandbox'];
+    function gcPipelineReset() {
+      var root = document.getElementById('gc-pipeline');
+      if (!root) return;
+      root.querySelectorAll('.gc-pipe-step').forEach(function (el) {
+        el.classList.remove('is-run', 'is-ok', 'is-err');
+        el.classList.add('is-pending');
+        var mark = el.querySelector('.gc-pipe-mark');
+        if (mark) mark.textContent = String(GC_PIPE_STEPS.indexOf(el.getAttribute('data-step')) + 1);
+      });
+    }
+    function gcPipelineSet(step, state, detail) {
+      var root = document.getElementById('gc-pipeline');
+      if (!root) return;
+      var idx = GC_PIPE_STEPS.indexOf(step);
+      root.querySelectorAll('.gc-pipe-step').forEach(function (el) {
+        var s = el.getAttribute('data-step');
+        var i = GC_PIPE_STEPS.indexOf(s);
+        var mark = el.querySelector('.gc-pipe-mark');
+        var det = el.querySelector('.gc-pipe-detail');
+        el.classList.remove('is-pending', 'is-run', 'is-ok', 'is-err');
+        if (i < idx) {
+          el.classList.add('is-ok');
+          if (mark) mark.textContent = '✓';
+        } else if (i === idx) {
+          el.classList.add(state === 'err' ? 'is-err' : (state === 'ok' ? 'is-ok' : 'is-run'));
+          if (mark) mark.textContent = state === 'ok' ? '✓' : (state === 'err' ? '!' : '…');
+          if (detail && det) det.textContent = detail;
+        } else {
+          el.classList.add('is-pending');
+          if (mark) mark.textContent = String(i + 1);
+        }
+      });
+    }
+    function gcPipelineAllOk(detail) {
+      GC_PIPE_STEPS.forEach(function (s, i) {
+        var el = document.querySelector('#gc-pipeline .gc-pipe-step[data-step="' + s + '"]');
+        if (!el) return;
+        el.classList.remove('is-pending', 'is-run', 'is-err');
+        el.classList.add('is-ok');
+        var mark = el.querySelector('.gc-pipe-mark');
+        if (mark) mark.textContent = '✓';
+        if (i === GC_PIPE_STEPS.length - 1 && detail) {
+          var det = el.querySelector('.gc-pipe-detail');
+          if (det) det.textContent = detail;
+        }
+      });
+    }
+    window.gcPipelineSet = gcPipelineSet;
+    window.gcPipelineReset = gcPipelineReset;
+    window.gcPipelineAllOk = gcPipelineAllOk;
+
+
     // ========== Collect via Cloudflare (Playwright) ==========
     // ========== Collect via Cloudflare (Playwright) ==========
     // Semua status & unduhan tetap di web ini — tidak buka tab GitHub.
@@ -12176,7 +12350,10 @@ function isApiLike(u){
         return;
       }
 
-      statusEl.textContent = 'Status: Collecting (Cloudflare) · wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + '...';
+      try { gcPipelineReset(); } catch (_) {}
+      try { gcPipelineSet('online', 'ok', 'URL siap · sign diharapkan valid'); } catch (_) {}
+      try { gcPipelineSet('capture', 'run', 'Wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + (opts.unlimited ? ' · unlimited' : '')); } catch (_) {}
+      statusEl.textContent = 'Status: [2/6 Capture] Collecting · wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + '...';
       try {
         const progressId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
         gcShowLiveCapture(true);
@@ -12187,7 +12364,12 @@ function isApiLike(u){
             const pr = await fetch('/api/progress?id=' + encodeURIComponent(progressId));
             const pd = await pr.json();
             if (pd && (pd.label || pd.phase)) {
-              statusEl.textContent = 'Status: ' + (pd.phase || '') + (pd.label ? ' — ' + pd.label : '') + (pd.pct != null ? ' (' + pd.pct + '%)' : '');
+              statusEl.textContent = 'Status: [2/6 Capture] ' + (pd.phase || '') + (pd.label ? ' — ' + pd.label : '') + (pd.pct != null ? ' (' + pd.pct + '%)' : '');
+              try {
+                var ph = String(pd.phase || pd.label || '').toLowerCase();
+                if (/pack|zip|hybrid|offline|fill/i.test(ph)) gcPipelineSet('zip', 'run', pd.label || pd.phase);
+                else gcPipelineSet('capture', 'run', (pd.label || pd.phase || '') + (pd.pct != null ? ' (' + pd.pct + '%)' : ''));
+              } catch (_) {}
             }
             if (pd) {
               gcRenderLiveFiles(pd.recentFiles || [], pd.files || 0, pd.pct || 0);
@@ -12213,6 +12395,7 @@ function isApiLike(u){
             errMsg = err.error || err.message || errMsg;
           } catch (_) {}
           statusEl.textContent = 'Status: Gagal — ' + errMsg;
+          try { gcPipelineSet('capture', 'err', errMsg); } catch (_) {}
           return;
         }
 
@@ -12249,7 +12432,12 @@ function isApiLike(u){
           } catch (_) {}
 
           if (incomplete || stillMissing > 0) {
-            statusEl.textContent = 'Status: Selesai tapi BELUM LENGKAP — ' + totalFiles + ' file · missing ' + stillMissing + (overall ? ' · skor ' + overall : '');
+            statusEl.textContent = 'Status: [3/6 ZIP] Selesai tapi BELUM LENGKAP — ' + totalFiles + ' file · missing ' + stillMissing + (overall ? ' · skor ' + overall : '');
+            try {
+              gcPipelineSet('capture', 'ok', 'Selesai');
+              gcPipelineSet('zip', 'ok', totalFiles + ' file · missing ' + stillMissing);
+              gcPipelineSet('seal', 'run', 'Jalankan Seal di Workspace');
+            } catch (_) {}
             gcShowIncomplete({
               incomplete: true,
               stillMissing,
@@ -12263,7 +12451,12 @@ function isApiLike(u){
               'Load ZIP di Workspace, cek kelengkapan.json / api-map.'
             ].filter(Boolean));
           } else {
-            statusEl.textContent = 'Status: Selesai — ZIP diunduh & dimuat ke Workspace (' + totalFiles + ' file)';
+            statusEl.textContent = 'Status: [3/6 ZIP] Selesai — ' + totalFiles + ' file · lanjut Seal di Workspace';
+            try {
+              gcPipelineSet('capture', 'ok', 'Capture OK');
+              gcPipelineSet('zip', 'ok', totalFiles + ' file di ZIP');
+              gcPipelineSet('seal', 'run', 'Buka Workspace → Seal / Auto Repair');
+            } catch (_) {}
             gcShowIncomplete(null);
           }
           return;
@@ -12291,6 +12484,7 @@ function isApiLike(u){
         statusEl.textContent = 'Status: ' + (data.message || 'Selesai');
       } catch (e) {
         statusEl.textContent = 'Status: Error — ' + e.message;
+        try { gcPipelineSet('capture', 'err', e.message); } catch (_) {}
       }
     }
 
@@ -12390,6 +12584,7 @@ function isApiLike(u){
         }
       } catch (e) {
         statusEl.textContent = 'Status: Error — ' + e.message;
+        try { gcPipelineSet('capture', 'err', e.message); } catch (_) {}
       }
     }
 
