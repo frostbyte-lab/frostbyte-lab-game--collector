@@ -21,6 +21,7 @@ import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
 import { mapAssetRelations } from "./analyze/relations.js";
 import { fillMissingAssets } from "./collect/fill-missing.js";
+import { normalizeResourceUrl, preferredAssetDir } from "./collect/normalize.js";
 import { postCollectAudit, formatCollectAuditSummary } from "./collect/post-audit.js";
 import { runRecoveryEngine } from "./collect/recovery.js";
 import { buildDependencyQueue, queueReport } from "./collect/queue.js";
@@ -370,7 +371,7 @@ export default {
           inputs: {
             url: gameUrl,
             wait_seconds: waitSeconds,
-            auto_spins: String(body.auto_spins ?? body.autoSpins ?? "3"),
+            auto_spins: String(body.auto_spins ?? body.autoSpins ?? "6"),
             auto_history: String(body.auto_history ?? body.autoHistory ?? "1"),
             spin_delay_ms: String(body.spin_delay_ms ?? body.spinDelayMs ?? "2200"),
             seed_zip: String(body.seed_zip ?? body.seedZip ?? "")
@@ -1036,9 +1037,9 @@ export default {
     );
 
     // Collect options (process 4)
-    const waitSeconds = Math.min(60, Math.max(3, Number(body.wait_seconds || body.waitSeconds || 20) || 20));
-    // Spin = Interaction Discovery — Rumus Offline Super v3: default 3
-    const autoSpins = Math.min(15, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 3) || 3));
+    // Offline-first (catatan proses baru): Wait 22s, spins 6
+    const waitSeconds = Math.min(60, Math.max(3, Number(body.wait_seconds || body.waitSeconds || 22) || 22));
+    const autoSpins = Math.min(15, Math.max(0, Number(body.auto_spins ?? body.autoSpins ?? 6) || 6));
     const spinDelayMs = Math.min(8000, Math.max(500, Number(body.spin_delay_ms ?? body.spinDelayMs ?? 2200) || 2200));
     // collectMode: static | runtime | full (default)
     const collectMode = String(body.mode || body.collect_mode || body.collectMode || "full").toLowerCase();
@@ -1189,10 +1190,23 @@ export default {
           } catch {}
 
           const classified = classifyResource(u, type, ct, bodyPeek);
+          // TRACKING: buang sejak intercept — jangan simpan ke ZIP
+          if (
+            classified.status === "TRACKING" ||
+            classified.reason === "tracking" ||
+            (classified.category === "server" && /tracking/i.test(classified.reason || ""))
+          ) {
+            return;
+          }
+
+          const norm = normalizeResourceUrl(u);
+          if (norm.basename) name = norm.basename;
           const slot = classified.category === "game"
             ? classifySlotSubfolder(u, type, ct)
             : { sub: null, reason: "" };
-          const folder = folderOf(type, classified.category, slot.sub);
+          let folder = folderOf(type, classified.category, slot.sub);
+          const pref = preferredAssetDir(type, ct, norm.basename);
+          if (pref && classified.category === "game") folder = pref;
 
           // Selective filter — skip resource di luar include/exclude
           if (!shouldIncludeResource({
@@ -1226,6 +1240,7 @@ export default {
           sizeState.rawBytes += buffer.byteLength;
           const entry = {
             url: u,
+            urlClean: norm.cleanUrl || u.split("?")[0],
             type,
             status: response.status(),
             localPath,
@@ -1235,7 +1250,8 @@ export default {
             subCategory: slot.sub || null,
             classifyReason: classified.reason + (slot.reason ? "+" + slot.reason : ""),
             collectStatus: STRICT_STATUS.DOWNLOADED,
-            strictStatus: classified.status || STRICT_STATUS.ASSET
+            strictStatus: classified.status || STRICT_STATUS.ASSET,
+            hadSignedQuery: !!norm.hadQuery
           };
           if (apiMeta) {
             entry.apiKind = apiMeta.kind;

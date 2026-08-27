@@ -42,6 +42,7 @@ export function buildUrlToLocalMap(manifest) {
     if (!r.url || !r.localPath) continue;
     const localPath = r.localPath;
     add(r.url, localPath);
+    if (r.urlClean) add(r.urlClean, localPath);
     try {
       const u = new URL(r.url);
       add(u.href, localPath);

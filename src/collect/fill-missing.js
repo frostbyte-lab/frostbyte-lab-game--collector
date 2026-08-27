@@ -172,7 +172,7 @@ export async function fillMissingAssets(
           report.fetched++;
           continue;
         }
-        let name = safe(new URL(u).pathname.split("/").pop() || "file");
+        let name = safe((new URL(u).pathname.split("/").pop() || "file").split("?")[0]);
         // Strip query from local filename (signed URL)
         name = name.split("?")[0].split("#")[0];
         if (!/\.[a-z0-9]{1,8}$/i.test(name)) {

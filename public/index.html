@@ -3230,11 +3230,11 @@
           <div class="collect-options" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 4px;">
             <div>
               <label for="collect-wait" style="font-size:12px;color:var(--text-muted);">Wait after load (detik)</label>
-              <input id="collect-wait" type="number" min="3" max="60" value="20" title="Waktu tunggu setelah halaman load agar asset/API sempat jalan">
+              <input id="collect-wait" type="number" min="3" max="60" value="22" title="Offline-first: 20–25s agar signed CDN + API sempat jalan">
             </div>
             <div>
               <label for="collect-spins" style="font-size:12px;color:var(--text-muted);">Auto-spins (opsional)</label>
-              <input id="collect-spins" type="number" min="0" max="15" value="0" title="0 = collect asset saja. >0 = Interaction Discovery (spin/API)">
+              <input id="collect-spins" type="number" min="0" max="15" value="6" title="Offline-first default 6: capture session/spin snapshot">
             </div>
             <div>
               <label for="collect-spin-delay" style="font-size:12px;color:var(--text-muted);">Delay antar spin (ms)</label>
@@ -3248,7 +3248,7 @@
               </select>
             </div>
           </div>
-          <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">Tips: Wait 12–20 untuk asset. Auto-spins default 0 (bukan syarat). Set 3–5 hanya jika perlu capture API spin. ZIP besar → GitHub Actions.</p>
+          <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">Offline-first: Wait <b>22</b>s · Auto-spins <b>6</b> (session+CDN). Tracking dibuang di Collect. ZIP besar → GitHub Actions.</p>
           
           <div class="collect-actions">
             <button class="btn btn-primary" onclick="runCollect()">
@@ -11413,8 +11413,8 @@ function isApiLike(u){
     // ========== Collect via Cloudflare (Playwright) ==========
     // Semua status & unduhan tetap di web ini — tidak buka tab GitHub.
     function gcCollectOptions() {
-      const wait = String(Math.min(60, Math.max(3, Number(document.getElementById('collect-wait')?.value) || 20)));
-      const spins = String(Math.min(15, Math.max(0, Number(document.getElementById('collect-spins')?.value) || 0)));
+      const wait = String(Math.min(60, Math.max(3, Number(document.getElementById('collect-wait')?.value) || 22)));
+      const spins = String(Math.min(15, Math.max(0, Number(document.getElementById('collect-spins')?.value) || 6)));
       const spinDelay = String(Math.min(8000, Math.max(500, Number(document.getElementById('collect-spin-delay')?.value) || 2200)));
       const history = String(document.getElementById('collect-history')?.value === '0' ? '0' : '1');
       return { wait_seconds: wait, auto_spins: spins, spin_delay_ms: spinDelay, auto_history: history };
