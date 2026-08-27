@@ -9791,6 +9791,59 @@ function isApiLike(u){
 
 
     /** Strict: unduh ASSET absolut yang masih missing (CDN signed URL) ke ZIP, lalu siap rewrite */
+
+    /** Force-replace full signed CDN URLs (termasuk ?sign=) → path lokal assets/eajzz/ */
+    function gcForceRewriteSignedCdn(code, downloadMap) {
+      if (!code || !downloadMap) return { code: code, changes: 0, report: [] };
+      var out = code;
+      var n = 0;
+      var report = [];
+      Object.keys(downloadMap).forEach(function (url) {
+        var local = downloadMap[url];
+        if (!url || !local) return;
+        if (out.indexOf(url) >= 0) {
+          out = out.split(url).join(local);
+          n++;
+          report.push('force ' + url.slice(0, 60) + ' → ' + local);
+        }
+        // HTML entity &amp;
+        var amp = url.replace(/&/g, '&amp;');
+        if (amp !== url && out.indexOf(amp) >= 0) {
+          out = out.split(amp).join(local);
+          n++;
+        }
+        // without query
+        var noq = url.split('?')[0];
+        if (noq && noq.length > 20 && out.indexOf(noq) >= 0) {
+          // only if still absolute host
+          out = out.split(noq).join(local);
+          n++;
+          report.push('force noq → ' + local);
+        }
+        // basename only in quotes pointing to eajzz
+        try {
+          var base = decodeURIComponent(new URL(url).pathname.split('/').pop() || '');
+          if (base && out.indexOf(base) >= 0) {
+            // don't replace basename alone too aggressively - skip
+          }
+        } catch (_) {}
+      });
+      // Strip GTM hard
+      var tr = 0;
+      out = out.replace(/<script\b[^>]*\bsrc\s*=\s*["'][^"']*(?:googletagmanager|google-analytics|gtag\/js|gtm\.js)[^"']*["'][^>]*>\s*<\/script>/gi, function () {
+        tr++; return '<!-- GC: GTM removed -->';
+      });
+      out = out.replace(/https?:\/\/www\.googletagmanager\.com\/[^"'\\s>]*/gi, function () {
+        tr++; return '';
+      });
+      if (tr) {
+        n += tr;
+        report.push('GTM stripped x' + tr);
+      }
+      return { code: out, changes: n, report: report };
+    }
+    window.gcForceRewriteSignedCdn = gcForceRewriteSignedCdn;
+
     async function gcStrictFetchMissingAssets(maxFetch) {
       maxFetch = maxFetch || 12;
       if (!currentZip || !zipFileMap) return { fetched: 0, failed: 0, skipped: 0, details: [] };
@@ -9819,6 +9872,36 @@ function isApiLike(u){
           need.push(url);
         });
       }
+      // Paksa masukkan ASSET dari scan terakhir (6 PNG eajzz, dll.)
+      try {
+        const scan = window.__gcLastScan || window.__oaReport || null;
+        const extra = [];
+        if (scan && scan.urls) {
+          scan.urls.forEach(function (u) {
+            const url = typeof u === 'string' ? u : (u.url || '');
+            const st = (u && u.status) || '';
+            if (!url || seen[url]) return;
+            if (st === 'TRACKING' || st === 'SVG_NAMESPACE' || st === 'API') return;
+            if (/eajzzxhro\.com|static\./i.test(url) && /\.(png|jpe?g|gif|webp)/i.test(url)) {
+              seen[url] = 1;
+              need.push(url);
+              extra.push(url);
+            } else if (st === 'ASSET' || (u && u.kind === 'ASSET')) {
+              seen[url] = 1;
+              need.push(url);
+            }
+          });
+        }
+        // Regex hard-scan index.html for static.eajzz signed png
+        Object.keys(zipFileMap || {}).forEach(function (p) {
+          if (!/index\.html?/i.test(p)) return;
+          try {
+            var code = openFiles.has(p) ? openFiles.get(p) : null;
+            // async not available here - skip if not open; paths loop already covered
+          } catch (_) {}
+        });
+      } catch (_) {}
+
       const details = [];
       let fetched = 0, failed = 0, skipped = 0;
       for (let i = 0; i < need.length && fetched + failed < maxFetch; i++) {
@@ -9903,6 +9986,10 @@ function isApiLike(u){
           }
           currentZip.file(localPath, buf);
           zipFileMap[localPath] = currentZip.file(localPath);
+          if (!window.__gcLastDownloadMap) window.__gcLastDownloadMap = {};
+          window.__gcLastDownloadMap[url] = localPath;
+          // also map without query
+          try { window.__gcLastDownloadMap[url.split('?')[0]] = localPath; } catch (_) {}
           fetched++;
           details.push('OK ' + base + ' (' + Math.round(buf.byteLength / 1024) + ' KB) → ' + localPath);
         } catch (e) {
@@ -10070,7 +10157,7 @@ function isApiLike(u){
       // Pass A: unduh ASSET CDN yang belum ada di ZIP (6 PNG signed, dll.)
       let fetchReport = { fetched: 0, failed: 0, details: [] };
       try {
-        fetchReport = await gcStrictFetchMissingAssets(40);
+        fetchReport = await gcStrictFetchMissingAssets(80);
         if (fetchReport.fetched) {
           appendLog('Strict download: ' + fetchReport.fetched + ' asset → ZIP', 'ok');
         }
@@ -10175,6 +10262,58 @@ function isApiLike(u){
               }
             })(list2[i]);
           }
+        }
+
+        
+        // Pass C: force signed CDN URL → local (jamin 6 PNG eajzz hilang dari index)
+        try {
+          const dmap = window.__gcLastDownloadMap || {};
+          const listC = Object.keys(zipFileMap || {});
+          for (let ci = 0; ci < listC.length; ci++) {
+            const path = listC[ci];
+            if (!path || /^BACKUP\//i.test(path) || !/\.(html?|css|js|mjs)$/i.test(path)) continue;
+            let code;
+            try {
+              code = openFiles.has(path) ? openFiles.get(path) : await zipFileMap[path].async('string');
+            } catch (_) { continue; }
+            const fr = gcForceRewriteSignedCdn(code, dmap);
+            // Also build map from any assets/eajzz already present
+            if (!Object.keys(dmap).length) {
+              // scan code for eajzz urls and map basename to local
+              const re = /https?:\/\/static\.eajzzxhro\.com\/[^"'\s]+/gi;
+              let m;
+              const autoMap = {};
+              while ((m = re.exec(code))) {
+                const u = m[0];
+                try {
+                  const b = decodeURIComponent(new URL(u).pathname.split('/').pop() || '').split('?')[0];
+                  const lp = 'assets/eajzz/' + b;
+                  if (zipFileMap[lp] || zipFileMap['assets/images/' + b]) {
+                    autoMap[u] = zipFileMap[lp] ? lp : 'assets/images/' + b;
+                  }
+                } catch (_) {}
+              }
+              const fr2 = gcForceRewriteSignedCdn(code, autoMap);
+              if (fr2.changes > 0) {
+                openFiles.set(path, fr2.code);
+                currentZip.file(path, fr2.code);
+                zipFileMap[path] = currentZip.file(path);
+                totalChanges += fr2.changes;
+                if (filesTouched.indexOf(path) < 0) filesTouched.push(path);
+              }
+            } else if (fr.changes > 0) {
+              openFiles.set(path, fr.code);
+              currentZip.file(path, fr.code);
+              zipFileMap[path] = currentZip.file(path);
+              totalChanges += fr.changes;
+              if (filesTouched.indexOf(path) < 0) filesTouched.push(path);
+              if (currentFile === path && editor) {
+                try { editor.setValue(fr.code); } catch (_) {}
+              }
+            }
+          }
+        } catch (ce) {
+          appendLog('Force CDN rewrite: ' + (ce && ce.message || ce), 'warn');
         }
 
         const score = await gcComputeOfflineScore();
