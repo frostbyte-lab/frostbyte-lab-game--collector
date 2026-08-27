@@ -9007,9 +9007,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 function isApiLike(u){
     var s = String(u || '').toLowerCase();
     // Signed CDN / static media = ASSET, never API
-    if (/\\.(png|jpe?g|gif|webp|svg|mp3|ogg|woff2?|css|js)(\\?|#|$)/i.test(s)) return false;
-    if (/eajzzxhro\\.com\\/.*\\.(png|jpe?g)/i.test(s)) return false;
-    return /\\/api\\/|\\/game\\/(init|session|balance|bet|spin|result|history)|gamewallet|verifysession|game-api|game-proxy|\\/spin\\b|\\/bet\\b|\\/balance\\b|\\/session\\b|graphql|\\/v1\\/|\\/v2\\//i.test(s) || /what-is-my-ip|\\/shared\\/[^?#]+index\\.json/i.test(s);
+    if (/\\.(png|jpe?g|gif|webp|svg|mp3|ogg|wav|woff2?|ttf|otf|css|js|mjs|wasm|atlas)(\\?|#|$)/i.test(s)) return false;
+    if (/eajzzxhro\\.com\\/.*\\.(png|jpe?g|webp)/i.test(s)) return false;
+    if (/static\\.|\\/pages\\/static\\//i.test(s) && /\\.(png|jpe?g|js|css)/i.test(s)) return false;
+    return /\\/api\\/|\\/web-api\\/|\\/game-api\\/|game-proxy|gamewallet|verifysession|gameinfo|gamedata|resources\\/get|\\/game\\/(init|session|balance|bet|spin|result|history)|\\/spin\\b|\\/bet\\b|\\/wager\\b|\\/balance\\b|\\/session\\b|\\/auth\\b|\\/login\\b|graphql|\\/v[0-9]+\\//i.test(s) || /what-is-my-ip|\\/shared\\/[^?#]+index\\.json/i.test(s);
   }
   function isExternalHttp(u){
     try {
@@ -9105,12 +9106,48 @@ function isApiLike(u){
         si: session.id, roundId: 'r-' + Date.now()
       }), { win: win, symbols: symbols, reels: symbols });
     }
-    if (/balance|wallet|credit/.test(s)) return wrap({ balance: balance, credit: balance, currency: 'IDR' });
-    if (/session|auth|token|login|init|launch|verifysession/.test(s)) {
-      return Object.assign(wrap({ session: session, token: 'sandbox-token', balance: balance, playerId: 'p-sandbox' }), { session: session });
+    if (/balance|wallet|credit|gamewallet/.test(s)) {
+      return wrap({ balance: balance, bl: balance, credit: balance, currency: 'IDR', tb: balance, wb: balance });
     }
-    if (/history|result/.test(s)) return wrap({ items: [], list: [], balance: balance });
-    return Object.assign(wrap({ balance: balance, session: session }), { session: session, url: String(url||'').slice(0,120), __gcFrom: 'fallback' });
+    if (/session|auth|token|login|init|launch|verifysession/.test(s)) {
+      return Object.assign(wrap({
+        session: session,
+        token: 'sandbox-token',
+        accessToken: 'sandbox-token',
+        balance: balance,
+        bl: balance,
+        playerId: 'p-sandbox',
+        si: session.id,
+        ok: true
+      }), { session: session, si: session.id });
+    }
+    if (/gameinfo|gamedata|gamename|getbyresources|resources\/get|\/gameinfo\//.test(s)) {
+      return wrap({
+        balance: balance,
+        bl: balance,
+        gameInfo: { name: 'sandbox-game', offline: true, mock: true },
+        config: { rtp: 96, lines: 20, betLevels: [100, 200, 500, 1000] },
+        symbols: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        list: [],
+        resources: [],
+        si: session.id
+      });
+    }
+    if (/history|result/.test(s)) return wrap({ items: [], list: [], balance: balance, bl: balance });
+    // Default dummy untuk SEMUA fetch API lain di Sandbox
+    return Object.assign(wrap({
+      balance: balance,
+      bl: balance,
+      session: session,
+      si: session.id,
+      offline: true,
+      message: 'GC Sandbox dummy — tanpa saldo server asli'
+    }), {
+      session: session,
+      si: session.id,
+      url: String(url || '').slice(0, 120),
+      __gcFrom: 'fetch-api-dummy'
+    });
   }
   function mockResponse(url){
     var data = mockPayload(url);
@@ -9172,10 +9209,15 @@ function isApiLike(u){
     if (GC_HYBRID && isExternalHttp(u) && !gcAssetUrl(u) && !isApiLike(u) && isStaticAssetUrl(u)) {
       return { kind: 'proxy', url: viaProxy(u) };
     }
-    if (GC_SANDBOX && !GC_HYBRID && isApiLike(u)) return { kind: 'mock', url: u };
-    if (GC_SANDBOX && !GC_HYBRID && isExternalHttp(u) && !gcAssetUrl(u)) {
-      if (isApiLike(u) || /json|api/i.test(u)) return { kind: 'mock', url: u };
-      return { kind: 'blocked', url: u };
+    // Sandbox murni: fetch/XHR API → SELALU dummy (bukan network server)
+    if (GC_SANDBOX && !GC_HYBRID) {
+      if (isApiLike(u) || (isExternalHttp(u) && !gcAssetUrl(u) && !isStaticAssetUrl(u))) {
+        return { kind: 'mock', url: u };
+      }
+      if (isExternalHttp(u) && !gcAssetUrl(u) && isStaticAssetUrl(u)) {
+        // asset belum lokal → blocked (bukan dummy JSON)
+        return { kind: 'blocked', url: u };
+      }
     }
     return { kind: 'pass', url: u };
   }
@@ -9269,7 +9311,7 @@ function isApiLike(u){
   });
   setTimeout(reportNet, 1500);
   setTimeout(reportNet, 4000);
-  console.info('[GC] network shim active · sandbox=' + GC_SANDBOX);
+  console.info('[GC] network shim active · sandbox=' + GC_SANDBOX + ' · fetch API → dummy=' + (GC_SANDBOX && !GC_HYBRID));
 })();<\/script>`;
         if (/<head[\s>]/i.test(html)) html = html.replace(/<head([^>]*)>/i, '<head$1>' + bridge);
         else if (/<html[\s>]/i.test(html)) html = html.replace(/<html([^>]*)>/i, '<html$1><head>' + bridge + '</head>');
