@@ -4088,7 +4088,7 @@
           <label>Saran (otomatis / edit)</label>
           <textarea id="gc-err-suggest" placeholder="Saran perbaikan…"></textarea>
           <label>Balas / instruksi ke AI</label>
-          <textarea id="gc-err-ask" placeholder="Contoh: hapus URL absolut CDN, rewrite ke assets/eajzz/…"></textarea>
+          <textarea id="gc-err-ask" placeholder="Contoh: hapus URL absolut CDN, rewrite ke assets/cdn/…"></textarea>
           <div class="gc-err-custom-actions">
             <button type="button" class="btn btn-secondary btn-sm" onclick="closeErrFixPopup()">Batal</button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="gcErrFixAskAI()">Tanya AI</button>
@@ -7752,7 +7752,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         return { url: u, host: host, kind: 'TRACKING', status: 'TRACKING', action: 'REMOVE' };
       }
       // Signed CDN image/audio = ASSET (bukan API meski ada ?sign= / token)
-      const isSignedCdnAsset = (/[?&](sign|signature|sig)=/i.test(low) || /eajzzxhro\.com|static\./i.test(host))
+      const isSignedCdnAsset = (/[?&](sign|signature|sig)=/i.test(low) || /eajzzxhro\.com|5egytucuw\.com|static\./i.test(host))
         && /\.(png|jpe?g|gif|webp|svg|mp3|ogg|woff2?)(\?|#|$)/i.test(low);
       if (isSignedCdnAsset) {
         return { url: u, host: host, kind: 'ASSET', status: 'ASSET', base: base, pathname: pathname, action: 'COLLECT', note: 'signed-cdn' };
@@ -8259,7 +8259,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         sug.value =
           'File error dari Scan.\n' +
           '• Hapus script tracking (GTM/gtag) jika ada\n' +
-          '• URL CDN signed (?sign=) → download lokal assets/eajzz/ + rewrite path\n' +
+          '• URL CDN signed (?sign=) → download lokal assets/cdn/ + rewrite path\n' +
           '• Biarkan xmlns SVG (w3.org/2000/svg)\n' +
           '• Jangan hapus dependency game yang valid';
       }
@@ -9990,7 +9990,7 @@ function isApiLike(u){
 
     /** Strict: unduh ASSET absolut yang masih missing (CDN signed URL) ke ZIP, lalu siap rewrite */
 
-    /** Force-replace full signed CDN URLs (termasuk ?sign=) → path lokal assets/eajzz/ */
+    /** Force-replace full signed CDN URLs (termasuk ?sign=) → path lokal assets/cdn/ */
     function gcForceRewriteSignedCdn(code, downloadMap) {
       if (!code || !downloadMap) return { code: code, changes: 0, report: [] };
       var out = code;
@@ -10230,7 +10230,7 @@ function isApiLike(u){
         if (!/index\.html?/i.test(textPaths[hi])) continue;
         try {
           var hc = openFiles.has(textPaths[hi]) ? openFiles.get(textPaths[hi]) : await zipFileMap[textPaths[hi]].async('string');
-          var re = /https?:\/\/static\.eajzzxhro\.com\/[^\s"\'<>]+/gi;
+          var re = /https?:\/\/static\.[a-z0-9.-]+\/[^\s"\'<>]+/gi;
           var m;
           while ((m = re.exec(hc))) {
             if (!seen[m[0]]) { seen[m[0]] = 1; needUrls.push(m[0]); }
@@ -10249,7 +10249,7 @@ function isApiLike(u){
         // A) sudah ada di ZIP?
         var local = gcFindLocalByBasename(base, index);
         if (!local) {
-          local = zipFileMap['assets/eajzz/' + base] ? 'assets/eajzz/' + base : null;
+          local = zipFileMap['assets/cdn/' + base] ? 'assets/cdn/' + base : null;
         }
         if (local) {
           window.__gcLastDownloadMap[url] = local;
@@ -10262,7 +10262,7 @@ function isApiLike(u){
         // B) unduh multi-strategi
         var got = await gcFetchAssetStrategies(url);
         if (got.ok && got.buf) {
-          var localPath = 'assets/eajzz/' + (got.base || base);
+          var localPath = 'assets/cdn/' + (got.base || base);
           if (!/\.[a-z0-9]{1,8}$/i.test(localPath)) localPath += '.png';
           currentZip.file(localPath, got.buf);
           zipFileMap[localPath] = currentZip.file(localPath);
@@ -10348,7 +10348,7 @@ function isApiLike(u){
         appendLog('  ' + d, /FAIL/.test(d) ? 'err' : 'ok');
       });
       if (failed && !downloaded && !reused) {
-        appendLog('Seal: token CDN mungkin mati. Buka game online sekali → Collect, ATAU Save As PNG ke assets/eajzz/', 'warn');
+        appendLog('Seal: token CDN mungkin mati. Buka game online sekali → Collect, ATAU Save As PNG ke assets/cdn/', 'warn');
       }
       return report;
     }
@@ -10393,7 +10393,7 @@ function isApiLike(u){
             const st = (u && u.status) || '';
             if (!url || seen[url]) return;
             if (st === 'TRACKING' || st === 'SVG_NAMESPACE' || st === 'API') return;
-            if (/eajzzxhro\.com|static\./i.test(url) && /\.(png|jpe?g|gif|webp)/i.test(url)) {
+            if (/eajzzxhro\.com|5egytucuw\.com|static\./i.test(url) && /\.(png|jpe?g|gif|webp)/i.test(url)) {
               seen[url] = 1;
               need.push(url);
               extra.push(url);
@@ -10403,14 +10403,24 @@ function isApiLike(u){
             }
           });
         }
-        // Regex hard-scan index.html for static.eajzz signed png
-        Object.keys(zipFileMap || {}).forEach(function (p) {
-          if (!/index\.html?/i.test(p)) return;
+        // Regex hard-scan: static.ANYHOST signed/hashed png (eajzz, 5egytucuw, dll.)
+        var staticRe = /https?:\/\/static\.[a-z0-9.-]+\/[^\s"'<>)]+/gi;
+        for (var hi = 0; hi < paths.length; hi++) {
+          if (!/index\.html?/i.test(paths[hi])) continue;
           try {
-            var code = openFiles.has(p) ? openFiles.get(p) : null;
-            // async not available here - skip if not open; paths loop already covered
+            var hcode = openFiles.has(paths[hi]) ? openFiles.get(paths[hi]) : await zipFileMap[paths[hi]].async('string');
+            var hm;
+            staticRe.lastIndex = 0;
+            while ((hm = staticRe.exec(hcode))) {
+              var hu = hm[0].replace(/["'<>)]+$/, '');
+              if (seen[hu]) continue;
+              if (!/\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(hu)) continue;
+              seen[hu] = 1;
+              need.push(hu);
+              extra.push(hu);
+            }
           } catch (_) {}
-        });
+        }
       } catch (_) {}
 
       const details = [];
@@ -10423,7 +10433,7 @@ function isApiLike(u){
         } catch (_) {}
         base = base.replace(/[^\w.\-]+/g, '_') || 'asset.bin';
         if (!/\.[a-z0-9]{1,8}$/i.test(base)) base += '.png';
-        const localPath = 'assets/eajzz/' + base;
+        const localPath = 'assets/cdn/' + base;
         // skip if path already exists
         if (zipFileMap[localPath] || zipFileMap['assets/images/' + base] || zipFileMap['assets/' + base]) {
           skipped++;
@@ -10439,6 +10449,7 @@ function isApiLike(u){
           try {
             const hu = new URL(url);
             if (/eajzzxhro\.com/i.test(hu.hostname)) gameRef = 'https://m.eajzzxhro.com/';
+            else if (/5egytucuw\.com/i.test(hu.hostname)) gameRef = 'https://m.5egytucuw.com/';
             else if (/^static\./i.test(hu.hostname)) {
               gameRef = 'https://m.' + hu.hostname.replace(/^static\./i, '') + '/';
             }
@@ -10801,14 +10812,14 @@ function isApiLike(u){
             // Also build map from any assets/eajzz already present
             if (!Object.keys(dmap).length) {
               // scan code for eajzz urls and map basename to local
-          var re = /https?:\/\/static\.eajzzxhro\.com\/[^\s"\'<>]+/gi;
+          var re = /https?:\/\/static\.[a-z0-9.-]+\/[^\s"\'<>]+/gi;
               let m;
               const autoMap = {};
               while ((m = re.exec(code))) {
                 const u = m[0];
                 try {
                   const b = decodeURIComponent(new URL(u).pathname.split('/').pop() || '').split('?')[0];
-                  const lp = 'assets/eajzz/' + b;
+                  const lp = 'assets/cdn/' + b;
                   if (zipFileMap[lp] || zipFileMap['assets/images/' + b]) {
                     autoMap[u] = zipFileMap[lp] ? lp : 'assets/images/' + b;
                   }
