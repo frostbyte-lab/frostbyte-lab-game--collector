@@ -1,0 +1,295 @@
+CATATAN ACUAN SELF-HOST GAME — WILD BANDITO
+
+Status dokumen: blueprint teknis untuk game yang dimiliki atau digunakan berdasarkan izin tertulis.
+URL acuan: https://m.eajzzxhro.com/104/index.html
+
+PERINGATAN HAK PENGGUNAAN
+
+Game pada URL acuan, nama Wild Bandito, kode client, gambar, audio, animasi, logo, aturan permainan, dan API provider dapat merupakan milik pihak lain. Dokumen ini tidak memberikan hak untuk menyalin, mendistribusikan, menghapus proteksi, atau menjalankan game pihak ketiga. Sebelum self-host, pastikan tersedia lisensi atau izin tertulis yang mencakup asset, kode, trademark, distribusi, penggunaan server, serta aturan game. Jika izin tidak tersedia, bangun game pengganti dengan asset dan kode sendiri.
+
+1. TUJUAN SELF-HOST
+
+Target self-host adalah menjalankan client game dari domain/server sendiri dan mengganti dependency provider dengan API milik sendiri. Ada tiga target berbeda:
+
+- STATIC_SHELL: halaman dan asset lokal dapat dibuka.
+- SELF_HOST_DEMO: client lokal menggunakan API sandbox milik sendiri untuk init, saldo, spin, dan result.
+- FULL_SELF_HOST: client dan backend milik sendiri menjalankan session, aturan game, saldo, payout, event realtime, monitoring, dan keamanan.
+
+STATIC_SHELL tidak sama dengan FULL_SELF_HOST. Menyalin file client saja tidak otomatis memindahkan session server, saldo, RNG, payout, bonus, atau validasi provider.
+
+2. RESOURCE YANG TERLIHAT DARI GAME ACUAN
+
+Sesi runtime pada URL acuan merender canvas GameCanvas dan memuat resource lintas origin. Resource yang perlu diperiksa pada game berizin meliputi loader seperti /loader/04.js, shared JavaScript, JSON konfigurasi, JPG/PNG, OGG audio, dan module tambahan dari folder /shared. Banyak URL asset memakai query signed seperti ?sign=....
+
+Untuk self-host yang stabil, jangan menyimpan signed URL sebagai dependency runtime. Unduh byte file saat URL masih valid, simpan ke localPath, hitung hash, lalu rewrite referensi client/JSON ke path lokal. Signed URL yang kedaluwarsa tidak boleh menjadi satu-satunya sumber asset deployment.
+
+GTM, iklan, tracking, dan analytics bukan dependency gameplay inti. Dalam deployment sendiri, resource tersebut harus dihapus atau dibuat optional sesuai lisensi dan kebijakan privasi.
+
+3. STRUKTUR DIRECTORY SERVER SENDIRI
+
+Struktur awal yang disarankan:
+
+public/
+  index.html
+  game/
+    loader.js
+    game.js
+    config.json
+    modules/
+    assets/images/
+    assets/audio/
+    assets/fonts/
+    assets/atlas/
+  api-map.json
+  manifest.json
+  service-worker.js
+server/
+  app.js
+  routes/session.js
+  routes/init.js
+  routes/balance.js
+  routes/spin.js
+  routes/result.js
+  routes/events.js
+  game/rules.js
+  game/rng.js
+  game/state.js
+  storage/session-store.js
+  storage/ledger.js
+  middleware/auth.js
+  middleware/rate-limit.js
+migrations/
+  001_sessions.sql
+  002_rounds.sql
+  003_ledger.sql
+tests/
+  api-contract.test.js
+  gameplay-flow.test.js
+  offline-preview.test.js
+  security.test.js
+
+Nama dan framework dapat berbeda. Yang penting adalah pemisahan client, API, aturan game, state session, ledger, dan test.
+
+4. REWRITE CLIENT KE DOMAIN SENDIRI
+
+Semua path asset harus memakai URL relatif atau origin domain sendiri. Contoh:
+
+- https://static.provider.example/shared/index.js?sign=... menjadi /game/modules/index.js
+- https://static.provider.example/104/image.jpg?sign=... menjadi /game/assets/images/image.jpg
+- endpoint provider /gamewallet menjadi /api/balance
+- endpoint provider /spin menjadi /api/spin
+
+Periksa HTML, JavaScript, CSS, JSON, WebAssembly, dynamic import, blob URL, iframe, worker, dan manifest. Cari URL absolut, import() runtime, fetch(), XMLHttpRequest, WebSocket, EventSource, createObjectURL(), dan setInterval polling.
+
+Setelah rewrite, jalankan grep atau scanner untuk memastikan tidak ada dependency provider yang masih wajib:
+
+- URL https:// atau http:// ke domain provider.
+- URL wss:// atau ws:// ke server provider.
+- path loader/CDN yang belum memiliki file lokal.
+- dynamic import dengan origin eksternal.
+- iframe eksternal.
+- worker atau wasm eksternal.
+
+5. KONTRAK API MILIK SENDIRI
+
+API sendiri harus mengikuti kontrak yang digunakan client atau client harus diubah agar menggunakan kontrak baru. Kontrak minimum:
+
+POST /api/session
+Response: { ok, sessionId, token, playerId, gameId, currency }
+
+POST /api/init
+Request: { sessionId, token, gameId }
+Response: { ok, gameId, config, balance, currency, limits, features }
+
+GET /api/balance
+Headers: Authorization atau token lokal.
+Response: { ok, sessionId, balance, currency, roundId }
+
+POST /api/spin
+Request: { sessionId, token, bet, clientSeed, roundId }
+Response: { ok, roundId, bet, charged, winAmount, balanceBefore, balanceAfter, reels, symbols, outcome, bonus, freeSpins }
+
+GET /api/result?roundId=...
+Response: hasil round yang sama seperti response spin.
+
+GET /api/events atau WebSocket/SSE
+Response/event: round result, balance update, bonus, free spin, reconnect state.
+
+Nama field harus mengikuti client. Jika client asli membaca field seperti dt, data, bl, rl, si, tk, atau field lain, buat adapter response atau ubah client secara resmi. Jangan membuat response generik yang tidak dibaca oleh client.
+
+6. STATE SESSION DAN DATABASE
+
+State minimum yang perlu dikelola server sendiri adalah sessionId, token, playerId, gameId, currency, balance, roundId, lastAction, freeSpins, bonusMultiplier, dan status session. State penting harus disimpan server-side bila aplikasi online. localStorage hanya cocok untuk demo/offline sandbox, bukan saldo nyata.
+
+Database minimal:
+
+- sessions: id, player_id, game_id, token_hash, status, created_at, expires_at.
+- rounds: round_id, session_id, bet, result_json, win_amount, seed_hash, created_at.
+- ledger: id, session_id, round_id, debit, credit, balance_after, created_at.
+- events: id, session_id, round_id, event_type, payload, delivered_at.
+
+Gunakan transaksi database untuk debit bet dan kredit kemenangan. Setiap round harus idempotent berdasarkan roundId agar retry tidak menggandakan debit atau payout. Jangan menyimpan token mentah jika token hash sudah cukup.
+
+7. SESSION DAN AUTHENTICATION
+
+Buat endpoint session yang menghasilkan token milik server sendiri. Token harus memiliki expiry, rotasi, dan validasi audience/gameId. Gunakan HTTPS, HttpOnly cookie atau Authorization header yang aman, CSRF protection bila memakai cookie, CORS allowlist, rate limit, dan log audit.
+
+Jangan menyalin cookie, Authorization header, signed URL, atau credential dari provider ke server sendiri. Semua credential provider harus dihapus dari ZIP, manifest, api-map, log, dan persistence.
+
+8. ATURAN SPIN DAN RNG
+
+Untuk demo, server dapat memakai deterministic seed. Untuk produksi berizin, aturan RNG, reel, paylines, wild, scatter, multiplier, free spin, bonus, jackpot, dan payout harus mengikuti spesifikasi resmi yang dimiliki/diizinkan.
+
+Flow spin yang disarankan:
+
+1. Validasi session dan gameId.
+2. Validasi roundId/idempotency key.
+3. Validasi bet minimum, maksimum, currency, dan saldo.
+4. Debit bet dalam transaksi.
+5. Hitung hasil menggunakan rules engine server.
+6. Hitung winAmount, bonus, dan freeSpins.
+7. Kredit kemenangan dalam transaksi yang sama.
+8. Simpan round dan ledger.
+9. Kirim response result.
+10. Publikasikan event realtime bila diperlukan.
+
+Untuk game demo offline, stateful-api-emulator.js dapat digunakan sebagai dasar. Untuk server online, emulator harus diganti dengan rules engine dan ledger yang diuji.
+
+9. WEBSOCKET, SSE, DAN POLLING
+
+Jika client membutuhkan realtime, pilih satu protokol yang benar-benar diperlukan. WebSocket membutuhkan endpoint wss:// milik sendiri, autentikasi saat handshake, heartbeat, reconnect, acknowledgement, dan replay event setelah reconnect. SSE membutuhkan endpoint /api/events dengan Last-Event-ID dan keepalive. Polling membutuhkan endpoint result/status dengan roundId dan batas retry.
+
+Untuk offline preview, gunakan fixture event lokal dan adapter pada src/offline/realtime-adapter.js. Fixture harus menyimpan urutan event, event type, payload, roundId, balance, dan timing. Adapter replay bukan pengganti backend online dan tidak boleh digunakan untuk settlement nyata.
+
+10. SERVICE WORKER DAN OFFLINE MODE
+
+Service Worker harus memiliki cache shell, cache asset game, cache vendor, dan kebijakan API yang jelas. Cache asset dapat memakai cache-first. API stateful tidak boleh dianggap valid hanya karena mendapatkan HTTP 200 dari cache lama.
+
+Mode offline harus mengarahkan /api/session, /api/init, /api/balance, /api/spin, /api/result, dan /api/events ke emulator atau fixture lokal yang kompatibel. Route tidak dikenal harus diblokir dengan error yang jelas. Mode hybrid boleh meneruskan route tertentu ke server, tetapi statusnya bukan FULL_OFFLINE_READY.
+
+11. API MAP DAN MANIFEST
+
+api-map.json harus mendeskripsikan setiap route yang digunakan client:
+
+- method.
+- path dan query.
+- request body schema.
+- header non-sensitif.
+- response status.
+- response schema.
+- snapshot atau fixture.
+- replay order.
+- route kind: session, init, balance, spin, result, event.
+
+manifest.json harus mendeskripsikan file yang benar-benar ada di paket:
+
+- localPath.
+- source URL.
+- category.
+- byte size.
+- content type.
+- hash.
+- collect status.
+- dependency parent bila diketahui.
+
+Jangan menampilkan checklist target sebagai bukti bahwa file sudah berhasil diambil. UI harus menampilkan nama file nyata dari manifest/ZIP dan status download aktual.
+
+12. DEPLOYMENT SERVER SENDIRI
+
+Untuk static client, gunakan Nginx, Cloudflare Pages, object storage, atau server HTTP sendiri. Untuk API, gunakan Node/FastAPI/Go/Rust atau platform backend dengan database. Pisahkan domain static dan API bila diperlukan:
+
+- https://game.example.com untuk client dan asset.
+- https://api.game.example.com untuk API.
+
+Jika memakai satu origin, gunakan /api/* agar CORS lebih sederhana. Pastikan compression, MIME type untuk wasm/audio/font, cache-control, HTTPS, health check, dan rollback tersedia.
+
+Contoh environment:
+
+APP_ORIGIN=https://game.example.com
+API_ORIGIN=https://api.game.example.com
+DATABASE_URL=...
+SESSION_SECRET=...
+GAME_ID=wild-bandito-authorized
+OFFLINE_MODE=false
+
+Jangan commit nilai rahasia ke repository. Gunakan secret manager atau environment deployment.
+
+13. VALIDASI SEBELUM LIVE
+
+Checklist client:
+
+- index.html terbuka dari domain sendiri.
+- loader dan semua JS lokal berhasil dimuat.
+- semua JSON, gambar, audio, font, atlas, wasm, worker, dan module runtime memiliki localPath.
+- tidak ada request wajib ke CDN/provider.
+- iframe dan origin sudah sesuai desain berizin.
+- tidak ada credential provider dalam file.
+
+Checklist API:
+
+- session berhasil.
+- init berhasil.
+- balance membaca state session yang sama.
+- spin memvalidasi bet dan saldo.
+- result dapat diambil dengan roundId.
+- debit dan credit tercatat idempotent.
+- saldo sebelum/sesudah benar.
+- reconnect realtime tidak menggandakan event.
+- error 401, 409, 429, dan 500 diuji.
+
+Checklist offline:
+
+- matikan network browser.
+- buka client dari server/cache lokal.
+- jalankan session → init → balance → spin → result.
+- pastikan saldo berubah konsisten.
+- pastikan roundId bertambah.
+- pastikan event realtime direplay.
+- pastikan request eksternal berjumlah nol.
+- hasil readiness harus FULL_OFFLINE_READY per paket.
+
+14. PERINTAH VALIDASI REPOSITORY COLLECTOR
+
+Perintah test dasar:
+
+npm run test:package-readiness
+npm run test:runtime-interceptor
+npm run test:realtime
+npm run test:api-replay
+npm run test:offline-gameplay
+npm run test:stateful-api
+npm run test:offline
+
+Audit ZIP:
+
+npm run validate:offline-package -- ./game-package.zip
+
+Audit menghasilkan report readiness. Status FULL_OFFLINE_READY hanya sah jika browser gameplay test sukses dengan network isolation. Jika browser test belum dilakukan, status paling aman adalah SHELL_READY, HYBRID_READY, MOCK_READY, atau GAMEPLAY_READY sesuai hasil sebenarnya.
+
+15. BATASAN UNTUK GAME ACUAN
+
+Resource runtime yang teramati pada URL acuan menunjukkan game client-side dengan canvas, loader remote, shared JS, JSON, gambar, audio, dan signed CDN query. Hal itu cukup untuk menyusun client package bila asset memang berizin, tetapi tidak membuktikan bahwa backend asli dapat dipindahkan.
+
+Full self-host membutuhkan salah satu pilihan berikut:
+
+A. Backend resmi/provider yang memang boleh digunakan.
+B. Backend baru milik Anda dengan rules, state, ledger, dan API yang Anda miliki atau Anda lisensikan.
+C. Demo offline non-komersial dengan stateful emulator dan fixture replay.
+
+Jangan menyebut pilihan C sebagai backend provider asli. Jangan menjalankan saldo, payout, RNG, atau settlement emulator untuk taruhan atau pembayaran nyata.
+
+16. DEFINITION OF DONE
+
+Self-host demo dianggap selesai jika client lokal terbuka, asset lokal termuat, session/init/balance/spin/result berjalan menggunakan API sendiri, state tersimpan, dan test offline berhasil.
+
+Full self-host online dianggap selesai jika backend sendiri memiliki auth, database, ledger idempotent, rules engine, monitoring, rate limit, backup, audit log, dan pengujian keamanan serta izin penggunaan yang lengkap.
+
+Full offline dianggap selesai hanya jika browser berjalan tanpa network, tidak ada external request, seluruh asset tersedia lokal, seluruh API kritis memiliki emulator/fixture kompatibel, dan alur gameplay berhasil dari awal sampai result.
+
+REFERENSI
+
+[1] URL game acuan Wild Bandito yang diberikan pengguna:
+https://m.eajzzxhro.com/104/index.html
+
+[2] Repository collector dan implementasi offline:
+https://github.com/frostbyte-lab/frostbyte-lab-game--collector

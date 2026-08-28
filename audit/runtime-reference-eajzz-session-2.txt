@@ -1,0 +1,25 @@
+AUDIT RUNTIME SESI 2
+URL: https://m.eajzzxhro.com/104/index.html
+
+Game berjudul Wild Bandito dan merender canvas GameCanvas. Performance API kembali menunjukkan dependency lintas origin:
+
+1. Loader: https://m.eajzzxhro.com/loader/04.js melalui XHR.
+2. Shared index/config: https://static.eajzzxhro.com/shared/984721902a/index.json dengan signed query.
+3. Shared module: https://static.eajzzxhro.com/shared/984721902a/996b5422dd.cee54.js dengan signed query.
+4. Game JSON: /104/4686cca2c8.e8234.json dengan signed query.
+5. Visual JPG: /104/b4ded45ece.65d39.jpg dan /104/2384416503.92033.jpg dengan signed query.
+6. Shared JSON: /shared/984721902a/7bc6ed27dc.d0275.json dengan signed query.
+7. Shared PNG: /shared/984721902a/16c66b844b.663ff.png, /3c32f1ac06.48adb.png, dan /d9b258ff19.806e2.png.
+8. Game JSON tambahan: /104/336ce9b84e.d6831.json.
+9. Audio OGG: /shared/984721902a/aa3271fac5.6b345.ogg.
+10. Ad script: /shared/984721902a/shell-res/ad/ad_adv_dfp_test.js.
+11. Banyak shared index.js dari folder /shared dengan query sign.
+12. GTM eksternal terdeteksi pada sesi sebelumnya dan dikategorikan optional/tracking.
+
+Implikasi teknis:
+- Resource signed CDN harus diunduh sebagai bytes dan dipetakan ke localPath; menyimpan URL saja tidak akan tahan offline karena sign/token dapat kedaluwarsa.
+- Loader 04.js harus ikut dipaketkan atau di-rewrite agar memakai asset lokal.
+- JSON game dan shared JS perlu diuji setelah rewrite karena kemungkinan berisi URL asset lanjutan yang baru diketahui saat runtime.
+- Asset yang terlihat saat loading belum cukup; perlu klik Play/Spin dan merekam request lanjutan.
+- Self-host dapat berhasil untuk client shell jika semua bytes dimiliki/diizinkan dan dependency URL direwrite.
+- Full offline gameplay masih memerlukan emulator API/provider-specific atau backend milik sendiri yang kompatibel.
