@@ -2,6 +2,7 @@
  * Build api-map.json from collect manifest + optional snapshot bodies in zipFiles.
  * Digunakan Sandbox mock agar endpoint nyata (bukan hanya pattern generik) punya mapping.
  */
+import { buildReplaySequence } from "../collect/api-contract.js";
 
 function pathnameOf(url) {
   try {
@@ -227,7 +228,8 @@ export function buildApiMap(manifest = [], zipFiles = null) {
     },
     byKind,
     endpoints,
-    routes
+    routes,
+    replaySequence: buildReplaySequence(manifest)
   };
 }
 

@@ -88,6 +88,35 @@ export function buildApiContract({
   };
 }
 
+export function buildReplaySequence(manifest = []) {
+  return manifest
+    .filter((entry) => entry?.apiContract)
+    .map((entry, index) => ({
+      order: entry.apiContract.order ?? index + 1,
+      kind: entry.apiKind || entry.apiContract.kind || "api",
+      method: entry.apiContract.method || "GET",
+      url: entry.url,
+      path: entry.apiContract.target?.path || null,
+      localPath: entry.localPath || null,
+      request: entry.apiContract.request || null,
+      response: entry.apiContract.response || null,
+      status: entry.status || entry.apiContract.response?.status || 200
+    }))
+    .sort((a, b) => a.order - b.order);
+}
+
+export function requestMatchesContract(contract, request) {
+  if (!contract || !request) return false;
+  const method = String(request.method || "GET").toUpperCase();
+  if (method !== String(contract.method || "GET").toUpperCase()) return false;
+  try {
+    const requestPath = new URL(request.url).pathname;
+    return requestPath === contract.target?.path || requestPath.includes(contract.target?.path || "\u0000");
+  } catch (_) {
+    return false;
+  }
+}
+
 export function mergeApiContracts(previous, next) {
   if (!previous) return next || null;
   if (!next) return previous;

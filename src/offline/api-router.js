@@ -1,4 +1,5 @@
 import { resolveMockFromApiMap } from "../package/api-map.js";
+import { requestMatchesContract } from "../collect/api-contract.js";
 
 function errorResponse(url, reason = "UNKNOWN_API_ROUTE") {
   return new Response(JSON.stringify({
@@ -32,7 +33,7 @@ function matchingEndpoint(apiMap, requestUrl) {
     .find((entry) => path === entry.pathLower || path.includes(entry.pathLower) || path.includes(String(entry.pathLower).split("/").filter(Boolean).pop() || "")) || null;
 }
 
-export function createLocalApiRouter({ emulator, apiMap = null, mode = "offline" } = {}) {
+export function createLocalApiRouter({ emulator, apiMap = null, mode = "offline", replay = false } = {}) {
   if (!emulator || typeof emulator.handle !== "function") throw new TypeError("emulator.handle wajib tersedia");
   const policy = mode === "hybrid" ? "hybrid" : "offline";
 
@@ -42,6 +43,16 @@ export function createLocalApiRouter({ emulator, apiMap = null, mode = "offline"
     const resolved = endpoint ? resolveMockFromApiMap(apiMap, request.url) : null;
     const kind = endpoint?.kind || resolved?.kind;
     const route = localRoute(kind);
+
+    if (replay && endpoint?.contract && !requestMatchesContract(endpoint.contract, request)) {
+      return errorResponse(request.url, "API_CONTRACT_MISMATCH");
+    }
+    if (replay && resolved?.body && endpoint?.hasSnapshot) {
+      return new Response(JSON.stringify(resolved.body), {
+        status: endpoint.status || 200,
+        headers: { "Content-Type": "application/json", "X-GC-Replay": "snapshot" }
+      });
+    }
 
     if (route) {
       const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.clone().arrayBuffer();
@@ -65,8 +76,8 @@ export function createLocalApiRouter({ emulator, apiMap = null, mode = "offline"
   return { handle, mode: policy, resolve: (url) => matchingEndpoint(apiMap, url) };
 }
 
-export function installLocalApiRouter({ emulator, apiMap, mode = "offline" } = {}) {
-  const router = createLocalApiRouter({ emulator, apiMap, mode });
+export function installLocalApiRouter({ emulator, apiMap, mode = "offline", replay = false } = {}) {
+  const router = createLocalApiRouter({ emulator, apiMap, mode, replay });
   const originalFetch = globalThis.fetch?.bind(globalThis);
   if (!originalFetch) throw new Error("fetch tidak tersedia pada runtime lokal");
   globalThis.fetch = async (input, init) => {

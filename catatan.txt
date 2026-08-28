@@ -10,6 +10,8 @@ Route /init, /gameinfo, dan /gamedata menghasilkan konfigurasi game serta saldo 
 
 Kontrak API hasil capture disimpan pada field apiContract di manifest dan field contract di api-map.json. Kontrak mencatat version, kind, confidence, method, URL, origin, path, queryKeys, request headers yang sudah disaring, request body terbatas, status response, content type, response headers yang sudah disaring, top-level response keys, dan bentuk field response. Header sensitif seperti Authorization, Cookie, Set-Cookie, X-Api-Key, dan proxy-auth tidak disimpan dalam bentuk asli; nilainya diganti dengan <redacted>.
 
+Setiap kontrak memiliki order capture dan dapat dirangkum menjadi replaySequence pada api-map.json. Router lokal mendukung mode replay untuk mencocokkan method dan path, kemudian mengembalikan snapshot response asli jika tersedia. Jika method tidak cocok, router mengembalikan API_CONTRACT_MISMATCH. Mode replay berguna untuk menguji response asli secara berurutan, sedangkan mode emulator stateful berguna untuk mengubah saldo dan menjalankan spin lokal.
+
 Emulator dapat menerima apiContract melalui opsi createStatefulApiEmulator({ apiContract }), menyimpannya dalam snapshot, serta memakai target.path dan kind untuk mengenali endpoint game khusus yang tidak memakai nama /init, /balance, atau /spin standar.
 
 3. STATE YANG DISIMPAN

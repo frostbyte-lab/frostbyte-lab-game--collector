@@ -21,7 +21,7 @@ import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
 import { mapAssetRelations } from "./analyze/relations.js";
 import { fillMissingAssetsV2 } from "./collect/fill-missing-enhanced.js";
-import { buildApiContract } from "./collect/api-contract.js";
+import { buildApiContract, buildReplaySequence } from "./collect/api-contract.js";
 import { normalizeResourceUrl, preferredAssetDir, professionalFileName } from "./collect/normalize.js";
 import { postCollectAudit, formatCollectAuditSummary } from "./collect/post-audit.js";
 import { runRecoveryEngine } from "./collect/recovery.js";
@@ -1100,6 +1100,7 @@ export default {
     const seen = new Set();
     const zipFiles = {};
     const runtimeBodies = new Map(); // url -> body for Recovery Engine
+    let apiCaptureOrder = 0;
     const recentCapture = [];
     let lastCaptureReport = 0;
     const expectedRefs = new Set(); // skema/referensi yang ditemukan di HTML/JS
@@ -1305,7 +1306,8 @@ export default {
                 responseHeaders: response.headers(),
                 responseBody: bodyPeek,
                 kind: apiMeta.kind,
-                confidence: apiMeta.confidence
+                confidence: apiMeta.confidence,
+                order: ++apiCaptureOrder
               });
             } catch {}
           }
@@ -1886,6 +1888,7 @@ export default {
       try {
         let apiMap = buildApiMap(manifest, zipFiles);
         apiMap = ensureCriticalApiMocks(apiMap);
+        apiMap.replaySequence = buildReplaySequence(manifest);
         apiMapFinal = apiMap;
         zipFiles["api-map.json"] = strToU8(JSON.stringify(apiMap, null, 2));
       } catch (e) {

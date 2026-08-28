@@ -272,7 +272,7 @@ export function createStatefulApiEmulator(options = {}) {
 export function installStatefulApiEmulator(options = {}) {
   const emulator = createStatefulApiEmulator(options);
   if (options.apiMap) {
-    const installed = installLocalApiRouter({ emulator, apiMap: options.apiMap, mode: options.mode || "offline" });
+    const installed = installLocalApiRouter({ emulator, apiMap: options.apiMap, mode: options.mode || "offline", replay: options.replay === true });
     return { emulator, router: installed.router, restore: installed.restore };
   }
   const originalFetch = globalThis.fetch?.bind(globalThis);
