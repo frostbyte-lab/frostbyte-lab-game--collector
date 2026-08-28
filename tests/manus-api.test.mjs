@@ -20,11 +20,12 @@ globalThis.fetch = async (url, init = {}) => {
   throw new Error(`Unexpected URL ${url}`);
 };
 
-const result = await runManusTask({ MANUS_API_KEY: 'secret-test-only' }, {
+const result = await runManusTask({ MANUS_API_KEY: '' }, {
   prompt: 'Berikan jawaban singkat.',
   title: 'Smoke test',
   agent_profile: 'manus-1.6-lite',
-  timeout_ms: 5000
+  timeout_ms: 5000,
+  api_key: 'personal-secret-test-only'
 });
 assert.equal(result.status, 200);
 const body = await result.json();
@@ -35,6 +36,6 @@ assert.equal(calls.length, 2);
 const createInit = JSON.parse(calls[0].init.body);
 assert.equal(createInit.message.content, 'Berikan jawaban singkat.');
 assert.equal(createInit.agent_profile, 'manus-1.6-lite');
-assert.equal(calls[0].init.headers['x-manus-api-key'], 'secret-test-only');
+assert.equal(calls[0].init.headers['x-manus-api-key'], 'personal-secret-test-only');
 assert.match(calls[1].url, /task_id=task_test_123/);
 console.log('Manus API helper smoke test passed');

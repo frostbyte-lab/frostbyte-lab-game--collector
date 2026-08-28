@@ -28,8 +28,10 @@ async function manusFetch(path, apiKey, init = {}) {
 }
 
 export async function runManusTask(env, body = {}) {
-  const apiKey = String(env.MANUS_API_KEY || "").trim();
-  if (!apiKey) return jsonError("MANUS_API_KEY belum dikonfigurasi sebagai secret Worker.", 503, "MANUS_NOT_CONFIGURED");
+  // Personal mode: key may arrive from the user's active browser session.
+  // Prefer the Worker secret when configured; never log either value.
+  const apiKey = String(env.MANUS_API_KEY || body.api_key || "").trim().slice(0, 512);
+  if (!apiKey) return jsonError("MANUS_API_KEY belum dikonfigurasi. Isi API key Manus pada sesi personal atau set secret Worker.", 503, "MANUS_NOT_CONFIGURED");
   const prompt = String(body.prompt || body.question || "").trim().slice(0, 18000);
   if (!prompt) return jsonError("Prompt Manus wajib diisi.", 400, "PROMPT_REQUIRED");
   const createBody = {

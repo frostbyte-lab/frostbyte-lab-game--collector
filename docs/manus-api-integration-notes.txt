@@ -9,14 +9,15 @@ Sumber resmi:
 Fakta implementasi:
 - API base URL: https://api.manus.ai/v2
 - Autentikasi API key menggunakan header x-manus-api-key: <API_KEY>.
-- API key harus disimpan sebagai secret server/Worker bernama MANUS_API_KEY; jangan ditaruh di frontend atau Git.
-- Email bukan kredensial API. Email hanya boleh digunakan sebagai label akun di UI.
+- Mode production yang paling aman memakai secret server/Worker bernama MANUS_API_KEY; jangan ditaruh di Git.
+- Mode personal dari UI juga didukung untuk satu pengguna: API key dikirim melalui proxy Worker dari sesi browser dan disimpan sementara pada sessionStorage, bukan localStorage, ZIP, atau repository.
+- Email bukan kredensial API. Email hanya digunakan sebagai label akun di UI dan tidak dapat menggantikan API key.
 - Membuat task memakai POST /task.create dengan body message.content dan dapat mengatur title, locale, interactive_mode, share_visibility, hide_in_task_list, dan agent_profile.
 - Task berjalan asynchronous. Hasil dipantau memakai GET /task.listMessages?task_id=...&order=desc&limit=50.
 - Status status_update yang relevan adalah running, stopped, waiting, dan error.
 - Assistant response dibaca dari event assistant_message.content.
 - Jika task waiting, aplikasi harus meminta input/confirmation sesuai waiting_for_event_type; jangan menganggap task selesai.
-- Endpoint Worker /api/ai/manus hanya menjadi proxy server-side dan mengembalikan hasil ke Custom AI. Jika MANUS_API_KEY belum ada, endpoint harus mengembalikan MANUS_NOT_CONFIGURED tanpa membuka secret.
+- Endpoint Worker /api/ai/manus menjadi proxy server-side dan mengembalikan hasil ke Custom AI. Worker memprioritaskan secret MANUS_API_KEY; jika tidak tersedia, mode personal dapat mengirim api_key dari sesi aktif. Jika keduanya tidak ada, endpoint mengembalikan MANUS_NOT_CONFIGURED tanpa membuka secret.
 - API key memiliki akses penuh ke akun Manus dan harus diperlakukan sebagai secret sensitif.
 
 Batas integrasi:
