@@ -1,0 +1,34 @@
+AUDIT RESOURCE RUNTIME URL ACUAN
+URL: https://m.eajzzxhro.com/104/index.html
+Tanggal pemeriksaan: 2026-08-28
+
+Halaman merender canvas GameCanvas dan memuat resource runtime dari beberapa origin. Resource yang terlihat pada Performance API antara lain:
+
+- https://www.googletagmanager.com/gtm.js?id=GTM-MDDV6Q2
+- https://m.eajzzxhro.com/loader/04.js
+- https://m.eajzzxhro.com/favicon/favicon.ico
+- https://static.eajzzxhro.com/shared/984721902a/index.json dengan query sign
+- https://static.eajzzxhro.com/shared/984721902a/996b5422dd.cee54.js dengan query sign
+- https://static.eajzzxhro.com/104/4686cca2c8.e8234.json dengan query sign
+- https://static.eajzzxhro.com/104/b4ded45ece.65d39.jpg dengan query sign
+- https://static.eajzzxhro.com/104/2384416503.92033.jpg dengan query sign
+- https://static.eajzzxhro.com/104/336ce9b84e.d6831.json dengan query sign
+- https://static.eajzzxhro.com/shared/984721902a/16c66b844b.663ff.png dengan query sign
+- https://static.eajzzxhro.com/shared/984721902a/7bc6ed27dc.d0275.json dengan query sign
+- https://static.eajzzxhro.com/shared/984721902a/3c32f1ac06.48adb.png dengan query sign
+- https://static.eajzzxhro.com/shared/984721902a/d9b258ff19.806e2.png dengan query sign
+- https://static.eajzzxhro.com/shared/984721902a/aa3271fac5.6b345.ogg dengan query sign
+- https://static.eajzzxhro.com/shared/984721902a/shell-res/ad/ad_adv_dfp_test.js dengan query sign
+- https://static.eajzzxhro.com/shared/b4d9192613/index.js dengan query sign
+- https://static.eajzzxhro.com/shared/c03a2652ad/index.js dengan query sign
+- https://static.eajzzxhro.com/shared/0b68fe0fe5/index.js dengan query sign
+- https://static.eajzzxhro.com/shared/c2fc9a6814/index.js dengan query sign
+- https://static.eajzzxhro.com/shared/4528468aab/index.js dengan query sign
+
+Temuan penting:
+1. Asset memakai signed CDN URL sehingga collector harus menyimpan bytes ke localPath dan tidak hanya menyimpan URL.
+2. Ada loader remote dan banyak shared module JS yang perlu masuk paket atau direwrite ke file lokal.
+3. Ada JSON konfigurasi/data, JPG/PNG visual, OGG audio, dan kemungkinan resource lanjutan yang muncul setelah interaksi canvas.
+4. GTM/ad script bukan dependency gameplay dan sebaiknya ditandai tracking/optional, bukan blocker kritis.
+5. Daftar ini hanya resource yang terlihat pada saat halaman dimuat; interaksi Play/Spin dan request lanjutan tetap wajib dicapture.
+6. Status offline tidak boleh menggunakan angka 0 file jika Performance/manifest sudah memiliki resource nyata; UI harus menampilkan jumlah file lokal aktual dan daftar file berhasil/gagal.

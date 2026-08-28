@@ -12274,6 +12274,21 @@ function isApiLike(u){
         if (list) list.innerHTML = '';
       }
     }
+    function gcEscapeText(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+      });
+    }
+    function gcActualFileRows(files, limit) {
+      var rows = Array.isArray(files) ? files : [];
+      return rows.slice(0, limit || 60).map(function (f) {
+        var path = typeof f === 'string' ? f : (f && (f.path || f.name || f.localPath || f.url)) || '?';
+        var status = typeof f === 'object' && f ? String(f.status || f.collectStatus || f.strictStatus || 'captured').toLowerCase() : 'captured';
+        var failed = /fail|error|invalid|missing/.test(status);
+        var kind = typeof f === 'object' && f ? (f.category || f.type || f.apiKind || (path.split('.').pop() || 'file')) : (path.split('.').pop() || 'file');
+        return '<li class="' + (failed ? 'no' : 'ok') + '">' + (failed ? '!' : '✓') + ' <span title="' + gcEscapeText(path) + '">' + gcEscapeText(path) + '</span> <small>(' + gcEscapeText(kind) + (failed ? ' · ' + gcEscapeText(status) : '') + ')</small></li>';
+      }).join('');
+    }
     function gcRenderLiveFiles(files, total, pct) {
       const list = document.getElementById('gc-live-files');
       const meta = document.getElementById('gc-live-meta');
@@ -12286,12 +12301,16 @@ function isApiLike(u){
       // Render newest first; keep DOM light
       const slice = files.slice(0, 24);
       list.innerHTML = slice.map(function (f) {
-        const cat = (f.category || f.type || 'other');
-        const nm = (f.name || f.path || '?');
+        const cat = gcEscapeText(f.category || f.type || 'other');
+        const nm = gcEscapeText(f.name || f.path || '?');
         const sz = f.size ? (f.size > 1024 ? Math.round(f.size / 1024) + ' KB' : f.size + ' B') : '';
-        const tag = (f.apiKind || cat || '').toString().slice(0, 10);
+        const tag = gcEscapeText((f.apiKind || f.category || f.type || 'file').toString().slice(0, 10));
         return '<div class="gc-live-file ' + cat + '"><span class="tag">' + tag + '</span><span class="name" title="' + nm + '">' + nm + '</span><span class="sz">' + sz + '</span></div>';
       }).join('');
+      var toastList = document.getElementById('gc-ct-list');
+      var toastNote = document.getElementById('gc-ct-note');
+      if (toastList && files.length) toastList.innerHTML = gcActualFileRows(files, 24);
+      if (toastNote && files.length) toastNote.textContent = 'File aktual: menampilkan ' + Math.min(files.length, 24) + ' terbaru dari ' + (total || files.length) + ' file hasil capture.';
     }
     function gcShowIncomplete(completeness, suggestions) {
       const box = document.getElementById('gc-incomplete');
@@ -12497,6 +12516,7 @@ function isApiLike(u){
             }
             if (pd) {
               gcRenderLiveFiles(pd.recentFiles || [], pd.files || 0, pd.pct || 0);
+              gcUpdateCollectProgress({ pct: pd.pct || 0, fileCount: pd.files || 0, recentFiles: pd.recentFiles || [] }, pd.label || pd.phase || 'capture');
               if (pd.done && pd.completeness && pd.completeness.incomplete) {
                 gcShowIncomplete(pd.completeness, pd.suggestions || []);
               }
@@ -12929,15 +12949,20 @@ function isApiLike(u){
       var tn = document.getElementById('gc-ct-note');
       if (tp) tp.textContent = pct + '%';
       if (tb) tb.style.width = pct + '%';
+      var actualFiles = Array.isArray(report.names) ? report.names : (Array.isArray(report.recentFiles) ? report.recentFiles : []);
       if (tl) {
-        tl.innerHTML = (report.items || []).map(function (it) {
-          return '<li class="' + (it.ok ? 'ok' : 'no') + '">' + (it.ok ? '✓' : '○') + ' ' + it.label + '</li>';
-        }).join('');
+        if (actualFiles.length) {
+          tl.innerHTML = gcActualFileRows(actualFiles, 60);
+        } else {
+          tl.innerHTML = '<li class="no">Belum ada file aktual yang diterima dari collector.</li>';
+        }
       }
       if (tn) {
-        tn.textContent = pct >= 100
-          ? 'Paket inti lengkap — siap unduh / Workspace.'
-          : 'Masih ada item inti yang kurang (lihat list). Collect/resume atau cek api-map.';
+        if (actualFiles.length) {
+          tn.textContent = 'File aktual: ' + Math.min(actualFiles.length, 60) + ' ditampilkan' + (actualFiles.length > 60 ? ' dari ' + actualFiles.length : '') + '. Persentase dihitung dari isi paket.';
+        } else {
+          tn.textContent = 'Menunggu file aktual dari collector; checklist target tidak dianggap sebagai file yang berhasil diambil.';
+        }
       }
       var st = document.getElementById('status');
       if (st && statusLabel) {

@@ -42,5 +42,9 @@ Adapter realtime tersedia pada src/offline/realtime-adapter.js. OfflineWebSocket
 
 Runtime dependency interceptor tersedia pada src/offline/runtime-interceptor.js. Interceptor mencatat fetch, XMLHttpRequest, WebSocket, EventSource, blob URL, dan dynamic-import melalui trackedImport(). Mode offline dapat memblokir fetch external dengan RUNTIME_NETWORK_BLOCKED. Catatan dynamic import: JavaScript tidak menyediakan monkey patch universal untuk sintaks import(); kode game perlu memakai trackedImport() atau dicatat melalui static/runtime instrumentation. Interceptor menyediakan snapshot() dan restore() untuk audit tanpa meninggalkan patch global.
 
-7. PENGUJIAN DAN KRITERIA BERHASIL
+7. UI COLLECT DAN FILE AKTUAL
+
+Toast Collect dan panel progress tidak lagi menganggap checklist seperti index.html, File JS game, atau api-map.json sebagai file yang sudah berhasil diambil. Selama capture, daftar menampilkan recentFiles yang dikirim backend, termasuk path lokal, tipe, ukuran, dan status. Setelah ZIP dibuka, daftar memakai names dari isi ZIP yang benar-benar terbaca. Jika belum ada recentFiles atau names, UI menampilkan pesan bahwa belum ada file aktual dan tidak menampilkan checklist sebagai bukti capture. Nilai fileCount berasal dari manifest/ZIP, sedangkan daftar live dibatasi pada file terbaru untuk menjaga performa HP.
+
+8. PENGUJIAN DAN KRITERIA BERHASIL
 Test minimal harus memverifikasi init mengembalikan saldo, balance membaca saldo yang sama, spin mengurangi atau menambah saldo secara konsisten, bet invalid mengembalikan status 400, saldo tidak cukup mengembalikan status 409, roundId bertambah, dan history tersimpan. Keberhasilan emulator tidak berarti seluruh game kompatibel; game tetap perlu diuji dengan request body, response schema, dan urutan endpoint asli.
