@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createStatefulApiEmulator } from "../src/offline/stateful-api-emulator.js";
 import { buildApiContract } from "../src/collect/api-contract.js";
 import { createLocalApiRouter } from "../src/offline/api-router.js";
+import { createMemoryStorage } from "../src/offline/state-storage.js";
 
 const contract = buildApiContract({
   url: "https://game.example.test/custom/start",
@@ -20,7 +21,8 @@ assert.equal(contract.request.headers.authorization, "<redacted>");
 assert.deepEqual(contract.request.body, { gameId: "g-test", bet: 100 });
 assert.deepEqual(contract.response.topKeys, ["ok", "balance", "data"]);
 
-const emulator = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 123, playerId: "p-test", gameId: "g-test", apiContract: contract });
+const storage = createMemoryStorage();
+const emulator = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 123, playerId: "p-test", gameId: "g-test", apiContract: contract, storage, storageKey: "test-session" });
 const session = await emulator.handle("https://gc.offline.local/verifysession");
 const sessionPayload = await session.json();
 assert.equal(sessionPayload.sessionId, emulator.snapshot().sessionId);
@@ -69,6 +71,21 @@ emulator.restore(saved);
 assert.equal(emulator.snapshot().balance, saved.balance);
 assert.equal(emulator.snapshot().round, saved.round);
 assert.equal(emulator.snapshot().sessionId, saved.sessionId);
+emulator.persist();
+const resumed = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 999, storage, storageKey: "test-session" });
+const loaded = resumed.loadPersisted();
+assert.equal(loaded.balance, saved.balance);
+assert.equal(loaded.round, saved.round);
+assert.equal(loaded.sessionId, saved.sessionId);
+assert.equal(loaded.token, "gc-offline-token");
+const replay = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 123, autoPersist: false });
+const firstReplay = await replay.handle("https://gc.offline.local/spin", { method: "POST", body: JSON.stringify({ bet: 100 }) });
+const firstReplayBody = await firstReplay.json();
+replay.replay();
+const secondReplay = await replay.handle("https://gc.offline.local/spin", { method: "POST", body: JSON.stringify({ bet: 100 }) });
+const secondReplayBody = await secondReplay.json();
+assert.deepEqual(secondReplayBody.data.symbols, firstReplayBody.data.symbols);
+assert.equal(secondReplayBody.data.winAmount, firstReplayBody.data.winAmount);
 
 const invalid = await emulator.handle("https://gc.offline.local/spin", {
   method: "POST",

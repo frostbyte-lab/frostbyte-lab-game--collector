@@ -5,6 +5,7 @@
  */
 
 import { installLocalApiRouter } from "./api-router.js";
+import { getSafeStorage, saveSessionState, loadSessionState, clearSessionState, DEFAULT_STORAGE_KEY } from "./state-storage.js";
 
 const DEFAULTS = {
   initialBalance: 100000,
@@ -33,11 +34,14 @@ function numberOr(value, fallback) {
 }
 
 function createPrng(seed) {
-  let state = seed >>> 0;
-  return () => {
+  const initial = seed >>> 0;
+  let state = initial;
+  const next = () => {
     state = (Math.imul(1664525, state) + 1013904223) >>> 0;
     return state / 0x100000000;
   };
+  next.reset = () => { state = initial; };
+  return next;
 }
 
 function routeOf(url) {
@@ -71,7 +75,11 @@ function requestBody(request) {
 
 export function createStatefulApiEmulator(options = {}) {
   const config = { ...DEFAULTS, ...options };
-  const random = createPrng(numberOr(config.seed, DEFAULTS.seed));
+  const seed = numberOr(config.seed, DEFAULTS.seed) >>> 0;
+  const random = createPrng(seed);
+  const storage = getSafeStorage(config.storage);
+  const storageKey = String(config.storageKey || DEFAULT_STORAGE_KEY);
+  const autoPersist = config.autoPersist !== false;
   const initialSessionId = config.sessionId || `sandbox-${Date.now().toString(36)}`;
   const initialToken = config.token || "gc-offline-token";
   const state = {
@@ -80,6 +88,7 @@ export function createStatefulApiEmulator(options = {}) {
     playerId: config.playerId || "sandbox-player",
     gameId: config.gameId || "sandbox-game",
     apiContract: config.apiContract || null,
+    seed,
     createdAt: new Date().toISOString(),
     balance: Math.max(0, numberOr(config.initialBalance, DEFAULTS.initialBalance)),
     currency: config.currency,
@@ -87,6 +96,17 @@ export function createStatefulApiEmulator(options = {}) {
     lastWin: 0,
     history: []
   };
+
+  function persist() {
+    return saveSessionState(storage, state, storageKey);
+  }
+
+  function loadPersisted() {
+    const saved = loadSessionState(storage, storageKey);
+    if (!saved) return null;
+    // Storage deliberately omits token; retain the current sandbox token.
+    return restore({ ...saved, token: state.token });
+  }
 
   function sessionPayload() {
     return {
@@ -176,6 +196,7 @@ export function createStatefulApiEmulator(options = {}) {
     };
     state.history.unshift(result);
     state.history.length = Math.min(state.history.length, 50);
+    if (autoPersist) persist();
     return jsonResponse({ ok: true, __gcMock: true, data: result, dt: result, ...result });
   }
 
@@ -214,6 +235,7 @@ export function createStatefulApiEmulator(options = {}) {
     state.round = Math.max(0, Math.floor(numberOr(saved.round, 0)));
     state.lastWin = Math.max(0, numberOr(saved.lastWin, 0));
     state.history = Array.isArray(saved.history) ? saved.history.slice(0, 50) : [];
+    if (autoPersist) persist();
     return snapshot();
   }
 
@@ -229,6 +251,13 @@ export function createStatefulApiEmulator(options = {}) {
     state.round = 0;
     state.lastWin = 0;
     state.history = [];
+    random.reset();
+    if (autoPersist) persist();
+    return snapshot();
+  }
+
+  function replay(options = {}) {
+    reset({ ...options, initialBalance: options.initialBalance ?? config.initialBalance });
     return snapshot();
   }
 
@@ -237,7 +266,7 @@ export function createStatefulApiEmulator(options = {}) {
     return state.apiContract;
   }
 
-  return { handle, snapshot, restore, reset, setContract, state };
+  return { handle, snapshot, restore, reset, replay, persist, loadPersisted, clearPersisted: () => clearSessionState(storage, storageKey), setContract, state };
 }
 
 export function installStatefulApiEmulator(options = {}) {

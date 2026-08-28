@@ -22,8 +22,13 @@ Payout ini hanya aturan sandbox dasar. Aturan provider asli seperti paylines, sc
 4. CARA PEMAKAIAN LOKAL
 Import createStatefulApiEmulator dari src/offline/stateful-api-emulator.js untuk memakai handler secara langsung. Gunakan installStatefulApiEmulator() pada sandbox browser atau test lokal untuk memasang interceptor global fetch. Contoh endpoint: fetch('/init'), fetch('/balance'), lalu fetch('/spin', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({bet: 100}) }). Panggil emulator.snapshot() untuk melihat state terakhir.
 
-5. BATASAN DAN KEAMANAN
-Emulator hanya menangani kontrak generik. Ia belum mengetahui paylines, bonus, free spin, jackpot, validasi signature, aturan payout, WebSocket, SSE, autentikasi server, atau format khusus provider tertentu. Nilai saldo dan hasil spin hanya untuk sandbox, tidak boleh digunakan untuk taruhan, pembayaran, atau sistem produksi. Request ke route yang tidak dikenal diteruskan ke network oleh adapter fetch.
+5. PERSISTENSI, RESET, DAN REPLAY STATE
+Emulator sekarang memiliki storage adapter dengan fallback memory untuk test lokal dan dukungan localStorage ketika berjalan di browser. Gunakan opsi storage dan storageKey untuk menentukan tempat penyimpanan. Fungsi persist() menyimpan state sandbox, loadPersisted() memulihkan state, clearPersisted() menghapus state, reset() mengosongkan session dan history, sedangkan replay() mengembalikan PRNG ke seed awal agar urutan hasil dapat diuji ulang.
 
-6. PENGUJIAN DAN KRITERIA BERHASIL
+Token tidak disimpan ke storage persistence. Saat state dipulihkan, token sandbox yang sedang aktif dipertahankan. Jangan menggunakan storage ini untuk menyimpan credential produksi, cookie, Authorization header, atau data pribadi.
+
+6. BATASAN DAN KEAMANAN
+Emulator hanya menangani kontrak generik. Ia belum mengetahui paylines, bonus, free spin, jackpot, validasi signature, aturan payout, WebSocket, SSE, autentikasi server, atau format khusus provider tertentu. Nilai saldo dan hasil spin hanya untuk sandbox, tidak boleh digunakan untuk taruhan, pembayaran, atau sistem produksi. Request ke route yang tidak dikenal diteruskan ke network oleh adapter fetch dalam mode hybrid atau diblokir router pada mode offline.
+
+7. PENGUJIAN DAN KRITERIA BERHASIL
 Test minimal harus memverifikasi init mengembalikan saldo, balance membaca saldo yang sama, spin mengurangi atau menambah saldo secara konsisten, bet invalid mengembalikan status 400, saldo tidak cukup mengembalikan status 409, roundId bertambah, dan history tersimpan. Keberhasilan emulator tidak berarti seluruh game kompatibel; game tetap perlu diuji dengan request body, response schema, dan urutan endpoint asli.
