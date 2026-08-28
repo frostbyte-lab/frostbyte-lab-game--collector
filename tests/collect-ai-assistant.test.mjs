@@ -5,6 +5,8 @@ const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), '
 assert.match(html, /id="collect-ai-readiness"/);
 assert.match(html, /id="collect-ai-status"/);
 assert.match(html, /id="offline-ready-ai"/);
+assert.match(html, /id="offline-ready-play"/);
+assert.match(html, /function playOfflineReview\(/);
 assert.match(html, /function gcRunOfflineReadinessAssistant\(/);
 assert.match(html, /callCustomAIWithFailover\(\[/);
 assert.match(html, /Cloudflare Capture/);

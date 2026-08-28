@@ -4345,6 +4345,7 @@
               <input type="file" id="offline-ready-zip" accept=".zip,application/zip" hidden>
             </label>
             <div class="offline-ready-actions">
+              <button type="button" class="btn btn-primary btn-sm" id="offline-ready-play" onclick="playOfflineReview()">▶ Play Review</button>
               <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-current" onclick="auditCurrentZipOffline()">Audit ZIP Workspace</button>
               <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-reset" onclick="resetOfflineReadyAudit()">Reset</button>
             </div>
@@ -6811,11 +6812,40 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       try {
         var zip = fileOrZip && fileOrZip.files ? fileOrZip : await JSZip.loadAsync(fileOrZip);
         var report = await gcInspectZipCompleteness(zip);
-        offlineReadyLastAudit = { report: report, filename: filename || fileOrZip.name || 'game-package.zip', browserTest: { status: 'NOT_RUN', networkIsolated: false, gameplayReady: false } };
+        offlineReadyLastAudit = { report: report, filename: filename || fileOrZip.name || 'game-package.zip', sourceFile: (fileOrZip && typeof fileOrZip.arrayBuffer === 'function') ? fileOrZip : null, browserTest: { status: 'NOT_RUN', networkIsolated: false, gameplayReady: false } };
         offlineReadyRender(report, offlineReadyLastAudit.filename, offlineReadyLastAudit.browserTest);
         try { actRecord('audit', 'ZIP readiness ' + (report.pct >= 100 ? 'lengkap' : 'belum lengkap'), JSON.stringify({ fileCount: report.fileCount, pct: report.pct, filename: offlineReadyLastAudit.filename })); } catch (_) {}
       } catch (err) {
         if (status) status.textContent = 'Gagal membaca ZIP: ' + (err && err.message ? err.message : err);
+      }
+    }
+    async function playOfflineReview() {
+      var status = document.getElementById('offline-ready-status');
+      try {
+        if (offlineReadyLastAudit && offlineReadyLastAudit.sourceFile) {
+          if (status) status.textContent = 'Memuat ZIP ke Workspace untuk Play Review…';
+          var input = document.getElementById('zip-input');
+          if (!input || typeof DataTransfer === 'undefined') throw new Error('Input Workspace tidak tersedia');
+          var transfer = new DataTransfer();
+          transfer.items.add(new File([offlineReadyLastAudit.sourceFile], offlineReadyLastAudit.filename || 'game-package.zip', { type: 'application/zip' }));
+          input.files = transfer.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          await new Promise(function (resolve) { setTimeout(resolve, 1400); });
+        }
+        if (typeof currentZip === 'undefined' || !currentZip) {
+          if (status) status.textContent = 'Pilih atau audit ZIP terlebih dahulu sebelum Play Review.';
+          return;
+        }
+        try { closeActivitySub(); } catch (_) {}
+        try {
+          var ws = document.querySelector('.nav-btn[data-panel="workspace"], button[onclick*="workspace"]');
+          if (ws) ws.click();
+        } catch (_) {}
+        if (status) status.textContent = 'Membuka Play Review dalam Sandbox offline…';
+        try { actRecord('preview', 'Play Review offline', offlineReadyLastAudit && offlineReadyLastAudit.filename || 'Workspace ZIP'); } catch (_) {}
+        await startPreview('sandbox');
+      } catch (error) {
+        if (status) status.textContent = 'Play Review gagal: ' + (error && error.message ? error.message : error);
       }
     }
     function auditCurrentZipOffline() {
@@ -6839,6 +6869,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
     window.openActivityOfflineReady = openActivityOfflineReady;
     window.auditCurrentZipOffline = auditCurrentZipOffline;
+    window.playOfflineReview = playOfflineReview;
     window.resetOfflineReadyAudit = resetOfflineReadyAudit;
     function openActivityTerminal() {
       var hub = document.getElementById('activity-hub');
