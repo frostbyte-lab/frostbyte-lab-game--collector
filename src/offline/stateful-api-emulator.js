@@ -13,6 +13,10 @@ const DEFAULTS = {
   defaultBet: 100,
   minBet: 1,
   maxBet: 100000,
+  strictSequence: true,
+  freeSpinsAward: 5,
+  bonusTriggerMatch: 3,
+  maxFreeSpins: 50,
   seed: 0x5f3759df,
   payoutTable: { 3: 5, 2: 1 }
 };
@@ -49,6 +53,7 @@ function routeOf(url) {
   if (/\/(?:init|gameinfo|gamedata)\/?$/.test(path)) return "init";
   if (/\/(?:balance|gamewallet)\/?$/.test(path)) return "balance";
   if (/\/(?:spin|bet|play)\/?$/.test(path)) return "spin";
+  if (/\/(?:result|settle)\/?$/.test(path)) return "result";
   if (/\/(?:session|verifysession)\/?$/.test(path)) return "session";
   return null;
 }
@@ -94,7 +99,12 @@ export function createStatefulApiEmulator(options = {}) {
     currency: config.currency,
     round: 0,
     lastWin: 0,
-    history: []
+    history: [],
+    phase: "NEW",
+    lastAction: null,
+    strictSequence: config.strictSequence !== false,
+    freeSpins: 0,
+    bonusMultiplier: Math.max(1, numberOr(config.bonusMultiplier, 1))
   };
 
   function persist() {
@@ -108,7 +118,38 @@ export function createStatefulApiEmulator(options = {}) {
     return restore({ ...saved, token: state.token });
   }
 
+  const phaseTransitions = {
+    session: ["NEW", "SESSION_READY", "INITIALIZED", "READY", "RESULT"],
+    init: ["NEW", "SESSION_READY", "READY", "RESULT"],
+    balance: ["SESSION_READY", "INITIALIZED", "READY", "RESULT"],
+    spin: ["READY", "RESULT"],
+    result: ["RESULT"]
+  };
+
+  function transition(action) {
+    const allowed = phaseTransitions[action] || [];
+    if (state.strictSequence && !allowed.includes(state.phase)) {
+      return jsonResponse({
+        ok: false,
+        __gcMock: true,
+        error: "INVALID_STATE",
+        phase: state.phase,
+        action,
+        allowedPhases: allowed,
+        message: `Action ${action} tidak valid pada fase ${state.phase}.`
+      }, 409);
+    }
+    if (action === "session") state.phase = "SESSION_READY";
+    else if (action === "init") state.phase = "READY";
+    else if (action === "spin") state.phase = "SPINNING";
+    else if (action === "result") state.phase = "RESULT";
+    state.lastAction = action;
+    return null;
+  }
+
   function sessionPayload() {
+    const error = transition("session");
+    if (error) return error;
     return {
       ok: true,
       __gcMock: true,
@@ -121,11 +162,16 @@ export function createStatefulApiEmulator(options = {}) {
       tk: state.token,
       balance: state.balance,
       bl: state.balance,
-      currency: state.currency
+      currency: state.currency,
+      phase: state.phase,
+      freeSpins: state.freeSpins,
+      bonusMultiplier: state.bonusMultiplier
     };
   }
 
   function initPayload() {
+    const error = transition("init");
+    if (error) return error;
     return {
       ok: true,
       __gcMock: true,
@@ -138,11 +184,16 @@ export function createStatefulApiEmulator(options = {}) {
       dt: { game: "offline", bl: state.balance },
       balance: state.balance,
       bl: state.balance,
-      currency: state.currency
+      currency: state.currency,
+      phase: state.phase,
+      freeSpins: state.freeSpins,
+      bonusMultiplier: state.bonusMultiplier
     };
   }
 
   function balancePayload() {
+    const error = transition("balance");
+    if (error) return error;
     return {
       ok: true,
       __gcMock: true,
@@ -153,28 +204,45 @@ export function createStatefulApiEmulator(options = {}) {
       bl: state.balance,
       credit: state.balance,
       currency: state.currency,
-      round: state.round
+      round: state.round,
+      phase: state.phase,
+      freeSpins: state.freeSpins,
+      bonusMultiplier: state.bonusMultiplier
     };
   }
 
+  function resultPayload() {
+    const error = transition("result");
+    if (error) return error;
+    const last = state.history[0] || null;
+    return jsonResponse({ ok: true, __gcMock: true, data: last, result: last, ...last });
+  }
+
   async function spin(request) {
+    const sequenceError = transition("spin");
+    if (sequenceError) return sequenceError;
     const body = await requestBody(request);
+    const freeSpin = state.freeSpins > 0 || body.freeSpin === true || body.data?.freeSpin === true;
     const bet = numberOr(body.bet ?? body.betAmount ?? body.amount ?? body.stake ?? body.data?.bet, config.defaultBet);
-    if (!Number.isFinite(bet) || bet < config.minBet || bet > config.maxBet) {
+    if (!freeSpin && (!Number.isFinite(bet) || bet < config.minBet || bet > config.maxBet)) {
       return jsonResponse({ ok: false, __gcMock: true, error: "INVALID_BET", message: "Bet di luar batas emulator." }, 400);
     }
-    if (bet > state.balance) {
+        const charged = freeSpin ? 0 : bet;
+    if (!freeSpin && charged > state.balance) {
       return jsonResponse({ ok: false, __gcMock: true, error: "INSUFFICIENT_BALANCE", balance: state.balance, bl: state.balance }, 409);
     }
-
     state.round += 1;
     const balanceBefore = state.balance;
-    state.balance -= bet;
+    if (freeSpin) state.freeSpins = Math.max(0, state.freeSpins - 1);
+    state.balance -= charged;
     const symbols = Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => 1 + Math.floor(random() * 9)));
     const payout = evaluatePayout(symbols, bet, config.payoutTable);
-    const win = payout.win;
+    const win = payout.win * state.bonusMultiplier;
+    const bonusTriggered = payout.match >= config.bonusTriggerMatch && config.freeSpinsAward > 0;
+    if (bonusTriggered) state.freeSpins = Math.min(config.maxFreeSpins, state.freeSpins + config.freeSpinsAward);
     state.lastWin = win;
     state.balance += win;
+    state.phase = "RESULT";
     const result = {
       roundId: `${state.sessionId}-${state.round}`,
       win,
@@ -182,7 +250,12 @@ export function createStatefulApiEmulator(options = {}) {
       totalWin: win,
       bet,
       balanceBefore,
-      charged: bet,
+      charged,
+      freeSpin,
+      freeSpins: state.freeSpins,
+      bonusTriggered,
+      bonusMultiplier: state.bonusMultiplier,
+      balanceAfter: state.balance,
       payoutMultiplier: payout.multiplier,
       matchedSymbols: payout.match,
       outcome: win > 0 ? "WIN" : "LOSS",
@@ -192,12 +265,17 @@ export function createStatefulApiEmulator(options = {}) {
       balance: state.balance,
       bl: state.balance,
       si: state.sessionId,
-      currency: state.currency
+      currency: state.currency,
+      phase: state.phase
     };
     state.history.unshift(result);
     state.history.length = Math.min(state.history.length, 50);
     if (autoPersist) persist();
     return jsonResponse({ ok: true, __gcMock: true, data: result, dt: result, ...result });
+  }
+
+  function asResponse(payload) {
+    return payload instanceof Response ? payload : jsonResponse(payload);
   }
 
   async function handle(requestOrUrl, init = {}) {
@@ -211,9 +289,10 @@ export function createStatefulApiEmulator(options = {}) {
       }
     }
     if (!route) return null;
-    if (route === "session") return jsonResponse(sessionPayload());
-    if (route === "init") return jsonResponse(initPayload());
-    if (route === "balance") return jsonResponse(balancePayload());
+    if (route === "session") return asResponse(sessionPayload());
+    if (route === "init") return asResponse(initPayload());
+    if (route === "balance") return asResponse(balancePayload());
+    if (route === "result") return resultPayload();
     return spin(request);
   }
 
@@ -235,6 +314,10 @@ export function createStatefulApiEmulator(options = {}) {
     state.round = Math.max(0, Math.floor(numberOr(saved.round, 0)));
     state.lastWin = Math.max(0, numberOr(saved.lastWin, 0));
     state.history = Array.isArray(saved.history) ? saved.history.slice(0, 50) : [];
+    state.freeSpins = Math.max(0, Math.floor(numberOr(saved.freeSpins, 0)));
+    state.bonusMultiplier = Math.max(1, numberOr(saved.bonusMultiplier, state.bonusMultiplier));
+    state.phase = ["NEW", "SESSION_READY", "INITIALIZED", "READY", "SPINNING", "RESULT"].includes(saved.phase) ? saved.phase : "NEW";
+    state.lastAction = saved.lastAction || null;
     if (autoPersist) persist();
     return snapshot();
   }
@@ -251,6 +334,10 @@ export function createStatefulApiEmulator(options = {}) {
     state.round = 0;
     state.lastWin = 0;
     state.history = [];
+    state.freeSpins = 0;
+    state.bonusMultiplier = Math.max(1, numberOr(overrides.bonusMultiplier, numberOr(config.bonusMultiplier, 1)));
+    state.phase = "NEW";
+    state.lastAction = null;
     random.reset();
     if (autoPersist) persist();
     return snapshot();

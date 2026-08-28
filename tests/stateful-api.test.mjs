@@ -21,6 +21,11 @@ assert.equal(contract.request.headers.authorization, "<redacted>");
 assert.deepEqual(contract.request.body, { gameId: "g-test", bet: 100 });
 assert.deepEqual(contract.response.topKeys, ["ok", "balance", "data"]);
 
+const sequenceCheck = createStatefulApiEmulator({ autoPersist: false });
+const prematureSpin = await sequenceCheck.handle("https://gc.offline.local/spin", { method: "POST", body: JSON.stringify({ bet: 100 }) });
+assert.equal(prematureSpin.status, 409);
+assert.equal((await prematureSpin.json()).error, "INVALID_STATE");
+
 const storage = createMemoryStorage();
 const emulator = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 123, playerId: "p-test", gameId: "g-test", apiContract: contract, storage, storageKey: "test-session" });
 const session = await emulator.handle("https://gc.offline.local/verifysession");
@@ -63,6 +68,9 @@ assert.equal(["WIN", "LOSS"].includes(spinPayload.data.outcome), true);
 assert.equal(spinPayload.data.balance, spinPayload.data.balanceBefore - spinPayload.data.charged + spinPayload.data.winAmount);
 assert.equal(emulator.snapshot().round, 1);
 assert.equal(emulator.snapshot().history.length, 1);
+const result = await emulator.handle("https://gc.offline.local/result");
+assert.equal(result.status, 200);
+assert.equal((await result.json()).data.roundId, spinPayload.data.roundId);
 const saved = emulator.snapshot();
 emulator.reset({ initialBalance: 500 });
 assert.equal(emulator.snapshot().balance, 500);
@@ -79,9 +87,13 @@ assert.equal(loaded.round, saved.round);
 assert.equal(loaded.sessionId, saved.sessionId);
 assert.equal(loaded.token, "gc-offline-token");
 const replay = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 123, autoPersist: false });
+await replay.handle("https://gc.offline.local/verifysession");
+await replay.handle("https://gc.offline.local/gameinfo");
 const firstReplay = await replay.handle("https://gc.offline.local/spin", { method: "POST", body: JSON.stringify({ bet: 100 }) });
 const firstReplayBody = await firstReplay.json();
 replay.replay();
+await replay.handle("https://gc.offline.local/verifysession");
+await replay.handle("https://gc.offline.local/gameinfo");
 const secondReplay = await replay.handle("https://gc.offline.local/spin", { method: "POST", body: JSON.stringify({ bet: 100 }) });
 const secondReplayBody = await secondReplay.json();
 assert.deepEqual(secondReplayBody.data.symbols, firstReplayBody.data.symbols);
@@ -95,10 +107,21 @@ const invalid = await emulator.handle("https://gc.offline.local/spin", {
 assert.equal(invalid.status, 400);
 
 const payoutEmulator = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 123, payoutTable: { 3: 10, 2: 0 } });
+await payoutEmulator.handle("https://gc.offline.local/verifysession");
+await payoutEmulator.handle("https://gc.offline.local/gameinfo");
 const payoutSpin = await payoutEmulator.handle("https://gc.offline.local/spin", { method: "POST", body: JSON.stringify({ bet: 100 }) });
 const payoutPayload = await payoutSpin.json();
 assert.equal(payoutPayload.data.balance, payoutPayload.data.balanceBefore - 100 + payoutPayload.data.winAmount);
 assert.equal(payoutPayload.data.winAmount, payoutPayload.data.bet * payoutPayload.data.payoutMultiplier);
+
+const freeEmulator = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, autoPersist: false });
+await freeEmulator.handle("https://gc.offline.local/verifysession");
+await freeEmulator.handle("https://gc.offline.local/gameinfo");
+freeEmulator.state.freeSpins = 1;
+const freeSpin = await freeEmulator.handle("https://gc.offline.local/spin", { method: "POST", body: JSON.stringify({ bet: 100 }) });
+const freeSpinPayload = await freeSpin.json();
+assert.equal(freeSpinPayload.data.freeSpin, true);
+assert.equal(freeSpinPayload.data.charged, 0);
 
 const insufficient = await emulator.handle("https://gc.offline.local/spin", {
   method: "POST",

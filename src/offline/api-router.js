@@ -19,7 +19,8 @@ function localRoute(kind) {
   if (kind === "session" || kind === "auth") return "/verifysession";
   if (kind === "init" || kind === "launch") return "/gameinfo";
   if (kind === "balance") return "/gamewallet";
-  if (kind === "spin" || kind === "spin-request" || kind === "spin-result") return "/spin";
+  if (kind === "spin" || kind === "spin-request") return "/spin";
+  if (kind === "spin-result" || kind === "result" || kind === "settle") return "/result";
   return null;
 }
 

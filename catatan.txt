@@ -15,6 +15,10 @@ Setiap kontrak memiliki order capture dan dapat dirangkum menjadi replaySequence
 Emulator dapat menerima apiContract melalui opsi createStatefulApiEmulator({ apiContract }), menyimpannya dalam snapshot, serta memakai target.path dan kind untuk mengenali endpoint game khusus yang tidak memakai nama /init, /balance, atau /spin standar.
 
 3. STATE YANG DISIMPAN
+State mencakup sessionId, token, balance, currency, round, lastWin, history maksimal 50 hasil, phase, lastAction, freeSpins, dan bonusMultiplier. State machine dasar menggunakan fase NEW → SESSION_READY → READY → RESULT. Spin hanya dapat dilakukan setelah session dan init berhasil. Endpoint /result atau /settle mengembalikan hasil spin terakhir. Request yang tidak mengikuti urutan menghasilkan INVALID_STATE HTTP 409, kecuali strictSequence dimatikan untuk kompatibilitas legacy.
+
+Free spin dasar dapat berjalan tanpa charge saldo ketika freeSpins tersedia. Payout match sesuai bonusTriggerMatch dapat menambah freeSpins sampai maxFreeSpins. Fitur bonus ini masih sandbox generik dan bukan aturan provider asli.
+
 State mencakup sessionId, token, balance, currency, round, lastWin, dan history maksimal 50 hasil. Saldo dikurangi sesuai nilai bet sebelum spin dan ditambah kembali sesuai win. Hasil spin memakai pseudo-random generator deterministic berdasarkan seed sehingga urutan hasil dapat diulang saat seed yang sama digunakan.
 
 Aturan spin dasar sekarang memakai payoutTable yang dapat dikonfigurasi. Default payoutTable adalah 3 simbol sama = 5x bet dan 2 simbol sama = 1x bet. Emulator mengembalikan balanceBefore, charged, win, winAmount, totalWin, payoutMultiplier, matchedSymbols, outcome, symbols, reels, rl, dan roundId. Bet divalidasi terhadap minBet, maxBet, dan saldo. Bet tidak valid menghasilkan HTTP 400, sedangkan saldo tidak mencukupi menghasilkan HTTP 409.
