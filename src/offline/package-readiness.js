@@ -30,15 +30,16 @@ function listExternalRefs(files) {
 export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   const names = Object.keys(files).filter((name) => !name.endsWith("/"));
   const lowerNames = names.map((name) => name.toLowerCase());
-  const manifest = jsonFile(files, "manifest.json");
+  const manifestRaw = jsonFile(files, "manifest.json");
+  const manifest = Array.isArray(manifestRaw) ? manifestRaw : (Array.isArray(manifestRaw?.resources) ? manifestRaw.resources : []);
   const apiMap = jsonFile(files, "api-map.json");
   const superReport = jsonFile(files, "offline-super.json");
   const statusReport = jsonFile(files, "collect-status.json");
   const indexHtml = lowerNames.some((name) => /(^|\/)index\.html?$/.test(name));
   const texts = names.filter((name) => TEXT_EXT.test(name)).map((name) => textOf(files[name]).slice(0, 500000));
   const externalRefs = listExternalRefs(files);
-  const apiEndpoints = Array.isArray(apiMap?.endpoints) ? apiMap.endpoints : [];
-  const snapshots = apiEndpoints.filter((entry) => entry?.hasSnapshot && entry?.snapshot);
+  const apiEndpoints = Array.isArray(apiMap?.endpoints) ? apiMap.endpoints : (Array.isArray(apiMap?.contracts) ? apiMap.contracts : []);
+  const snapshots = apiEndpoints.filter((entry) => entry?.hasSnapshot && entry?.snapshot || entry?.response?.localPath || entry?.response?.schema);
   const unresolved = Array.isArray(manifest) ? manifest.filter((entry) => /https?:\/\//i.test(String(entry?.url || "")) && !entry?.localPath).length : 0;
   const failed = Array.isArray(manifest) ? manifest.filter((entry) => /FAILED|INVALID|ERROR/i.test(String(entry?.collectStatus || entry?.strictStatus || ""))).length : 0;
   const hasApi = apiEndpoints.length > 0 || texts.some((text) => API_MARKER.test(text));
@@ -72,7 +73,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
     fullOfflineReady,
     browserTest: browser,
     assets: { files: names.length, indexHtml, unresolved, failed, externalRefs: externalRefs.length },
-    api: { detected: hasApi, endpoints: apiEndpoints.length, snapshots: snapshots.length, replaySequence: Array.isArray(apiMap?.replaySequence) ? apiMap.replaySequence.length : 0 },
+    api: { detected: hasApi, endpoints: apiEndpoints.length, snapshots: snapshots.length, contracts: Array.isArray(apiMap?.contracts) ? apiMap.contracts.length : 0, replaySequence: Array.isArray(apiMap?.replaySequence) ? apiMap.replaySequence.length : 0 },
     realtime: { detected: hasRealtime, adapterPresent: hasRuntimeInterceptor },
     sourceReports: { hasManifest: Boolean(manifest), hasApiMap: Boolean(apiMap), hasOfflineSuper: Boolean(superReport), hasCollectStatus: Boolean(statusReport) },
     blockers,

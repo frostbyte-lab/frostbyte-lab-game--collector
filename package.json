@@ -13,6 +13,7 @@
     "test:realtime": "node tests/realtime-adapter.test.mjs",
     "test:runtime-interceptor": "node tests/runtime-interceptor.test.mjs",
     "test:package-readiness": "node tests/package-readiness.test.mjs",
+    "test:collect-artifact": "node tests/collect-artifact-schema.test.mjs",
     "validate:offline-package": "node scripts/validate-offline-package.js"
   },
   "dependencies": {

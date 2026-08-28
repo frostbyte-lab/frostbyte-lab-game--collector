@@ -26,6 +26,7 @@ import {
   isCriticalApiUrl,
   classifyApiResource
 } from "./zip-aware-detect.js";
+import { buildApiMap } from "../src/package/api-map.js";
 
 const TARGET_URL = process.env.TARGET_URL;
 const WAIT_SECONDS = Math.max(5, parseInt(process.env.WAIT_SECONDS || "22", 10));
@@ -136,6 +137,37 @@ function smartPackage(zipFiles, resources) {
   return { rewritten, neutralized };
 }
 
+function redactHeaders(headers = {}) {
+  const blocked = /authorization|cookie|set-cookie|x-api-key|proxy-auth|signature|token/i;
+  return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key, blocked.test(key) ? '<redacted>' : String(value).slice(0, 300)]));
+}
+function bodyPeek(value, limit = 4096) {
+  if (value == null) return null;
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return text.length > limit ? text.slice(0, limit) + '…' : text;
+}
+function topKeys(value) {
+  if (!value || typeof value !== 'object') return [];
+  return Array.isArray(value) ? [] : Object.keys(value).slice(0, 80);
+}
+function responseSchema(value, depth = 0) {
+  if (depth > 2 || value == null) return value == null ? String(value) : typeof value;
+  if (Array.isArray(value)) return { type: 'array', length: value.length, item: value.length ? responseSchema(value[0], depth + 1) : null };
+  if (typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).slice(0, 40).map(([key, item]) => [key, responseSchema(item, depth + 1)]));
+  }
+  return typeof value;
+}
+function classifyReplayKind(url, apiKind) {
+  const path = (() => { try { return new URL(url).pathname.toLowerCase(); } catch { return String(url).toLowerCase(); } })();
+  if (/verifysession|session|auth|login/.test(path)) return 'session';
+  if (/init|gameinfo|gamedata|config/.test(path)) return 'init';
+  if (/balance|wallet|credit|cashier/.test(path)) return 'balance';
+  if (/result|settle|history/.test(path)) return 'result';
+  if (/spin|bet|play|round/.test(path)) return 'spin';
+  return apiKind || 'other';
+}
+
 function isBlockedHtml(html) {
   const h = String(html || "");
   const hl = h.toLowerCase();
@@ -190,6 +222,9 @@ async function main() {
   const zipFiles = {};
   const seen = new Set();
   const criticalApis = [];
+  const apiContracts = [];
+  const replaySequence = [];
+  let apiOrder = 0;
   let detectProfile = null;
   let mainDocStatus = 0;
   let mainDocUrl = TARGET_URL;
@@ -201,18 +236,55 @@ async function main() {
       if (!TYPES.has(type)) return;
 
       const url = response.url();
-      if (seen.has(url) || EXCLUDE.some((r) => r.test(url))) return;
+      const isApi = type === "xhr" || type === "fetch";
+      const duplicate = seen.has(url);
+      if ((duplicate && !isApi) || EXCLUDE.some((r) => r.test(url))) return;
       if (url.startsWith("data:") || url.startsWith("blob:")) return;
 
       const status = response.status();
       if (status >= 400) return;
-      seen.add(url);
+      if (!duplicate) seen.add(url);
 
+      const requestHeaders = redactHeaders(req.headers());
+      const requestBody = bodyPeek(req.postData());
+      const parsedUrl = (() => { try { return new URL(url); } catch { return null; } })();
       const buffer = await response.body();
       if (!buffer || buffer.length === 0) return;
       if (buffer.length > 18 * 1024 * 1024) return;
 
       const ct = response.headers()["content-type"] || "";
+      const apiKind = isApi ? classifyApiResource(url, ct) : null;
+      let parsedBody = null;
+      if (isApi && /json|javascript|text\//i.test(ct)) {
+        try { parsedBody = JSON.parse(new TextDecoder().decode(buffer)); } catch {}
+      }
+      let contractForResource = null;
+      if (isApi) {
+        const kind = classifyReplayKind(url, apiKind);
+        const contract = {
+          order: ++apiOrder,
+          method: req.method(),
+          url,
+          origin: parsedUrl?.origin || null,
+          path: parsedUrl?.pathname || null,
+          query: parsedUrl ? Object.fromEntries(parsedUrl.searchParams.keys().map((key) => [key, '<captured>'])) : {},
+          kind,
+          requestHeaders,
+          requestBody,
+          response: {
+            status,
+            headers: redactHeaders(response.headers()),
+            contentType: ct,
+            topKeys: topKeys(parsedBody),
+            schema: responseSchema(parsedBody),
+            localPath: null
+          }
+        };
+        apiContracts.push(contract);
+        contractForResource = contract;
+        replaySequence.push({ order: contract.order, method: contract.method, path: contract.path, kind, requestBody });
+      }
+      if (duplicate) return;
       let name = safe(new URL(url).pathname.split("/").pop() || "index");
       if (!/\.[a-z0-9]{1,8}$/i.test(name)) {
         if (ct.includes("javascript")) name += ".js";
@@ -228,7 +300,6 @@ async function main() {
       }
 
       const critical = isCriticalApiUrl(url, detectProfile);
-      const apiKind = (type === "xhr" || type === "fetch") ? classifyApiResource(url, ct) : null;
 
       let folder = folderOf(type);
       // Tag critical API responses into named files for easier analysis
@@ -242,6 +313,9 @@ async function main() {
 
       const localPath = `${folder}/${String(resources.length + 1).padStart(4, "0")}-${name}`;
       zipFiles[localPath] = new Uint8Array(buffer);
+      for (const contract of apiContracts) {
+        if (!contract.response.localPath && contract.url === url) contract.response.localPath = localPath;
+      }
       resources.push({
         url,
         type,
@@ -250,7 +324,8 @@ async function main() {
         size: buffer.length,
         contentType: ct,
         critical: Boolean(critical),
-        apiKind: apiKind || undefined
+        apiKind: apiKind || undefined,
+        apiContract: contractForResource || undefined
       });
     } catch {}
   });
@@ -315,38 +390,24 @@ async function main() {
   console.log("PROGRESS: rewrite");
   const smart = smartPackage(zipFiles, resources);
 
-  // api-map summary
-  const apiMap = {};
-  for (const r of resources) {
-    if (r.type !== "xhr" && r.type !== "fetch") continue;
-    const kind = r.apiKind || "other";
-    if (!apiMap[kind]) apiMap[kind] = [];
-    if (apiMap[kind].length < 20) {
-      apiMap[kind].push({ url: r.url, path: r.localPath, size: r.size, critical: r.critical });
-    }
-  }
-  zipFiles["api-map.json"] = strToU8(
-    JSON.stringify(
-      {
-        generatedAt: new Date().toISOString(),
-        criticalCount: criticalApis.length,
-        byKind: apiMap,
-        profile: {
+  // api-map resmi: endpoint + snapshot + contract + replay sequence
+  const apiMap = buildApiMap(resources, zipFiles);
+  apiMap.generatedAt = new Date().toISOString();
+  apiMap.criticalCount = criticalApis.length;
+  apiMap.contracts = apiContracts;
+  apiMap.replaySequence = replaySequence;
+  apiMap.profile = {
           spinKeywords: detectProfile?.spinKeywords?.slice(0, 20),
           historyKeywords: detectProfile?.historyKeywords?.slice(0, 12),
           apiPaths: detectProfile?.apiPaths?.slice(0, 30),
           apiHosts: detectProfile?.apiHosts?.slice(0, 15)
-        },
-        autoInteract: {
-          autoSpins: interactResult?.autoSpins,
-          autoHistory: interactResult?.autoHistory,
-          spinDelayMs: interactResult?.spinDelayMs
-        }
-      },
-      null,
-      2
-    )
-  );
+  };
+  apiMap.autoInteract = {
+    autoSpins: interactResult?.autoSpins,
+    autoHistory: interactResult?.autoHistory,
+    spinDelayMs: interactResult?.spinDelayMs
+  };
+  zipFiles["api-map.json"] = strToU8(JSON.stringify(apiMap, null, 2));
 
   const manifest = {
     target: TARGET_URL,
@@ -362,7 +423,9 @@ async function main() {
       autoHistory: AUTO_HISTORY !== "0",
       spinDelayMs: Number(SPIN_DELAY_MS)
     },
-    resources
+    resources,
+    apiContracts,
+    replaySequence
   };
   zipFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
   zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
@@ -371,6 +434,7 @@ Main document status: ${mainDocStatus}
 Tanggal: ${new Date().toISOString()}
 Total: ${resources.length} file
 Critical API: ${criticalApis.length}
+API contracts: ${apiContracts.length} · replay exchanges: ${replaySequence.length}
 Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
 Auto spins: ${AUTO_SPINS} · history: ${AUTO_HISTORY}
 Via: GitHub Actions (auto-detect + strict interact)
