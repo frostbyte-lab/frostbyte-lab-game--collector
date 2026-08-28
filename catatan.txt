@@ -27,8 +27,10 @@ Emulator sekarang memiliki storage adapter dengan fallback memory untuk test lok
 
 Token tidak disimpan ke storage persistence. Saat state dipulihkan, token sandbox yang sedang aktif dipertahankan. Jangan menggunakan storage ini untuk menyimpan credential produksi, cookie, Authorization header, atau data pribadi.
 
-6. BATASAN DAN KEAMANAN
-Emulator hanya menangani kontrak generik. Ia belum mengetahui paylines, bonus, free spin, jackpot, validasi signature, aturan payout, WebSocket, SSE, autentikasi server, atau format khusus provider tertentu. Nilai saldo dan hasil spin hanya untuk sandbox, tidak boleh digunakan untuk taruhan, pembayaran, atau sistem produksi. Request ke route yang tidak dikenal diteruskan ke network oleh adapter fetch dalam mode hybrid atau diblokir router pada mode offline.
+6. VALIDASI OFFLINE PENUH DAN BATASAN KOMPATIBILITAS
+Modul src/offline/offline-validation.js menyediakan validasi alur session → init → balance → spin → balance-after dengan mode offline. Harness memeriksa status response, sessionId dan token, saldo sebelum dan sesudah, roundId, history, arithmetic saldo, serta memastikan tidak ada request yang lolos ke fallback network. Jika semua syarat terpenuhi, status menjadi FULL_OFFLINE_READY. Jika ada kegagalan, status menjadi NOT_READY dan detail kegagalan tersedia pada failures.
+
+Validasi ini tidak membuktikan semua aturan provider asli. Emulator tetap belum mengetahui paylines, bonus, free spin, jackpot, validasi signature, WebSocket, SSE, autentikasi server, atau format khusus provider tertentu. Nilai saldo dan hasil spin hanya untuk sandbox, tidak boleh digunakan untuk taruhan, pembayaran, atau sistem produksi. Game yang tidak dikenal oleh api-map harus diblokir pada mode offline atau diteruskan ke network pada mode hybrid.
 
 7. PENGUJIAN DAN KRITERIA BERHASIL
 Test minimal harus memverifikasi init mengembalikan saldo, balance membaca saldo yang sama, spin mengurangi atau menambah saldo secara konsisten, bet invalid mengembalikan status 400, saldo tidak cukup mengembalikan status 409, roundId bertambah, dan history tersimpan. Keberhasilan emulator tidak berarti seluruh game kompatibel; game tetap perlu diuji dengan request body, response schema, dan urutan endpoint asli.
