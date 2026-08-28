@@ -1,0 +1,21 @@
+CATATAN EMULATOR STATEFUL API LOKAL
+Repository: frostbyte-lab-game--collector
+Versi: stateful-v1
+
+1. TUJUAN
+Emulator ini menyediakan backend lokal sederhana untuk preview offline. Endpoint yang ditangani adalah init, balance, dan spin, dengan tambahan session/verifysession agar alur awal game dapat dimulai. Emulator ini bukan backend produksi dan bukan simulasi aturan game asli.
+
+2. ENDPOINT YANG DIDUKUNG
+Route /init, /gameinfo, dan /gamedata menghasilkan konfigurasi game serta saldo awal. Route /balance dan /gamewallet menghasilkan saldo terbaru. Route /spin, /bet, dan /play menjalankan satu putaran. Route /session dan /verifysession menghasilkan session ID serta token lokal.
+
+3. STATE YANG DISIMPAN
+State mencakup sessionId, token, balance, currency, round, lastWin, dan history maksimal 50 hasil. Saldo dikurangi sesuai nilai bet sebelum spin dan ditambah kembali sesuai win. Hasil spin memakai pseudo-random generator deterministic berdasarkan seed sehingga urutan hasil dapat diulang saat seed yang sama digunakan.
+
+4. CARA PEMAKAIAN LOKAL
+Import createStatefulApiEmulator dari src/offline/stateful-api-emulator.js untuk memakai handler secara langsung. Gunakan installStatefulApiEmulator() pada sandbox browser atau test lokal untuk memasang interceptor global fetch. Contoh endpoint: fetch('/init'), fetch('/balance'), lalu fetch('/spin', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({bet: 100}) }). Panggil emulator.snapshot() untuk melihat state terakhir.
+
+5. BATASAN DAN KEAMANAN
+Emulator hanya menangani kontrak generik. Ia belum mengetahui paylines, bonus, free spin, jackpot, validasi signature, aturan payout, WebSocket, SSE, autentikasi server, atau format khusus provider tertentu. Nilai saldo dan hasil spin hanya untuk sandbox, tidak boleh digunakan untuk taruhan, pembayaran, atau sistem produksi. Request ke route yang tidak dikenal diteruskan ke network oleh adapter fetch.
+
+6. PENGUJIAN DAN KRITERIA BERHASIL
+Test minimal harus memverifikasi init mengembalikan saldo, balance membaca saldo yang sama, spin mengurangi atau menambah saldo secara konsisten, bet invalid mengembalikan status 400, saldo tidak cukup mengembalikan status 409, roundId bertambah, dan history tersimpan. Keberhasilan emulator tidak berarti seluruh game kompatibel; game tetap perlu diuji dengan request body, response schema, dan urutan endpoint asli.

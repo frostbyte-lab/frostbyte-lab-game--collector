@@ -6,7 +6,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "collect": "node scripts/collect.js",
-    "test:offline": "node tests/offline-sw.test.mjs"
+    "test:offline": "node tests/offline-sw.test.mjs",
+    "test:stateful-api": "node tests/stateful-api.test.mjs"
   },
   "dependencies": {
     "@cloudflare/playwright": "^1.3.0",
