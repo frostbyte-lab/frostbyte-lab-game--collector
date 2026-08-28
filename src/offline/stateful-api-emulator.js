@@ -10,7 +10,8 @@ const DEFAULTS = {
   defaultBet: 100,
   minBet: 1,
   maxBet: 100000,
-  seed: 0x5f3759df
+  seed: 0x5f3759df,
+  payoutTable: { 3: 5, 2: 1 }
 };
 
 function jsonResponse(payload, status = 200) {
@@ -44,6 +45,19 @@ function routeOf(url) {
   if (/\/(?:spin|bet|play)\/?$/.test(path)) return "spin";
   if (/\/(?:session|verifysession)\/?$/.test(path)) return "session";
   return null;
+}
+
+function evaluatePayout(symbols, bet, payoutTable = DEFAULTS.payoutTable) {
+  const rows = Array.isArray(symbols) ? symbols : [];
+  let bestMatch = 0;
+  for (const row of rows) {
+    if (!Array.isArray(row) || row.length < 2) continue;
+    const counts = new Map();
+    for (const symbol of row) counts.set(symbol, (counts.get(symbol) || 0) + 1);
+    for (const count of counts.values()) bestMatch = Math.max(bestMatch, count);
+  }
+  const multiplier = Math.max(0, numberOr(payoutTable?.[bestMatch], 0));
+  return { match: bestMatch, multiplier, win: bet * multiplier };
 }
 
 function requestBody(request) {
@@ -123,7 +137,7 @@ export function createStatefulApiEmulator(options = {}) {
 
   async function spin(request) {
     const body = await requestBody(request);
-    const bet = numberOr(body.bet ?? body.betAmount ?? body.amount ?? body.stake, config.defaultBet);
+    const bet = numberOr(body.bet ?? body.betAmount ?? body.amount ?? body.stake ?? body.data?.bet, config.defaultBet);
     if (!Number.isFinite(bet) || bet < config.minBet || bet > config.maxBet) {
       return jsonResponse({ ok: false, __gcMock: true, error: "INVALID_BET", message: "Bet di luar batas emulator." }, 400);
     }
@@ -132,17 +146,26 @@ export function createStatefulApiEmulator(options = {}) {
     }
 
     state.round += 1;
+    const balanceBefore = state.balance;
     state.balance -= bet;
     const symbols = Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => 1 + Math.floor(random() * 9)));
-    const win = random() < 0.2 ? bet * (2 + Math.floor(random() * 5)) : 0;
+    const payout = evaluatePayout(symbols, bet, config.payoutTable);
+    const win = payout.win;
     state.lastWin = win;
     state.balance += win;
     const result = {
       roundId: `${state.sessionId}-${state.round}`,
       win,
       winAmount: win,
+      totalWin: win,
       bet,
+      balanceBefore,
+      charged: bet,
+      payoutMultiplier: payout.multiplier,
+      matchedSymbols: payout.match,
+      outcome: win > 0 ? "WIN" : "LOSS",
       symbols,
+      reels: symbols,
       rl: symbols,
       balance: state.balance,
       bl: state.balance,

@@ -15,6 +15,10 @@ Emulator dapat menerima apiContract melalui opsi createStatefulApiEmulator({ api
 3. STATE YANG DISIMPAN
 State mencakup sessionId, token, balance, currency, round, lastWin, dan history maksimal 50 hasil. Saldo dikurangi sesuai nilai bet sebelum spin dan ditambah kembali sesuai win. Hasil spin memakai pseudo-random generator deterministic berdasarkan seed sehingga urutan hasil dapat diulang saat seed yang sama digunakan.
 
+Aturan spin dasar sekarang memakai payoutTable yang dapat dikonfigurasi. Default payoutTable adalah 3 simbol sama = 5x bet dan 2 simbol sama = 1x bet. Emulator mengembalikan balanceBefore, charged, win, winAmount, totalWin, payoutMultiplier, matchedSymbols, outcome, symbols, reels, rl, dan roundId. Bet divalidasi terhadap minBet, maxBet, dan saldo. Bet tidak valid menghasilkan HTTP 400, sedangkan saldo tidak mencukupi menghasilkan HTTP 409.
+
+Payout ini hanya aturan sandbox dasar. Aturan provider asli seperti paylines, scatter, wild, bonus, free spin, jackpot, multiplier khusus, dan server-side RNG belum otomatis direkonstruksi. Untuk game tertentu, payoutTable dan response schema harus diganti berdasarkan kontrak API serta aturan game yang berhasil dicapture.
+
 4. CARA PEMAKAIAN LOKAL
 Import createStatefulApiEmulator dari src/offline/stateful-api-emulator.js untuk memakai handler secara langsung. Gunakan installStatefulApiEmulator() pada sandbox browser atau test lokal untuk memasang interceptor global fetch. Contoh endpoint: fetch('/init'), fetch('/balance'), lalu fetch('/spin', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({bet: 100}) }). Panggil emulator.snapshot() untuk melihat state terakhir.
 

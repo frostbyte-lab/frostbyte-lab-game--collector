@@ -47,6 +47,9 @@ const spinPayload = await spin.json();
 assert.equal(spinPayload.ok, true);
 assert.equal(spinPayload.data.bet, 100);
 assert.equal(spinPayload.data.roundId.endsWith("-1"), true);
+assert.equal(typeof spinPayload.data.payoutMultiplier, "number");
+assert.equal(["WIN", "LOSS"].includes(spinPayload.data.outcome), true);
+assert.equal(spinPayload.data.balance, spinPayload.data.balanceBefore - spinPayload.data.charged + spinPayload.data.winAmount);
 assert.equal(emulator.snapshot().round, 1);
 assert.equal(emulator.snapshot().history.length, 1);
 const saved = emulator.snapshot();
@@ -64,6 +67,12 @@ const invalid = await emulator.handle("https://gc.offline.local/spin", {
   body: JSON.stringify({ bet: 0 })
 });
 assert.equal(invalid.status, 400);
+
+const payoutEmulator = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 123, payoutTable: { 3: 10, 2: 0 } });
+const payoutSpin = await payoutEmulator.handle("https://gc.offline.local/spin", { method: "POST", body: JSON.stringify({ bet: 100 }) });
+const payoutPayload = await payoutSpin.json();
+assert.equal(payoutPayload.data.balance, payoutPayload.data.balanceBefore - 100 + payoutPayload.data.winAmount);
+assert.equal(payoutPayload.data.winAmount, payoutPayload.data.bet * payoutPayload.data.payoutMultiplier);
 
 const insufficient = await emulator.handle("https://gc.offline.local/spin", {
   method: "POST",
