@@ -31,6 +31,7 @@ import { buildUrlMap, formatStatusReport } from "./collect/url-map.js";
 import { sha256 } from "./offline/strict-collector.js";
 import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
+import { runManusTask } from "./lib/manus-api.js";
 import {
   MAX_SINGLE_FILE,
   MAX_RAW_TOTAL,
@@ -218,6 +219,14 @@ export default {
       url.pathname === "/api/asset-proxy"
     ) {
       return handleAssetProxy(request, url);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/ai/manus") {
+      let body;
+      try { body = await request.json(); } catch {
+        return Response.json({ ok: false, error: "INVALID_JSON" }, { status: 400 });
+      }
+      return runManusTask(env, body || {});
     }
 
     if (request.method === "POST" && url.pathname === "/api/ai/analyze") {

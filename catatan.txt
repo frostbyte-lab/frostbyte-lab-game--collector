@@ -48,3 +48,18 @@ Toast Collect dan panel progress tidak lagi menganggap checklist seperti index.h
 
 8. PENGUJIAN DAN KRITERIA BERHASIL
 Test minimal harus memverifikasi init mengembalikan saldo, balance membaca saldo yang sama, spin mengurangi atau menambah saldo secara konsisten, bet invalid mengembalikan status 400, saldo tidak cukup mengembalikan status 409, roundId bertambah, dan history tersimpan. Keberhasilan emulator tidak berarti seluruh game kompatibel; game tetap perlu diuji dengan request body, response schema, dan urutan endpoint asli.
+
+
+9. INTEGRASI MANUS AI PADA CUSTOM AI
+
+Custom AI sekarang memiliki provider Manus AI selain Groq, Gemini, dan Meta AI. Pada UI, email digunakan sebagai identitas atau label akun agar sesi dapat ditampilkan secara konsisten. Email bukan kredensial Manus dan tidak dapat menggantikan API key. Untuk provider Manus, API key wajib disimpan sebagai secret Worker bernama MANUS_API_KEY; jangan menaruhnya di public/index.html, localStorage, file ZIP, atau repository Git.
+
+Saat Manus dipilih, UI mengirim request server-side ke POST /api/ai/manus. Browser hanya mengirim prompt, title, locale, agent_profile, dan timeout_ms. Worker memakai header x-manus-api-key untuk memanggil API Manus V2, membuat task asynchronous, memantau task.listMessages, lalu mengembalikan assistant_message sebagai content. Endpoint ini tidak meneruskan secret ke browser. Jika secret belum diatur, endpoint mengembalikan MANUS_NOT_CONFIGURED HTTP 503 sehingga UI dapat menampilkan konfigurasi yang belum lengkap.
+
+Provider Manus ikut jalur callCustomAIWithFailover. Slot Manus diaktifkan dengan email label dan secret Worker; slot Groq, Gemini, atau Meta tetap memakai API key masing-masing. Ketika provider aktif gagal atau terkena rate limit, sistem mencoba slot provider berikutnya. Error konfigurasi Manus tidak boleh dianggap sebagai bukti bahwa email salah; periksa secret Worker dan deployment terlebih dahulu.
+
+Konfigurasi lokal menggunakan Wrangler secret, bukan variable publik. Jalankan `npx wrangler secret put MANUS_API_KEY` pada environment Worker yang benar, kemudian deploy ulang Worker. Untuk pengujian lokal, gunakan secret lokal sesuai mekanisme Wrangler dan jangan commit file `.dev.vars`. Smoke test helper Manus menggunakan fetch mock sehingga tidak mengirim task sungguhan dan tidak mengonsumsi quota.
+
+Sumber kontrak API dan catatan teknis lebih rinci tersedia di `docs/manus-api-integration-notes.txt`. Rujukan resmi adalah dokumentasi [authentication](https://open.manus.ai/docs/v2/authentication), [task.create](https://open.manus.ai/docs/v2/task.create), [task.listMessages](https://open.manus.ai/docs/v2/task.listMessages), dan [task lifecycle](https://open.manus.ai/docs/v2/task-lifecycle).
+
+Integrasi Manus berlaku untuk bantuan kode, analisis file, perbaikan error, dan chat AI melalui Custom AI. Integrasi ini tidak mengubah kriteria FULL_OFFLINE_READY: Manus adalah layanan bantuan online dan tidak boleh menjadi ketergantungan runtime game offline. Uji offline tetap harus memblokir network dan memakai asset, API contract, stateful emulator, realtime replay, serta runtime interceptor lokal.
