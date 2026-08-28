@@ -10255,11 +10255,19 @@ function isApiLike(u){
           n++;
           report.push('force ' + url.slice(0, 60) + ' → ' + local);
         }
-        // HTML entity &amp;
+        // HTML entity &amp; (URL query sering terserialisasi di atribut HTML)
         var amp = url.replace(/&/g, '&amp;');
         if (amp !== url && out.indexOf(amp) >= 0) {
           out = out.split(amp).join(local);
           n++;
+          report.push('force html-entity → ' + local);
+        }
+        // Escaped JavaScript string: https:\\/\\/host\\/path?... 
+        var escaped = url.replace(/\\//g, '\\\\/').replace(/&/g, '\\u0026');
+        if (escaped !== url && out.indexOf(escaped) >= 0) {
+          out = out.split(escaped).join(local);
+          n++;
+          report.push('force escaped → ' + local);
         }
         // without query
         var noq = url.split('?')[0];
@@ -10268,6 +10276,12 @@ function isApiLike(u){
           out = out.split(noq).join(local);
           n++;
           report.push('force noq → ' + local);
+        }
+        var noqEscaped = noq.replace(/\\//g, '\\\\/');
+        if (noqEscaped && noqEscaped !== noq && out.indexOf(noqEscaped) >= 0) {
+          out = out.split(noqEscaped).join(local);
+          n++;
+          report.push('force noq-escaped → ' + local);
         }
         // basename only in quotes pointing to eajzz
         try {
