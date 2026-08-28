@@ -3459,6 +3459,15 @@
             </button>
           </div>
           
+          <div class="collect-ai-assist" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 10px;padding:10px;border:1px solid rgba(94,225,192,.28);border-radius:10px;background:rgba(94,225,192,.06);">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-secondary);cursor:pointer;">
+              <input type="checkbox" id="collect-ai-readiness" checked>
+              <b>AI Offline Readiness Assistant</b>
+            </label>
+            <span style="font-size:11px;color:var(--text-muted);">Audit otomatis setelah ZIP selesai: asset, API, realtime, URL online, dan blocker.</span>
+            <span id="collect-ai-status" style="font-size:11px;color:var(--text-muted);margin-left:auto;">Siap membantu setelah capture.</span>
+          </div>
+
           <div class="collect-actions" id="gc-full-collect-actions">
             <button class="btn btn-primary" onclick="runCollect()">
               <span class="brand-icon" aria-hidden="true">
@@ -3495,8 +3504,9 @@
                 <p>1) <b>Paste URL</b> game.<br>
                 2) Klik <b>Preview Game</b> → putar ±10× (lihat API/asset hidup).<br>
                 3) <b>Get data ✓</b> lalu <b>Full Collect</b> (Cloudflare atau GitHub, Auto-spins 10).<br>
-                4) ZIP → Workspace → Sandbox / Auto Repair.<br>
-                5) Download ZIP → hosting / EDU.</p>
+                4) AI Offline Readiness Assistant mengaudit ZIP dan memberi saran repair.<br>
+                5) ZIP → Workspace → Sandbox / Auto Repair → browser test tanpa network.<br>
+                6) Download ZIP → hosting / EDU.</p>
               </details>
               <details class="collect-help-item">
                 <summary>Wait after load (detik)</summary>
@@ -4340,6 +4350,7 @@
             </div>
             <div id="offline-ready-status" class="offline-ready-status">Belum ada ZIP yang diaudit.</div>
             <div id="offline-ready-summary" class="offline-ready-summary" hidden></div>
+            <div id="offline-ready-ai" class="offline-ready-summary" hidden style="border-color:rgba(94,225,192,.35);background:rgba(94,225,192,.06);"></div>
             <pre id="offline-ready-report" class="offline-ready-report" hidden></pre>
           </div>
         </div>
@@ -12664,6 +12675,74 @@ function isApiLike(u){
       return { wait_seconds: wait, auto_spins: spins, spin_delay_ms: spinDelay, auto_history: history, unlimited: unlimited, mode: unlimited ? 'unlimited' : undefined };
     }
 
+    function gcCollectAIEnabled() {
+      try { return !!(document.getElementById('collect-ai-readiness')?.checked); } catch (_) { return false; }
+    }
+
+    function gcReadinessAssistantPrompt(report, context) {
+      var items = Array.isArray(report && report.items) ? report.items : [];
+      var blockers = items.filter(function (x) { return x && !x.ok && !x.optional; }).map(function (x) { return x.label; });
+      var optional = items.filter(function (x) { return x && !x.ok && x.optional; }).map(function (x) { return x.label; });
+      var names = Array.isArray(report && report.names) ? report.names.slice(0, 500) : [];
+      var meta = context && context.collectMeta || {};
+      return [
+        'Anda adalah AI Offline Readiness Assistant untuk Game Collector Pro.',
+        'Analisis hasil Collect URL berikut dan berikan rencana repair konkret agar paket game dapat diuji FULL_OFFLINE_READY.',
+        'Jangan menganggap nama file sebagai bukti. Bedakan fakta capture, blocker, risiko, dan langkah verifikasi browser tanpa network.',
+        'Jangan menyarankan credential, pembayaran, taruhan, atau bypass DRM. Jangan mengubah aturan payout tanpa bukti kontrak game.',
+        '',
+        'TARGET URL HOST: ' + String(context && context.urlHost || 'unknown'),
+        'SUMBER COLLECT: ' + String(context && context.source || 'unknown'),
+        'FILE NYATA: ' + Number(report && report.fileCount || names.length),
+        'KELENGKAPAN STATIS: ' + Number(report && report.pct || 0) + '%',
+        'BLOCKER WAJIB: ' + (blockers.length ? blockers.join(' | ') : 'tidak terdeteksi'),
+        'ITEM OPSIONAL YANG HILANG: ' + (optional.length ? optional.join(' | ') : 'tidak ada'),
+        'METADATA CAPTURE: ' + JSON.stringify(meta).slice(0, 4000),
+        'CONTOH PATH ZIP: ' + (names.length ? names.join(' | ') : 'tidak ada'),
+        '',
+        'Kembalikan jawaban dengan bagian: Diagnosis, Repair Prioritas 1-5, Kontrak API yang masih harus dicapture, dan Test browser network-off yang wajib dijalankan.'
+      ].join('\\n');
+    }
+
+    function gcRenderReadinessAssistant(state) {
+      var collectStatus = document.getElementById('collect-ai-status');
+      var panel = document.getElementById('offline-ready-ai');
+      if (!state) return;
+      var label = state.error ? 'AI gagal: ' + state.error : state.pending ? 'AI sedang menganalisis…' : state.content ? 'AI selesai memberi rencana repair.' : 'Audit lokal selesai; AI belum dijalankan.';
+      if (collectStatus) collectStatus.textContent = label;
+      if (!panel) return;
+      panel.hidden = false;
+      panel.innerHTML = '<b>AI Offline Readiness Assistant</b><br><small>' + offlineReadyEsc(label) + '</small>' + (state.content ? '<pre style="white-space:pre-wrap;margin:8px 0 0;max-height:360px;overflow:auto;">' + offlineReadyEsc(state.content) + '</pre><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button type="button" class="btn btn-primary btn-sm" onclick="runAiZipRepair()">Buka Workspace · Auto Repair</button><button type="button" class="btn btn-secondary btn-sm" onclick="openActivityOfflineReady()">Audit FULL_OFFLINE_READY</button></div>' : '');
+    }
+
+    async function gcRunOfflineReadinessAssistant(blob, filename, context) {
+      if (!gcCollectAIEnabled()) return { skipped: true, reason: 'disabled' };
+      var state = { pending: true };
+      gcRenderReadinessAssistant(state);
+      try {
+        var zip = await JSZip.loadAsync(blob, { checkCRC32: false, createFolders: false });
+        var report = await gcInspectZipCompleteness(zip);
+        offlineReadyLastAudit = { report: report, filename: filename || 'game-package.zip', browserTest: { status: 'NOT_RUN', networkIsolated: false, gameplayReady: false } };
+        offlineReadyRender(report, offlineReadyLastAudit.filename, offlineReadyLastAudit.browserTest);
+        var canAI = typeof hasCustomAIKeys === 'function' && hasCustomAIKeys() && typeof callCustomAIWithFailover === 'function';
+        if (!canAI) {
+          gcRenderReadinessAssistant({ error: 'Belum ada provider AI aktif. Audit lokal tetap selesai; aktifkan Manus/Groq/Gemini/Meta untuk saran repair.' });
+          return { report: report, skipped: true, reason: 'no-provider' };
+        }
+        var content = await callCustomAIWithFailover([
+          { role: 'system', content: 'Gunakan Bahasa Indonesia. Fokus pada audit offline yang dapat diverifikasi.' },
+          { role: 'user', content: gcReadinessAssistantPrompt(report, context || {}) }
+        ], { max_tokens: 3500, title: 'Offline Readiness Assistant · ' + (filename || 'game-package.zip'), timeout_ms: 20000 });
+        gcRenderReadinessAssistant({ content: content.content, report: report });
+        try { actRecord('audit', 'AI readiness selesai', JSON.stringify({ filename: filename || null, pct: report.pct, blockers: (report.items || []).filter(function (x) { return x && !x.ok && !x.optional; }).map(function (x) { return x.label; }), provider: content.slotName || null })); } catch (_) {}
+        return { report: report, content: content.content };
+      } catch (error) {
+        gcRenderReadinessAssistant({ error: error && error.message ? error.message : String(error) });
+        return { error: error && error.message ? error.message : String(error) };
+      }
+    }
+    window.gcRunOfflineReadinessAssistant = gcRunOfflineReadinessAssistant;
+
     async function runCollect() {
       try { gcSetFlowStep(4); } catch (_gc) {}
       const urlInput = document.getElementById('url');
@@ -12743,6 +12822,9 @@ function isApiLike(u){
           window.__gcLastCollectMeta = { stillMissing, gameFiles, apiFiles, totalFiles, overall, incomplete };
 
           const blob = await res.blob();
+          try {
+            gcRunOfflineReadinessAssistant(blob, 'game-package.zip', { source: 'Cloudflare Capture', urlHost: new URL(gameUrl).host, collectMeta: window.__gcLastCollectMeta }).catch(function () {});
+          } catch (_) {}
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
           a.download = 'game-package.zip';
@@ -12974,6 +13056,9 @@ function isApiLike(u){
                   return;
                 }
                 var sizeMb = (blob.size / 1024 / 1024).toFixed(1);
+                try {
+                  gcRunOfflineReadinessAssistant(blob, 'game-resources.zip', { source: 'GitHub Actions Collect', urlHost: new URL(document.getElementById('url')?.value || 'https://unknown.invalid').host, collectMeta: { runId: runId, github: true } }).catch(function () {});
+                } catch (_) {}
                 // 1) Unduh file ke HP (cadangan kalau auto-load Workspace gagal di Android)
                 try {
                   try { gcCollectToastShow('Mengunduh & cek paket…'); } catch (_) {}

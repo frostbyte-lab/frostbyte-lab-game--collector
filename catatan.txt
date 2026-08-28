@@ -63,3 +63,14 @@ Konfigurasi lokal menggunakan Wrangler secret, bukan variable publik. Jalankan `
 Sumber kontrak API dan catatan teknis lebih rinci tersedia di `docs/manus-api-integration-notes.txt`. Rujukan resmi adalah dokumentasi [authentication](https://open.manus.ai/docs/v2/authentication), [task.create](https://open.manus.ai/docs/v2/task.create), [task.listMessages](https://open.manus.ai/docs/v2/task.listMessages), dan [task lifecycle](https://open.manus.ai/docs/v2/task-lifecycle).
 
 Integrasi Manus berlaku untuk bantuan kode, analisis file, perbaikan error, dan chat AI melalui Custom AI. Integrasi ini tidak mengubah kriteria FULL_OFFLINE_READY: Manus adalah layanan bantuan online dan tidak boleh menjadi ketergantungan runtime game offline. Uji offline tetap harus memblokir network dan memakai asset, API contract, stateful emulator, realtime replay, serta runtime interceptor lokal.
+
+
+10. AI OFFLINE READINESS ASSISTANT PADA COLLECT URL
+
+Form Collect URL sekarang menyediakan opsi AI Offline Readiness Assistant yang aktif secara default. Setelah Capture Cloudflare atau Collect via GitHub menghasilkan ZIP, sistem membaca isi ZIP secara lokal, menjalankan pemeriksaan kelengkapan, lalu mengirim ringkasan aman kepada provider Custom AI yang aktif. Ringkasan berisi host target, sumber collect, jumlah file nyata, skor kelengkapan, item checklist yang gagal, metadata capture yang sudah tersedia, dan contoh path ZIP. Isi binary dan credential tidak dikirim sebagai bagian dari ringkasan assistant.
+
+AI mengembalikan Diagnosis, Repair Prioritas 1–5, kontrak API yang masih harus dicapture, serta test browser network-off yang wajib dijalankan. Hasilnya ditampilkan pada status Collect dan area laporan halaman FULL_OFFLINE_READY, serta dicatat ke Histories. Jika provider AI belum aktif atau Manus belum memiliki secret Worker, audit lokal tetap berjalan dan status menjelaskan bahwa saran AI belum tersedia.
+
+Assistant hanya membantu tahap persiapan, audit, dan repair. Ia tidak boleh dijadikan dependency runtime game. Status FULL_OFFLINE_READY tetap ditentukan oleh isi ZIP, API replay/stateful emulator, realtime replay, runtime interceptor, dan browser test tanpa network. AI tidak boleh mengubah payout, RNG, signature, DRM, atau aturan server-side tanpa bukti kontrak game yang dicapture.
+
+Alur yang direkomendasikan adalah Paste URL → Preview dan spin → Get data → Full Collect → AI audit otomatis → terapkan repair yang sudah ditinjau → browser test tanpa network → ulangi audit per ZIP sampai blocker terselesaikan. Untuk hasil maksimal, gunakan auto-spins dan buka History pada game yang memerlukannya, karena AI tidak dapat memperbaiki data API yang tidak pernah dicapture.

@@ -15,6 +15,7 @@
     "test:package-readiness": "node tests/package-readiness.test.mjs",
     "test:collect-artifact": "node tests/collect-artifact-schema.test.mjs",
     "test:manus-api": "node tests/manus-api.test.mjs",
+    "test:collect-ai-assistant": "node tests/collect-ai-assistant.test.mjs",
     "validate:offline-package": "node scripts/validate-offline-package.js"
   },
   "dependencies": {
