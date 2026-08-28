@@ -12796,6 +12796,16 @@ function isApiLike(u){
     }
     window.gcRunOfflineReadinessAssistant = gcRunOfflineReadinessAssistant;
 
+    function gcDescribeCollectError(error, endpoint) {
+      var name = error && error.name ? String(error.name) : '';
+      var raw = error && error.message ? String(error.message) : String(error || 'Error tidak diketahui');
+      if (name === 'AbortError') return 'timeout saat menghubungi ' + endpoint + '. Coba lagi dengan koneksi yang lebih stabil.';
+      if (/failed to fetch|networkerror|load failed/i.test(raw)) {
+        return 'Worker collect tidak dapat dihubungi. Periksa alamat deployment, koneksi internet, dan endpoint /api/health pada domain yang sama.';
+      }
+      return raw;
+    }
+
     async function runCollect() {
       try { gcSetFlowStep(4); } catch (_gc) {}
       const urlInput = document.getElementById('url');
@@ -12816,12 +12826,13 @@ function isApiLike(u){
       try { gcPipelineSet('online', 'ok', 'URL siap · sign diharapkan valid'); } catch (_) {}
       try { gcPipelineSet('capture', 'run', 'Wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + (opts.unlimited ? ' · unlimited' : '')); } catch (_) {}
       statusEl.textContent = 'Status: [2/6 Capture] Collecting · wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + '...';
+      let progressTimer = null;
       try {
         const progressId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
         gcShowLiveCapture(true);
         gcRenderLiveFiles([], 0, 2);
         // Poll progress + live file list
-        const progressTimer = setInterval(async () => {
+        progressTimer = setInterval(async () => {
           try {
             const pr = await fetch('/api/progress?id=' + encodeURIComponent(progressId));
             const pd = await pr.json();
@@ -12949,8 +12960,11 @@ function isApiLike(u){
         }
         statusEl.textContent = 'Status: ' + (data.message || 'Selesai');
       } catch (e) {
-        statusEl.textContent = 'Status: Error — ' + e.message;
-        try { gcPipelineSet('capture', 'err', e.message); } catch (_) {}
+        var detail = gcDescribeCollectError(e, '/api/collect');
+        statusEl.textContent = 'Status: Error — ' + detail;
+        try { gcPipelineSet('capture', 'err', detail); } catch (_) {}
+      } finally {
+        if (progressTimer) clearInterval(progressTimer);
       }
     }
 
