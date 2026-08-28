@@ -1,0 +1,362 @@
+PANDUAN HOST GAME DI SERVER SENDIRI
+
+URL ACUAN
+https://m.eajzzxhro.com/104/index.html
+
+CATATAN IZIN
+
+Gunakan panduan ini hanya untuk game, kode, asset, nama, audio, API, dan aturan permainan yang Anda miliki atau sudah mendapat izin tertulis untuk di-host. URL acuan dapat berisi material dan layanan milik pihak ketiga. Jangan menyalin, mendistribusikan, atau mengubah game pihak ketiga tanpa lisensi yang sesuai. Jika izin tidak ada, gunakan panduan ini untuk game pengganti yang dibuat dengan asset dan kode sendiri.
+
+1. HASIL AKHIR YANG DITUJU
+
+Target hosting adalah membuka client game dari domain server sendiri, misalnya:
+
+https://game.example.com/
+https://game.example.com/game/
+https://api.example.com/api/
+
+Mode yang mungkin:
+
+- DEMO: client dan asset lokal, memakai API sandbox sendiri.
+- HYBRID: asset lokal, sebagian API masih memakai server online berizin.
+- FULL SELF-HOST: client, asset, API, database, aturan game, session, saldo, result, dan realtime semuanya berada di infrastruktur sendiri.
+- FULL OFFLINE: client berjalan tanpa network menggunakan emulator atau fixture lokal.
+
+Hosting file client saja belum berarti backend game ikut pindah. Untuk full self-host, API dan aturan game harus dibangun atau dilisensikan secara terpisah.
+
+2. ASSET YANG HARUS DIAMBIL
+
+Koleksi tidak boleh berhenti pada index.html. Jalankan game sampai loader selesai, klik Play/Start, jalankan interaksi utama, dan lakukan beberapa spin pada game berizin. Simpan semua resource yang benar-benar dipakai:
+
+- index.html.
+- loader JavaScript.
+- JavaScript game dan shared module.
+- JSON konfigurasi, game data, paytable, dan manifest.
+- JPG, PNG, SVG, WebP, atlas, sprite, dan texture.
+- OGG, MP3, WAV, dan audio lain.
+- WOFF, WOFF2, TTF, dan font lain.
+- WebAssembly, worker, dynamic module, dan resource blob bila digunakan.
+- API contract, request body, response schema, dan snapshot yang aman.
+
+Resource dari signed CDN memakai query seperti ?sign=.... Untuk hosting sendiri, simpan isi byte file ke localPath. Jangan mengandalkan signed URL sebagai URL permanen karena dapat kedaluwarsa.
+
+3. STRUKTUR FOLDER HOSTING
+
+Gunakan struktur berikut sebagai contoh:
+
+server-game/
+  public/
+    index.html
+    manifest.json
+    api-map.json
+    game/
+      loader.js
+      game.js
+      modules/
+      config/
+      assets/images/
+      assets/audio/
+      assets/fonts/
+      assets/atlas/
+      wasm/
+      workers/
+    sw.js
+  server/
+    app.js
+    routes/session.js
+    routes/init.js
+    routes/balance.js
+    routes/spin.js
+    routes/result.js
+    routes/events.js
+    game/rules.js
+    game/rng.js
+    game/state.js
+    storage/session-store.js
+    storage/ledger.js
+  migrations/
+  tests/
+  .env
+
+Folder public berisi client dan asset. Folder server berisi API. Folder storage dan database menyimpan state yang tidak boleh ditaruh di client.
+
+4. REWRITE URL GAME KE SERVER SENDIRI
+
+Semua URL provider yang masih berada di HTML, JavaScript, CSS, JSON, worker, dan module harus diganti dengan path lokal. Contoh:
+
+- https://static.provider.example/shared/index.js?sign=... menjadi /game/modules/index.js.
+- https://static.provider.example/104/image.jpg?sign=... menjadi /game/assets/images/image.jpg.
+- https://static.provider.example/104/config.json?sign=... menjadi /game/config/config.json.
+- https://provider.example/api/gamewallet menjadi /api/balance.
+- https://provider.example/api/spin menjadi /api/spin.
+- wss://provider.example/events menjadi wss://api.example.com/events.
+
+Setelah rewrite, cari sisa dependency:
+
+- https://
+- http://
+- wss://
+- ws://
+- fetch(
+- XMLHttpRequest
+- WebSocket
+- EventSource
+- import(
+- createObjectURL(
+- iframe src
+- worker src
+
+URL eksternal seperti analytics dan iklan harus dihapus atau dijadikan optional sesuai izin dan kebijakan privasi.
+
+5. API SENDIRI YANG DIPERLUKAN
+
+Client harus diarahkan ke API server sendiri. Kontrak minimum:
+
+POST /api/session
+
+Request:
+{ "gameId": "game-authorized", "playerId": "demo-player" }
+
+Response:
+{ "ok": true, "sessionId": "local-session-id", "token": "local-token", "gameId": "game-authorized", "currency": "IDR" }
+
+POST /api/init
+
+Request:
+{ "sessionId": "local-session-id", "token": "local-token", "gameId": "game-authorized" }
+
+Response:
+{ "ok": true, "gameId": "game-authorized", "balance": 100000, "currency": "IDR", "config": {}, "limits": { "minBet": 100, "maxBet": 100000 } }
+
+GET /api/balance
+
+Response:
+{ "ok": true, "sessionId": "local-session-id", "balance": 100000, "currency": "IDR", "roundId": 0 }
+
+POST /api/spin
+
+Request:
+{ "sessionId": "local-session-id", "token": "local-token", "bet": 100, "roundId": "round-1", "clientSeed": "demo-seed" }
+
+Response:
+{ "ok": true, "roundId": "round-1", "bet": 100, "charged": 100, "winAmount": 0, "balanceBefore": 100000, "balanceAfter": 99900, "reels": [], "symbols": [], "outcome": "LOSS", "bonus": null, "freeSpins": 0 }
+
+GET /api/result?roundId=round-1
+
+Response:
+{ "ok": true, "roundId": "round-1", "result": {} }
+
+6. SERVER STATE DAN DATABASE
+
+Jangan memakai localStorage sebagai sumber saldo online. Untuk server sendiri, simpan state pada database atau session store. Tabel minimum:
+
+sessions:
+- id.
+- player_id.
+- game_id.
+- token_hash.
+- status.
+- created_at.
+- expires_at.
+
+rounds:
+- round_id.
+- session_id.
+- bet.
+- result_json.
+- win_amount.
+- created_at.
+
+ledger:
+- id.
+- session_id.
+- round_id.
+- debit.
+- credit.
+- balance_after.
+- created_at.
+
+events:
+- id.
+- session_id.
+- round_id.
+- event_type.
+- payload.
+- delivered_at.
+
+Spin harus idempotent. Retry request dengan roundId yang sama tidak boleh melakukan debit atau payout dua kali. Debit, perhitungan result, dan credit harus berada dalam transaksi database yang aman.
+
+7. RULES ENGINE GAME
+
+API server harus memiliki rules engine yang sesuai dengan game berizin. Engine dapat mencakup reel, paylines, wild, scatter, multiplier, bonus, free spin, jackpot, dan payout. Jangan memakai payout sandbox untuk transaksi nyata.
+
+Flow spin:
+
+1. Validasi session, token, gameId, dan currency.
+2. Validasi roundId atau idempotency key.
+3. Validasi bet minimum, maksimum, dan saldo.
+4. Debit bet.
+5. Hitung hasil menggunakan rules engine.
+6. Hitung kemenangan dan bonus.
+7. Credit kemenangan.
+8. Simpan round dan ledger.
+9. Kembalikan result.
+10. Kirim event realtime bila digunakan.
+
+8. WEBSOCKET, SSE, DAN POLLING
+
+Jika game membutuhkan realtime, gunakan endpoint sendiri. Contoh:
+
+- WebSocket: wss://api.example.com/events.
+- SSE: https://api.example.com/api/events.
+- Polling: GET /api/result?roundId=....
+
+Implementasikan authentication saat koneksi, heartbeat, reconnect, acknowledgement, Last-Event-ID untuk SSE, dan replay event setelah reconnect. Fixture lokal pada offline preview hanya untuk demo/test dan bukan backend settlement.
+
+9. NGINX REVERSE PROXY
+
+Contoh konfigurasi konseptual:
+
+server {
+    listen 443 ssl http2;
+    server_name game.example.com;
+    root /var/www/server-game/public;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8787/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+
+Jika WebSocket digunakan, tambahkan proxy_http_version 1.1 serta Upgrade dan Connection header. Aktifkan HTTPS dengan sertifikat valid.
+
+10. ENVIRONMENT SERVER
+
+Contoh .env:
+
+APP_ORIGIN=https://game.example.com
+API_ORIGIN=https://game.example.com
+DATABASE_URL=postgresql://user:password@localhost/game_db
+SESSION_SECRET=ganti-dengan-secret-kuat
+GAME_ID=game-authorized
+NODE_ENV=production
+
+Jangan commit .env, password database, token, cookie, Authorization header, signed URL, atau credential provider. Gunakan secret manager atau environment deployment.
+
+11. SERVICE WORKER
+
+Service Worker dapat memakai cache-first untuk asset statis dan route lokal. API stateful harus menuju API server sendiri saat online. Pada mode offline, arahkan endpoint session/init/balance/spin/result/events ke emulator lokal atau fixture yang sesuai.
+
+Mode hybrid boleh meneruskan endpoint tertentu ke server online, tetapi statusnya bukan FULL_OFFLINE_READY. Route tidak dikenal harus menghasilkan error jelas dan tidak boleh menunggu network tanpa batas.
+
+12. DEPLOYMENT
+
+Urutan deployment yang disarankan:
+
+1. Siapkan server Linux atau platform hosting.
+2. Pasang runtime Node/FastAPI/Go sesuai backend.
+3. Salin public ke web root.
+4. Pasang database dan jalankan migration.
+5. Isi environment variable melalui secret manager.
+6. Jalankan API pada localhost/private network.
+7. Pasang Nginx atau reverse proxy.
+8. Aktifkan HTTPS.
+9. Atur DNS game.example.com.
+10. Jalankan health check /health.
+11. Uji endpoint session, init, balance, spin, result.
+12. Uji browser dari domain publik.
+13. Aktifkan monitoring, backup, log, dan rollback.
+
+Contoh health check:
+
+GET /health
+Response: { "ok": true, "service": "game-api", "version": "1.0.0" }
+
+13. CHECKLIST CLIENT
+
+- index.html terbuka dari domain sendiri.
+- loader lokal berhasil.
+- game JavaScript lokal berhasil.
+- JSON konfigurasi lokal berhasil.
+- gambar, audio, font, atlas, wasm, dan worker berhasil.
+- tidak ada signed URL provider yang wajib.
+- tidak ada iframe eksternal wajib.
+- dynamic import sudah memiliki path lokal.
+- Service Worker aktif jika offline diperlukan.
+
+14. CHECKLIST API
+
+- /api/session menghasilkan sessionId dan token lokal.
+- /api/init memakai session yang sama.
+- /api/balance mengembalikan saldo yang konsisten.
+- /api/spin memvalidasi bet.
+- saldo berkurang dan kemenangan dikreditkan benar.
+- /api/result mengembalikan round yang sama.
+- retry tidak menggandakan debit/payout.
+- 401, 403, 409, 429, dan 500 diuji.
+- realtime reconnect diuji.
+- log tidak membocorkan secret.
+
+15. CHECKLIST OFFLINE
+
+Matikan network browser atau gunakan network interception yang memblokir semua external request. Kemudian jalankan:
+
+load index.html
+→ session
+→ init
+→ balance
+→ spin
+→ result
+→ balance-after
+
+Syarat FULL_OFFLINE_READY:
+
+- external request kritis = 0.
+- asset unresolved = 0.
+- download failed kritis = 0.
+- session lokal berhasil.
+- init lokal berhasil.
+- balance lokal berhasil.
+- spin lokal berhasil.
+- result lokal berhasil.
+- saldo sebelum dan sesudah konsisten.
+- roundId bertambah.
+- WebSocket/SSE memakai fixture lokal atau adapter lokal.
+- tidak ada error JavaScript yang menghentikan gameplay.
+- report readiness memiliki blockers kosong.
+
+16. PERINTAH PADA REPOSITORY COLLECTOR
+
+npm install
+npm run test:package-readiness
+npm run test:runtime-interceptor
+npm run test:realtime
+npm run test:api-replay
+npm run test:offline-gameplay
+npm run test:stateful-api
+npm run test:offline
+npm run validate:offline-package -- ./game-package.zip
+
+17. TROUBLESHOOTING
+
+Jika loading berhenti, periksa loader dan dynamic module. Jika gambar atau audio hilang, periksa path lokal dan MIME type. Jika game meminta login terus, periksa sessionId, token, cookie policy, dan urutan init. Jika saldo tidak berubah, periksa response field yang dibaca client serta transaksi ledger. Jika spin error, cocokkan method, path, request body, response schema, dan roundId. Jika game menunggu tanpa akhir, periksa WebSocket, SSE, polling, dan endpoint result.
+
+18. DEFINISI SELESAI
+
+Hosting server sendiri dianggap selesai jika client dan asset terbuka dari domain sendiri, API sendiri merespons session/init/balance/spin/result, database menyimpan state, rules engine berjalan, asset provider tidak lagi menjadi dependency wajib, dan seluruh test browser berhasil.
+
+Full offline hanya dianggap selesai per game jika browser tetap menyelesaikan alur gameplay ketika network benar-benar diputus dan report menunjukkan FULL_OFFLINE_READY. Collector, emulator, dan replay fixture tidak menggantikan izin distribusi, backend provider asli, atau sistem produksi.
+
+REFERENSI
+
+[1] URL game acuan yang diberikan pengguna:
+https://m.eajzzxhro.com/104/index.html
+
+[2] Repository Game Collector:
+https://github.com/frostbyte-lab/frostbyte-lab-game--collector
