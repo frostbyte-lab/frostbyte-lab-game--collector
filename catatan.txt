@@ -8,6 +8,10 @@ Emulator ini menyediakan backend lokal sederhana untuk preview offline. Endpoint
 2. ENDPOINT YANG DIDUKUNG
 Route /init, /gameinfo, dan /gamedata menghasilkan konfigurasi game serta saldo awal. Route /balance dan /gamewallet menghasilkan saldo terbaru. Route /spin, /bet, dan /play menjalankan satu putaran. Route /session dan /verifysession menghasilkan session ID serta token lokal.
 
+Kontrak API hasil capture disimpan pada field apiContract di manifest dan field contract di api-map.json. Kontrak mencatat version, kind, confidence, method, URL, origin, path, queryKeys, request headers yang sudah disaring, request body terbatas, status response, content type, response headers yang sudah disaring, top-level response keys, dan bentuk field response. Header sensitif seperti Authorization, Cookie, Set-Cookie, X-Api-Key, dan proxy-auth tidak disimpan dalam bentuk asli; nilainya diganti dengan <redacted>.
+
+Emulator dapat menerima apiContract melalui opsi createStatefulApiEmulator({ apiContract }), menyimpannya dalam snapshot, serta memakai target.path dan kind untuk mengenali endpoint game khusus yang tidak memakai nama /init, /balance, atau /spin standar.
+
 3. STATE YANG DISIMPAN
 State mencakup sessionId, token, balance, currency, round, lastWin, dan history maksimal 50 hasil. Saldo dikurangi sesuai nilai bet sebelum spin dan ditambah kembali sesuai win. Hasil spin memakai pseudo-random generator deterministic berdasarkan seed sehingga urutan hasil dapat diulang saat seed yang sama digunakan.
 

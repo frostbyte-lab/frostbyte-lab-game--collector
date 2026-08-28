@@ -63,6 +63,7 @@ export function createStatefulApiEmulator(options = {}) {
     token: initialToken,
     playerId: config.playerId || "sandbox-player",
     gameId: config.gameId || "sandbox-game",
+    apiContract: config.apiContract || null,
     createdAt: new Date().toISOString(),
     balance: Math.max(0, numberOr(config.initialBalance, DEFAULTS.initialBalance)),
     currency: config.currency,
@@ -155,7 +156,14 @@ export function createStatefulApiEmulator(options = {}) {
 
   async function handle(requestOrUrl, init = {}) {
     const request = requestOrUrl instanceof Request ? requestOrUrl : new Request(requestOrUrl, init);
-    const route = routeOf(request.url);
+    let route = routeOf(request.url);
+    if (!route && state.apiContract?.target?.path) {
+      const contractPath = String(state.apiContract.target.path).toLowerCase();
+      const requestPath = new URL(request.url).pathname.toLowerCase();
+      if (requestPath === contractPath || requestPath.includes(contractPath)) {
+        route = state.apiContract.kind === "balance" ? "balance" : state.apiContract.kind === "spin" ? "spin" : "init";
+      }
+    }
     if (!route) return null;
     if (route === "session") return jsonResponse(sessionPayload());
     if (route === "init") return jsonResponse(initPayload());
@@ -174,6 +182,7 @@ export function createStatefulApiEmulator(options = {}) {
     state.token = String(saved.token);
     state.playerId = String(saved.playerId || state.playerId);
     state.gameId = String(saved.gameId || state.gameId);
+    state.apiContract = saved.apiContract || state.apiContract || null;
     state.createdAt = String(saved.createdAt || state.createdAt);
     state.balance = Math.max(0, numberOr(saved.balance, state.balance));
     state.currency = String(saved.currency || state.currency);
@@ -188,6 +197,7 @@ export function createStatefulApiEmulator(options = {}) {
     state.token = overrides.token || initialToken;
     state.playerId = overrides.playerId || config.playerId || "sandbox-player";
     state.gameId = overrides.gameId || config.gameId || "sandbox-game";
+    state.apiContract = overrides.apiContract || config.apiContract || null;
     state.createdAt = new Date().toISOString();
     state.balance = Math.max(0, numberOr(overrides.initialBalance, numberOr(config.initialBalance, DEFAULTS.initialBalance)));
     state.currency = overrides.currency || config.currency;
@@ -197,7 +207,12 @@ export function createStatefulApiEmulator(options = {}) {
     return snapshot();
   }
 
-  return { handle, snapshot, restore, reset, state };
+  function setContract(contract) {
+    state.apiContract = contract && typeof contract === "object" ? JSON.parse(JSON.stringify(contract)) : null;
+    return state.apiContract;
+  }
+
+  return { handle, snapshot, restore, reset, setContract, state };
 }
 
 export function installStatefulApiEmulator(options = {}) {

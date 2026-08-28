@@ -186,6 +186,7 @@ export function buildApiMap(manifest = [], zipFiles = null) {
       confidence: r.apiConfidence || "low",
       fields: r.apiFields || null,
       topKeys: r.apiTopKeys || null,
+      contract: r.apiContract || null,
       hasSnapshot: Boolean(snapshot),
       // Snapshot lebih dalam (session/init perlu field lengkap)
       snapshot: snapshot && typeof snapshot === "object"

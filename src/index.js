@@ -21,6 +21,7 @@ import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
 import { mapAssetRelations } from "./analyze/relations.js";
 import { fillMissingAssetsV2 } from "./collect/fill-missing-enhanced.js";
+import { buildApiContract } from "./collect/api-contract.js";
 import { normalizeResourceUrl, preferredAssetDir, professionalFileName } from "./collect/normalize.js";
 import { postCollectAudit, formatCollectAuditSummary } from "./collect/post-audit.js";
 import { runRecoveryEngine } from "./collect/recovery.js";
@@ -1291,9 +1292,21 @@ export default {
 
           // Poin 4: semantik API
           let apiMeta = null;
+          let apiContract = null;
           if (classified.category === "api" || type === "xhr" || type === "fetch") {
             try {
               apiMeta = classifyApiSemantics(u, type, ct, bodyPeek);
+              apiContract = buildApiContract({
+                url: u,
+                method: req.method(),
+                requestHeaders: req.headers(),
+                requestBody: req.postData(),
+                status: response.status(),
+                responseHeaders: response.headers(),
+                responseBody: bodyPeek,
+                kind: apiMeta.kind,
+                confidence: apiMeta.confidence
+              });
             } catch {}
           }
 
@@ -1319,7 +1332,8 @@ export default {
             classifyReason: classified.reason + (slot.reason ? "+" + slot.reason : ""),
             collectStatus: STRICT_STATUS.DOWNLOADED,
             strictStatus: classified.status || STRICT_STATUS.ASSET,
-            hadSignedQuery: !!norm.hadQuery
+            hadSignedQuery: !!norm.hadQuery,
+            apiContract
           };
           if (apiMeta) {
             entry.apiKind = apiMeta.kind;
