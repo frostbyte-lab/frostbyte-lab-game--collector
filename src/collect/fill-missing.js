@@ -28,7 +28,8 @@ export async function fillMissingAssets(
   env,
   selectAllowed = null,
   maxPerPass = MAX_FILL_PER_PASS,
-  maxPasses = MAX_FILL_PASSES
+  maxPasses = MAX_FILL_PASSES,
+  seedUrls = []
 ) {
   const report = {
     scanned: 0,
@@ -68,6 +69,11 @@ export async function fillMissingAssets(
     }
 
     const needed = new Set();
+    if (pass === 1) {
+      for (const seed of seedUrls || []) {
+        if (typeof seed === "string" && /^https?:\/\//i.test(seed)) needed.add(seed);
+      }
+    }
     for (const t of texts) {
       for (const u of extractReferencedUrls(t, targetHref)) needed.add(u);
     }

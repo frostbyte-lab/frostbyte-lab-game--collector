@@ -1,7 +1,9 @@
 /* Game Collector Pro — SW v6: shell + ZIP /__gc__/ + hybrid API policy */
-const SHELL = "gc-pro-shell-v8";
+const SHELL = "gc-pro-shell-v9";
 const ZIP_CACHE = "gc-pro-zip-v5";
+const VENDOR_CACHE = "gc-pro-vendor-v1";
 const ASSETS = ["/", "/index.html", "/manifest.json", "/offline-analyze.js"];
+const VENDOR_ASSETS = ["/vendor/"];
 
 /** @type {{ mode: 'hybrid'|'offline', apiPatterns: string[], allowHosts: string[] }} */
 let HYBRID_POLICY = {
@@ -29,6 +31,8 @@ self.addEventListener("install", (e) => {
     caches
       .open(SHELL)
       .then((c) => c.addAll(ASSETS))
+      .then(() => caches.open(VENDOR_CACHE))
+      .then((c) => c.addAll(VENDOR_ASSETS).catch(() => undefined))
       .then(() => self.skipWaiting())
   );
 });
@@ -39,7 +43,7 @@ self.addEventListener("activate", (e) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          keys.filter((k) => k !== SHELL && k !== ZIP_CACHE).map((k) => caches.delete(k))
+          keys.filter((k) => ![SHELL, ZIP_CACHE, VENDOR_CACHE].includes(k)).map((k) => caches.delete(k))
         )
       )
       .then(() => self.clients.claim())
@@ -136,6 +140,33 @@ self.addEventListener("message", (e) => {
     if (e.ports && e.ports[0]) e.ports[0].postMessage({ ok: true, policy: HYBRID_POLICY });
     return;
   }
+  if (data.type === "PUT_VENDOR_ASSETS" && Array.isArray(data.assets)) {
+    e.waitUntil(
+      (async () => {
+        const cache = await caches.open(VENDOR_CACHE);
+        if (data.clear) {
+          await Promise.all((await cache.keys()).map((request) => cache.delete(request)));
+        }
+        let count = 0;
+        for (const item of data.assets) {
+          if (!item || !item.url || !item.body) continue;
+          const request = new Request(String(item.url), { method: "GET" });
+          const headers = new Headers(item.headers || {});
+          if (!headers.has("Content-Type")) headers.set("Content-Type", item.mime || mimeOf(item.url));
+          headers.set("Cache-Control", "public, max-age=31536000, immutable");
+          headers.set("X-GC-Vendor", "1");
+          await cache.put(request, new Response(item.body, { status: 200, headers }));
+          count++;
+        }
+        e.ports?.[0]?.postMessage({ ok: true, count, cache: VENDOR_CACHE });
+      })().catch((error) => e.ports?.[0]?.postMessage({ ok: false, error: String(error) }))
+    );
+    return;
+  }
+  if (data.type === "CLEAR_VENDOR") {
+    e.waitUntil(caches.delete(VENDOR_CACHE).then(() => e.ports?.[0]?.postMessage({ ok: true })));
+    return;
+  }
   if (data.type === "CLEAR_ZIP") {
     e.waitUntil(
       caches.delete(ZIP_CACHE).then(() => {
@@ -210,6 +241,18 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
+  // Vendor assets are cache-first and never require network in offline mode.
+  if (url.pathname === "/vendor" || url.pathname.startsWith("/vendor/")) {
+    e.respondWith(
+      caches.open(VENDOR_CACHE).then((cache) =>
+        cache.match(e.request).then((hit) => hit || fetch(e.request).then((response) => {
+          if (response.ok) cache.put(e.request, response.clone());
+          return response;
+        }).catch(() => new Response("Offline: vendor asset not cached", { status: 503 })))
+      )
+    );
+    return;
+  }
   // Virtual ZIP assets — always from cache
   if (url.pathname.startsWith("/__gc__/")) {
     e.respondWith(

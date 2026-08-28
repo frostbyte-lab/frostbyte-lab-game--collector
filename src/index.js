@@ -20,7 +20,7 @@ import { buildOfflineSuperReport, injectOfflineBootstrap, ensureCriticalApiMocks
 import { analyzeGameContent } from "./analyze/content.js";
 import { analyzeDependencies } from "./analyze/dependency.js";
 import { mapAssetRelations } from "./analyze/relations.js";
-import { fillMissingAssets } from "./collect/fill-missing.js";
+import { fillMissingAssetsV2 } from "./collect/fill-missing-enhanced.js";
 import { normalizeResourceUrl, preferredAssetDir, professionalFileName } from "./collect/normalize.js";
 import { postCollectAudit, formatCollectAuditSummary } from "./collect/post-audit.js";
 import { runRecoveryEngine } from "./collect/recovery.js";
@@ -1539,7 +1539,7 @@ export default {
       await report(62, "fill", "Auto-lengkapi (multi-pass)...", { files: manifest.length });
       let fillReport = { scanned: 0, missingFound: 0, fetched: 0, failed: 0, stillMissing: [], passes: 0 };
       try {
-        fillReport = await fillMissingAssets(
+        fillReport = await fillMissingAssetsV2(
           zipFiles,
           manifest,
           seen,
@@ -1547,8 +1547,10 @@ export default {
           id,
           env,
           selectAllowed,
-          fillPerPass,
-          fillPasses
+          {
+            maxPerPass: Math.min(250, fillPerPass),
+            maxPasses: Math.min(8, fillPasses)
+          }
         );
         await report(
           68,
