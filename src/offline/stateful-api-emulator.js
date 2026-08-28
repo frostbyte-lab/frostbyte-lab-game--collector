@@ -56,9 +56,14 @@ function requestBody(request) {
 export function createStatefulApiEmulator(options = {}) {
   const config = { ...DEFAULTS, ...options };
   const random = createPrng(numberOr(config.seed, DEFAULTS.seed));
+  const initialSessionId = config.sessionId || `sandbox-${Date.now().toString(36)}`;
+  const initialToken = config.token || "gc-offline-token";
   const state = {
-    sessionId: config.sessionId || `sandbox-${Date.now().toString(36)}`,
-    token: config.token || "gc-offline-token",
+    sessionId: initialSessionId,
+    token: initialToken,
+    playerId: config.playerId || "sandbox-player",
+    gameId: config.gameId || "sandbox-game",
+    createdAt: new Date().toISOString(),
     balance: Math.max(0, numberOr(config.initialBalance, DEFAULTS.initialBalance)),
     currency: config.currency,
     round: 0,
@@ -71,7 +76,10 @@ export function createStatefulApiEmulator(options = {}) {
       ok: true,
       __gcMock: true,
       session: { id: state.sessionId, ok: true },
+      sessionId: state.sessionId,
       token: state.token,
+      playerId: state.playerId,
+      gameId: state.gameId,
       si: state.sessionId,
       tk: state.token,
       balance: state.balance,
@@ -84,8 +92,12 @@ export function createStatefulApiEmulator(options = {}) {
     return {
       ok: true,
       __gcMock: true,
-      gameInfo: { offline: true, mode: "stateful-sandbox" },
-      data: { gameInfo: { offline: true }, balance: state.balance, currency: state.currency },
+      session: { id: state.sessionId, ok: true },
+      token: state.token,
+      playerId: state.playerId,
+      gameId: state.gameId,
+      gameInfo: { offline: true, mode: "stateful-sandbox", gameId: state.gameId },
+      data: { gameInfo: { offline: true, gameId: state.gameId }, balance: state.balance, currency: state.currency },
       dt: { game: "offline", bl: state.balance },
       balance: state.balance,
       bl: state.balance,
@@ -97,6 +109,8 @@ export function createStatefulApiEmulator(options = {}) {
     return {
       ok: true,
       __gcMock: true,
+      sessionId: state.sessionId,
+      token: state.token,
       data: { balance: state.balance, currency: state.currency },
       balance: state.balance,
       bl: state.balance,
@@ -150,10 +164,40 @@ export function createStatefulApiEmulator(options = {}) {
   }
 
   function snapshot() {
-    return { ...state, history: state.history.map((item) => ({ ...item, symbols: item.symbols.map((row) => [...row]) })) };
+    return JSON.parse(JSON.stringify(state));
   }
 
-  return { handle, snapshot, state };
+  function restore(saved) {
+    if (!saved || typeof saved !== "object") throw new TypeError("snapshot session tidak valid");
+    if (!saved.sessionId || !saved.token) throw new TypeError("snapshot wajib memiliki sessionId dan token");
+    state.sessionId = String(saved.sessionId);
+    state.token = String(saved.token);
+    state.playerId = String(saved.playerId || state.playerId);
+    state.gameId = String(saved.gameId || state.gameId);
+    state.createdAt = String(saved.createdAt || state.createdAt);
+    state.balance = Math.max(0, numberOr(saved.balance, state.balance));
+    state.currency = String(saved.currency || state.currency);
+    state.round = Math.max(0, Math.floor(numberOr(saved.round, 0)));
+    state.lastWin = Math.max(0, numberOr(saved.lastWin, 0));
+    state.history = Array.isArray(saved.history) ? saved.history.slice(0, 50) : [];
+    return snapshot();
+  }
+
+  function reset(overrides = {}) {
+    state.sessionId = overrides.sessionId || initialSessionId;
+    state.token = overrides.token || initialToken;
+    state.playerId = overrides.playerId || config.playerId || "sandbox-player";
+    state.gameId = overrides.gameId || config.gameId || "sandbox-game";
+    state.createdAt = new Date().toISOString();
+    state.balance = Math.max(0, numberOr(overrides.initialBalance, numberOr(config.initialBalance, DEFAULTS.initialBalance)));
+    state.currency = overrides.currency || config.currency;
+    state.round = 0;
+    state.lastWin = 0;
+    state.history = [];
+    return snapshot();
+  }
+
+  return { handle, snapshot, restore, reset, state };
 }
 
 export function installStatefulApiEmulator(options = {}) {

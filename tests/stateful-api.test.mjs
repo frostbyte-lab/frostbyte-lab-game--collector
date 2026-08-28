@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { createStatefulApiEmulator } from "../src/offline/stateful-api-emulator.js";
 
-const emulator = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 123 });
+const emulator = createStatefulApiEmulator({ initialBalance: 1000, defaultBet: 100, seed: 123, playerId: "p-test", gameId: "g-test" });
+const session = await emulator.handle("https://gc.offline.local/verifysession");
+const sessionPayload = await session.json();
+assert.equal(sessionPayload.sessionId, emulator.snapshot().sessionId);
+assert.equal(sessionPayload.token, emulator.snapshot().token);
+assert.equal(sessionPayload.playerId, "p-test");
+assert.equal(sessionPayload.gameId, "g-test");
 
 const init = await emulator.handle("https://gc.offline.local/gameinfo");
 assert.equal(init.status, 200);
@@ -22,6 +28,14 @@ assert.equal(spinPayload.data.bet, 100);
 assert.equal(spinPayload.data.roundId.endsWith("-1"), true);
 assert.equal(emulator.snapshot().round, 1);
 assert.equal(emulator.snapshot().history.length, 1);
+const saved = emulator.snapshot();
+emulator.reset({ initialBalance: 500 });
+assert.equal(emulator.snapshot().balance, 500);
+assert.equal(emulator.snapshot().round, 0);
+emulator.restore(saved);
+assert.equal(emulator.snapshot().balance, saved.balance);
+assert.equal(emulator.snapshot().round, saved.round);
+assert.equal(emulator.snapshot().sessionId, saved.sessionId);
 
 const invalid = await emulator.handle("https://gc.offline.local/spin", {
   method: "POST",
