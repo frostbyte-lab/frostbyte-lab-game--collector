@@ -4227,6 +4227,11 @@
               <span class="activity-card-title">Secret Code</span>
               <span class="activity-card-desc">Pengingat Sandbox mock API — masukkan kode, lalu simpan template ke Workspace</span>
             </button>
+            <button type="button" class="activity-card activity-card-offline" id="btn-activity-offline" onclick="openActivityOfflineReady()">
+              <span class="activity-card-icon" aria-hidden="true">✓</span>
+              <span class="activity-card-title">FULL_OFFLINE_READY</span>
+              <span class="activity-card-desc">Audit ZIP per game · validasi browser tanpa network · lihat blocker nyata</span>
+            </button>
           </div>
 
           <details class="fb-portfolio">
@@ -4304,6 +4309,27 @@
               <strong id="act-detail-title">Detail</strong>
             </div>
             <pre id="act-detail-body" class="act-detail-pre"></pre>
+          </div>
+        </div>
+
+        <div class="activity-view" id="activity-offline-view" hidden>
+          <div class="activity-view-bar">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeActivitySub()">← Kembali</button>
+            <strong>FULL_OFFLINE_READY</strong>
+            <span class="activity-view-hint">Audit per ZIP</span>
+          </div>
+          <div class="offline-ready-page">
+            <p class="offline-ready-intro">Pilih ZIP hasil Collect. Halaman ini hanya memberi status <b>FULL_OFFLINE_READY</b> jika isi paket, API, realtime, dan bukti browser network-off semuanya memenuhi syarat.</p>
+            <label class="btn btn-primary btn-sm offline-ready-upload">Pilih ZIP game
+              <input type="file" id="offline-ready-zip" accept=".zip,application/zip" hidden>
+            </label>
+            <div class="offline-ready-actions">
+              <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-current" onclick="auditCurrentZipOffline()">Audit ZIP Workspace</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-reset" onclick="resetOfflineReadyAudit()">Reset</button>
+            </div>
+            <div id="offline-ready-status" class="offline-ready-status">Belum ada ZIP yang diaudit.</div>
+            <div id="offline-ready-summary" class="offline-ready-summary" hidden></div>
+            <pre id="offline-ready-report" class="offline-ready-report" hidden></pre>
           </div>
         </div>
 
@@ -6585,8 +6611,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       var hub = document.getElementById('activity-hub');
       var chat = document.getElementById('activity-chat-view');
       var logv = document.getElementById('activity-log-view');
+      var offline = document.getElementById('activity-offline-view');
       if (hub) hub.hidden = true;
       if (logv) logv.hidden = true;
+      if (offline) offline.hidden = true;
       if (chat) chat.hidden = false;
       actRecord('nav', 'Buka Chat AI', 'User membuka Chat AI dari Activity');
     }
@@ -6659,14 +6687,96 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
     window.openActivitySecret = openActivitySecret;
 
+    var offlineReadyLastAudit = null;
+    function offlineReadyEsc(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+      });
+    }
+    function openActivityOfflineReady() {
+      var hub = document.getElementById('activity-hub');
+      var views = ['activity-chat-view', 'activity-log-view', 'activity-term-view', 'activity-offline-view'];
+      if (hub) hub.hidden = true;
+      views.forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = id !== 'activity-offline-view'; });
+      var input = document.getElementById('offline-ready-zip');
+      if (input && !input.__gcBound) {
+        input.__gcBound = true;
+        input.addEventListener('change', function () {
+          var file = input.files && input.files[0];
+          if (file) auditOfflineReadyZip(file);
+        });
+      }
+      try { actRecord('nav', 'Buka FULL_OFFLINE_READY', 'Audit readiness per ZIP dibuka'); } catch (_) {}
+    }
+    function offlineReadyRender(report, filename, browserTest) {
+      var status = document.getElementById('offline-ready-status');
+      var summary = document.getElementById('offline-ready-summary');
+      var pre = document.getElementById('offline-ready-report');
+      if (!report) return;
+      var browserOk = !!(browserTest && browserTest.networkIsolated && browserTest.gameplayReady);
+      var ready = report.pct >= 100 && browserOk && !(report.blockers && report.blockers.length);
+      var label = ready ? 'FULL_OFFLINE_READY' : (report.pct >= 100 ? 'GAMEPLAY_READY · browser network-off belum terbukti' : 'NOT_READY · asset/paket belum lengkap');
+      if (status) status.innerHTML = '<strong class="' + (ready ? 'offline-ready-ok' : 'offline-ready-warn') + '">' + offlineReadyEsc(label) + '</strong><br><small>' + offlineReadyEsc(filename || 'ZIP') + ' · ' + Number(report.fileCount || 0) + ' file nyata · kelengkapan ' + Number(report.pct || 0) + '%</small>';
+      if (summary) {
+        summary.hidden = false;
+        var actual = Array.isArray(report.names) ? report.names : [];
+        var missing = (report.items || []).filter(function (x) { return !x.ok; }).map(function (x) { return x.label; });
+        summary.innerHTML = '<div><b>File nyata dalam ZIP:</b> ' + actual.length + '</div>' +
+          '<div><b>API map:</b> ' + (report.meta && report.meta.apiMapOk ? 'OK' : 'Belum terverifikasi') + '</div>' +
+          '<div><b>Browser tanpa network:</b> ' + (browserOk ? 'LULUS' : 'BELUM DIJALANKAN') + '</div>' +
+          '<div><b>Blocker:</b> ' + (missing.length ? offlineReadyEsc(missing.join(' · ')) : 'Tidak ada checklist yang gagal') + '</div>' +
+          '<p class="offline-ready-hint">Daftar file di bawah berasal dari isi ZIP. Status FULL_OFFLINE_READY tidak diberikan hanya berdasarkan nama file; bukti browser network-off wajib ada.</p>';
+      }
+      if (pre) {
+        pre.hidden = false;
+        pre.textContent = JSON.stringify({ status: ready ? 'FULL_OFFLINE_READY' : (report.pct >= 100 ? 'GAMEPLAY_READY' : 'NOT_READY'), package: filename || null, files: report.names || [], completeness: report, browserTest: browserTest || { status: 'NOT_RUN', networkIsolated: false, gameplayReady: false } }, null, 2);
+      }
+    }
+    async function auditOfflineReadyZip(fileOrZip, filename) {
+      var status = document.getElementById('offline-ready-status');
+      if (status) status.textContent = 'Membaca ZIP dan memeriksa file aktual…';
+      try {
+        var zip = fileOrZip && fileOrZip.files ? fileOrZip : await JSZip.loadAsync(fileOrZip);
+        var report = await gcInspectZipCompleteness(zip);
+        offlineReadyLastAudit = { report: report, filename: filename || fileOrZip.name || 'game-package.zip', browserTest: { status: 'NOT_RUN', networkIsolated: false, gameplayReady: false } };
+        offlineReadyRender(report, offlineReadyLastAudit.filename, offlineReadyLastAudit.browserTest);
+        try { actRecord('audit', 'ZIP readiness ' + (report.pct >= 100 ? 'lengkap' : 'belum lengkap'), JSON.stringify({ fileCount: report.fileCount, pct: report.pct, filename: offlineReadyLastAudit.filename })); } catch (_) {}
+      } catch (err) {
+        if (status) status.textContent = 'Gagal membaca ZIP: ' + (err && err.message ? err.message : err);
+      }
+    }
+    function auditCurrentZipOffline() {
+      if (typeof currentZip === 'undefined' || !currentZip) {
+        var status = document.getElementById('offline-ready-status');
+        if (status) status.textContent = 'Belum ada ZIP di Workspace. Pilih file ZIP terlebih dahulu.';
+        return;
+      }
+      auditOfflineReadyZip(currentZip, 'Workspace ZIP');
+    }
+    function resetOfflineReadyAudit() {
+      offlineReadyLastAudit = null;
+      var status = document.getElementById('offline-ready-status');
+      var summary = document.getElementById('offline-ready-summary');
+      var pre = document.getElementById('offline-ready-report');
+      if (status) status.textContent = 'Belum ada ZIP yang diaudit.';
+      if (summary) { summary.hidden = true; summary.innerHTML = ''; }
+      if (pre) { pre.hidden = true; pre.textContent = ''; }
+      var input = document.getElementById('offline-ready-zip');
+      if (input) input.value = '';
+    }
+    window.openActivityOfflineReady = openActivityOfflineReady;
+    window.auditCurrentZipOffline = auditCurrentZipOffline;
+    window.resetOfflineReadyAudit = resetOfflineReadyAudit;
     function openActivityTerminal() {
       var hub = document.getElementById('activity-hub');
       var chat = document.getElementById('activity-chat-view');
       var log = document.getElementById('activity-log-view');
       var term = document.getElementById('activity-term-view');
+      var offline = document.getElementById('activity-offline-view');
       if (hub) hub.hidden = true;
       if (chat) chat.hidden = true;
       if (log) log.hidden = true;
+      if (offline) offline.hidden = true;
       if (term) term.hidden = false;
       renderActivityTerminal();
       try { actRecord('nav', 'Buka Console', 'User membuka console log Activity'); } catch (_) {}
@@ -6706,8 +6816,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       var hub = document.getElementById('activity-hub');
       var chat = document.getElementById('activity-chat-view');
       var logv = document.getElementById('activity-log-view');
+      var offline = document.getElementById('activity-offline-view');
       if (hub) hub.hidden = true;
       if (chat) chat.hidden = true;
+      if (offline) offline.hidden = true;
       if (logv) logv.hidden = false;
       var det = document.getElementById('act-log-detail');
       if (det) det.hidden = true;
@@ -6720,9 +6832,11 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       var chat = document.getElementById('activity-chat-view');
       var logv = document.getElementById('activity-log-view');
       var term = document.getElementById('activity-term-view');
+      var offline = document.getElementById('activity-offline-view');
       if (chat) chat.hidden = true;
       if (logv) logv.hidden = true;
       if (term) term.hidden = true;
+      if (offline) offline.hidden = true;
       if (hub) hub.hidden = false;
     }
     function actRenderLogList() {
@@ -13136,6 +13250,16 @@ function isApiLike(u){
     }
     .activity-card-title { font-weight:700; font-size:15px; grid-column:2; }
     .activity-card-desc { font-size:12px; color:var(--text-muted); line-height:1.45; grid-column:2; }
+    .activity-card-offline .activity-card-icon { color:#4ade80; border-color:rgba(74,222,128,.35); background:rgba(74,222,128,.12); }
+    .offline-ready-page { padding:16px; max-width:680px; width:100%; margin:0 auto; overflow:auto; }
+    .offline-ready-intro { color:var(--text-secondary); font-size:13px; line-height:1.55; margin:0 0 14px; }
+    .offline-ready-upload { display:inline-flex; cursor:pointer; margin-bottom:10px; }
+    .offline-ready-actions { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .offline-ready-status, .offline-ready-summary { padding:12px; border:1px solid var(--border); border-radius:10px; background:rgba(15,23,42,.62); margin-bottom:10px; font-size:13px; line-height:1.6; }
+    .offline-ready-ok { color:#4ade80; }
+    .offline-ready-warn { color:#fbbf24; }
+    .offline-ready-hint { margin-top:8px; color:var(--text-muted); font-size:11px; }
+    .offline-ready-report { max-height:360px; overflow:auto; white-space:pre-wrap; word-break:break-word; padding:12px; border-radius:10px; border:1px solid var(--border); background:#0b1220; color:#cbd5e1; font-size:11px; }
 
     .fb-portfolio {
       margin-top:18px;
