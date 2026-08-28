@@ -1,0 +1,93 @@
+import { unzipSync } from "fflate";
+
+const TEXT_EXT = /\.(html?|js|css|json|txt|map|xml|svg)$/i;
+const EXTERNAL_URL = /https?:\/\/(?!localhost|127\.0\.0\.1|[^/]*\.offline\.local)[^\s"'<>]+/gi;
+const API_MARKER = /(?:fetch\s*\(|XMLHttpRequest|\/verifysession|\/gamewallet|\/gameinfo|\/spin|\/api\/)/i;
+const REALTIME_MARKER = /(?:WebSocket|EventSource|new\s+WebSocket|setInterval\s*\(|\/sse|wss?:\/\/)/i;
+
+function textOf(value) {
+  if (typeof value === "string") return value;
+  if (value instanceof Uint8Array) return new TextDecoder().decode(value);
+  return "";
+}
+
+function jsonFile(files, name) {
+  const key = Object.keys(files).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  if (!key) return null;
+  try { return JSON.parse(textOf(files[key])); } catch (_) { return null; }
+}
+
+function listExternalRefs(files) {
+  const refs = [];
+  for (const [path, raw] of Object.entries(files)) {
+    if (!TEXT_EXT.test(path)) continue;
+    const text = textOf(raw).slice(0, 500000);
+    for (const url of text.match(EXTERNAL_URL) || []) refs.push({ path, url: url.slice(0, 500) });
+  }
+  return refs.slice(0, 200);
+}
+
+export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
+  const names = Object.keys(files).filter((name) => !name.endsWith("/"));
+  const lowerNames = names.map((name) => name.toLowerCase());
+  const manifest = jsonFile(files, "manifest.json");
+  const apiMap = jsonFile(files, "api-map.json");
+  const superReport = jsonFile(files, "offline-super.json");
+  const statusReport = jsonFile(files, "collect-status.json");
+  const indexHtml = lowerNames.some((name) => /(^|\/)index\.html?$/.test(name));
+  const texts = names.filter((name) => TEXT_EXT.test(name)).map((name) => textOf(files[name]).slice(0, 500000));
+  const externalRefs = listExternalRefs(files);
+  const apiEndpoints = Array.isArray(apiMap?.endpoints) ? apiMap.endpoints : [];
+  const snapshots = apiEndpoints.filter((entry) => entry?.hasSnapshot && entry?.snapshot);
+  const unresolved = Array.isArray(manifest) ? manifest.filter((entry) => /https?:\/\//i.test(String(entry?.url || "")) && !entry?.localPath).length : 0;
+  const failed = Array.isArray(manifest) ? manifest.filter((entry) => /FAILED|INVALID|ERROR/i.test(String(entry?.collectStatus || entry?.strictStatus || ""))).length : 0;
+  const hasApi = apiEndpoints.length > 0 || texts.some((text) => API_MARKER.test(text));
+  const hasRealtime = texts.some((text) => REALTIME_MARKER.test(text));
+  const hasRuntimeInterceptor = lowerNames.some((name) => /runtime-interceptor|realtime-adapter|offline-validation/.test(name));
+  const browser = browserTest || { status: "NOT_RUN", networkIsolated: false, gameplayReady: false, failures: ["Browser test belum dijalankan"] };
+  const shellReady = indexHtml && names.some((name) => /\.js$/i.test(name));
+  const hybridReady = shellReady && (externalRefs.length > 0 || unresolved > 0 || hasApi);
+  const mockReady = shellReady && apiEndpoints.length > 0 && (snapshots.length > 0 || Boolean(superReport));
+  const gameplayReady = Boolean(browser.gameplayReady) || (mockReady && snapshots.length >= 3 && failed === 0);
+  const fullOfflineReady = Boolean(browser.gameplayReady && browser.networkIsolated && browser.status === "FULL_OFFLINE_READY" && unresolved === 0 && failed === 0);
+  const status = fullOfflineReady ? "FULL_OFFLINE_READY" : gameplayReady ? "GAMEPLAY_READY" : mockReady ? "MOCK_READY" : hybridReady ? "HYBRID_READY" : shellReady ? "SHELL_READY" : "NOT_READY";
+  const blockers = [];
+  if (!indexHtml) blockers.push("index.html tidak ditemukan");
+  if (!names.some((name) => /\.js$/i.test(name))) blockers.push("JavaScript utama tidak ditemukan");
+  if (unresolved > 0) blockers.push(`${unresolved} asset masih memiliki URL absolut tanpa localPath`);
+  if (failed > 0) blockers.push(`${failed} asset memiliki status gagal`);
+  if (hasApi && apiEndpoints.length === 0) blockers.push("API terdeteksi tetapi api-map.json kosong");
+  if (apiEndpoints.length > 0 && snapshots.length === 0) blockers.push("Tidak ada snapshot API nyata");
+  if (hasRealtime && !hasRuntimeInterceptor) blockers.push("Realtime terdeteksi tetapi runtime/realtime adapter tidak ada di paket");
+  if (!browser.gameplayReady) blockers.push("Browser gameplay test belum berhasil");
+  if (!browser.networkIsolated) blockers.push("Network isolation belum terbukti");
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    status,
+    shellReady,
+    hybridReady,
+    mockReady,
+    gameplayReady,
+    fullOfflineReady,
+    browserTest: browser,
+    assets: { files: names.length, indexHtml, unresolved, failed, externalRefs: externalRefs.length },
+    api: { detected: hasApi, endpoints: apiEndpoints.length, snapshots: snapshots.length, replaySequence: Array.isArray(apiMap?.replaySequence) ? apiMap.replaySequence.length : 0 },
+    realtime: { detected: hasRealtime, adapterPresent: hasRuntimeInterceptor },
+    sourceReports: { hasManifest: Boolean(manifest), hasApiMap: Boolean(apiMap), hasOfflineSuper: Boolean(superReport), hasCollectStatus: Boolean(statusReport) },
+    blockers,
+    externalRefs
+  };
+}
+
+export function validateZipPackage(zipData, options = {}) {
+  const entries = unzipSync(zipData);
+  return validatePackageFiles(entries, options);
+}
+
+export function assertPackageReady(report, expected = "FULL_OFFLINE_READY") {
+  if (report?.status !== expected) throw new Error(`Paket belum ${expected}: ${JSON.stringify(report?.blockers || [])}`);
+  return report;
+}
+
+export default validatePackageFiles;
