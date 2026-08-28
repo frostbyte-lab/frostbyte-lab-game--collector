@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createStatefulApiEmulator } from "../src/offline/stateful-api-emulator.js";
 import { buildApiContract } from "../src/collect/api-contract.js";
+import { createLocalApiRouter } from "../src/offline/api-router.js";
 
 const contract = buildApiContract({
   url: "https://game.example.test/custom/start",
@@ -29,6 +30,14 @@ assert.equal(sessionPayload.gameId, "g-test");
 const customInit = await emulator.handle("https://game.example.test/custom/start");
 assert.equal(customInit.status, 200);
 assert.equal((await customInit.json()).balance, 1000);
+const customMap = { endpoints: [{ pathLower: "/provider/v3/init", kind: "init", status: 200, hasSnapshot: false, mockTemplate: {} }] };
+const router = createLocalApiRouter({ emulator, apiMap: customMap, mode: "offline" });
+const routed = await router.handle("https://provider.example.test/provider/v3/init");
+assert.equal(routed.status, 200);
+assert.equal((await routed.json()).balance, 1000);
+const unknown = await router.handle("https://provider.example.test/provider/v3/unknown");
+assert.equal(unknown.status, 503);
+assert.equal((await unknown.json()).error, "UNKNOWN_API_ROUTE");
 
 const init = await emulator.handle("https://gc.offline.local/gameinfo");
 assert.equal(init.status, 200);

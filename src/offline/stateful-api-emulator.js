@@ -4,6 +4,8 @@
  * represent a real-money backend or guarantee compatibility with every game.
  */
 
+import { installLocalApiRouter } from "./api-router.js";
+
 const DEFAULTS = {
   initialBalance: 100000,
   currency: "IDR",
@@ -240,16 +242,17 @@ export function createStatefulApiEmulator(options = {}) {
 
 export function installStatefulApiEmulator(options = {}) {
   const emulator = createStatefulApiEmulator(options);
+  if (options.apiMap) {
+    const installed = installLocalApiRouter({ emulator, apiMap: options.apiMap, mode: options.mode || "offline" });
+    return { emulator, router: installed.router, restore: installed.restore };
+  }
   const originalFetch = globalThis.fetch?.bind(globalThis);
   if (!originalFetch) throw new Error("fetch tidak tersedia pada runtime lokal");
   globalThis.fetch = async (input, init) => {
     const response = await emulator.handle(input, init);
     return response || originalFetch(input, init);
   };
-  return {
-    emulator,
-    restore() { globalThis.fetch = originalFetch; }
-  };
+  return { emulator, restore() { globalThis.fetch = originalFetch; } };
 }
 
 export { routeOf };
