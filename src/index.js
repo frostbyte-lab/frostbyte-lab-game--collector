@@ -29,6 +29,7 @@ import { buildDependencyQueue, queueReport } from "./collect/queue.js";
 import { staticAnalyzeHtml, staticAnalyzeZip } from "./collect/static-scan.js";
 import { buildUrlMap, formatStatusReport } from "./collect/url-map.js";
 import { sha256 } from "./offline/strict-collector.js";
+import { buildConformanceReport } from "./offline/conformance-lab.js";
 import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
 import { savePackageToGitHub, listGitHubPackages, downloadGitHubPackage } from "./collect/github-packages.js";
@@ -280,6 +281,13 @@ export default {
         return Response.json({ ok: false, error: "INVALID_JSON" }, { status: 400 });
       }
       return runManusTask(env, body || {});
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/test/conformance") {
+      let body;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "JSON tidak valid" }, { status: 400 }); }
+      const report = buildConformanceReport(body || {});
+      return Response.json({ ok: true, provider: "local-conformance-lab", report });
     }
 
     if (request.method === "POST" && url.pathname === "/api/ai/analyze") {

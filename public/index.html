@@ -4365,12 +4365,14 @@
             </label>
             <div class="offline-ready-actions">
               <button type="button" class="btn btn-primary btn-sm" id="offline-ready-play" onclick="playOfflineReview()">▶ Play Review</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-conformance" onclick="runOfflineConformance()">Conformance API</button>
               <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-current" onclick="auditCurrentZipOffline()">Audit ZIP Workspace</button>
               <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-reset" onclick="resetOfflineReadyAudit()">Reset</button>
             </div>
             <div id="offline-ready-status" class="offline-ready-status">Belum ada ZIP yang diaudit.</div>
             <div id="offline-ready-summary" class="offline-ready-summary" hidden></div>
             <div id="offline-ready-ai" class="offline-ready-summary" hidden style="border-color:rgba(94,225,192,.35);background:rgba(94,225,192,.06);"></div>
+            <div id="offline-ready-conformance-report" class="offline-ready-summary" hidden></div>
             <pre id="offline-ready-report" class="offline-ready-report" hidden></pre>
           </div>
         </div>
@@ -6867,6 +6869,37 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (status) status.textContent = 'Play Review gagal: ' + (error && error.message ? error.message : error);
       }
     }
+    async function runOfflineConformance() {
+      var status = document.getElementById('offline-ready-status');
+      var panel = document.getElementById('offline-ready-conformance-report');
+      try {
+        if (typeof currentZip === 'undefined' || !currentZip) {
+          if (offlineReadyLastAudit && offlineReadyLastAudit.sourceFile) await playOfflineReview();
+        }
+        if (typeof currentZip === 'undefined' || !currentZip) throw new Error('Load atau audit ZIP terlebih dahulu.');
+        var entry = zipFileMap && (zipFileMap['api-map.json'] || Object.keys(zipFileMap).find(function (p) { return /(^|\/)api-map\.json$/i.test(p); }));
+        if (!entry) throw new Error('api-map.json tidak ditemukan di ZIP. Jalankan Collect dengan interaksi dan API capture lebih lengkap.');
+        var raw = openFiles && openFiles.has(entry) ? openFiles.get(entry) : await entry.async('string');
+        var apiMap = JSON.parse(raw);
+        var exchanges = (apiMap.endpoints || []).map(function (ep) { return { method: ep.method_hint || 'GET', path: ep.path || ep.url || '/', status: ep.status || 200, request: ep.contract && ep.contract.request || {}, response: ep.snapshot || ep.contract && ep.contract.response || {} }; });
+        if (status) status.textContent = 'Menjalankan Conformance API dari api-map.json…';
+        var res = await fetch('/api/test/conformance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exchanges: exchanges, realtime: apiMap.realtime || apiMap.replaySequence || [] }) });
+        var body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || 'Conformance gagal');
+        var report = body.report || {};
+        if (panel) {
+          panel.hidden = false;
+          panel.innerHTML = '<b>Conformance API</b><br><span>Status: <strong>' + offlineReadyEsc(report.status || 'UNKNOWN') + '</strong> · Score ' + Number(report.score || 0) + '%</span><br><small>Exchange: ' + Number(report.counts && report.counts.exchanges || 0) + ' · realtime: ' + Number(report.counts && report.counts.realtime || 0) + '</small>' + '<br><small>Covered: ' + offlineReadyEsc((report.coveredKinds || []).join(', ') || 'none') + ' · Missing: ' + offlineReadyEsc((report.missingKinds || []).join(', ') || 'none') + '</small>' + '<pre style="white-space:pre-wrap;margin:8px 0 0;max-height:260px;overflow:auto;">' + offlineReadyEsc(JSON.stringify(report.blockers || [], null, 2)) + '</pre>';
+        }
+        if (status) status.textContent = 'Conformance selesai · ' + (report.status || 'UNKNOWN') + ' · score ' + Number(report.score || 0) + '%';
+        try { actRecord('audit', 'Conformance API selesai', JSON.stringify({ status: report.status, score: report.score, missing: report.missingKinds || [] })); } catch (_) {}
+        return report;
+      } catch (error) {
+        if (status) status.textContent = 'Conformance gagal: ' + (error && error.message ? error.message : error);
+        if (panel) { panel.hidden = false; panel.textContent = 'Conformance gagal: ' + (error && error.message ? error.message : error); }
+        return null;
+      }
+    }
     function auditCurrentZipOffline() {
       if (typeof currentZip === 'undefined' || !currentZip) {
         var status = document.getElementById('offline-ready-status');
@@ -6889,6 +6922,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     window.openActivityOfflineReady = openActivityOfflineReady;
     window.auditCurrentZipOffline = auditCurrentZipOffline;
     window.playOfflineReview = playOfflineReview;
+    window.runOfflineConformance = runOfflineConformance;
     window.resetOfflineReadyAudit = resetOfflineReadyAudit;
     function openActivityTerminal() {
       var hub = document.getElementById('activity-hub');

@@ -19,6 +19,7 @@
     "test:collect-artifact": "node tests/collect-artifact-schema.test.mjs",
     "test:manus-api": "node tests/manus-api.test.mjs",
     "test:collect-ai-assistant": "node tests/collect-ai-assistant.test.mjs",
+    "test:conformance-lab": "node tests/conformance-lab.test.mjs",
     "validate:offline-package": "node scripts/validate-offline-package.js"
   },
   "dependencies": {
