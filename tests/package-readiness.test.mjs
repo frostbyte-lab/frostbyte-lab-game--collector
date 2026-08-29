@@ -12,6 +12,8 @@ const files = {
     { pathLower: "/spin", kind: "spin", hasSnapshot: true, snapshot: { winAmount: 0 } }
   ], replaySequence: [{ order: 1 }, { order: 2 }, { order: 3 }] })),
   "offline-super.json": strToU8(JSON.stringify({ status: "READY" })),
+  "KETERANGAN.md": strToU8("Authorized offline package evidence"),
+  "analisis.json": strToU8(JSON.stringify({ ok: true })),
   "src/offline/realtime-adapter.js": strToU8("export class OfflineWebSocket {}")
 };
 const report = validatePackageFiles(files, {

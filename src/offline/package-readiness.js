@@ -36,6 +36,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   const superReport = jsonFile(files, "offline-super.json");
   const statusReport = jsonFile(files, "collect-status.json");
   const replicationReport = jsonFile(files, "replication-report.json");
+  const authorizedResearch = jsonFile(files, "authorized-research.json");
   const indexHtml = lowerNames.some((name) => /(^|\/)index\.html?$/.test(name));
   const texts = names.filter((name) => TEXT_EXT.test(name)).map((name) => textOf(files[name]).slice(0, 500000));
   const externalRefs = listExternalRefs(files);
@@ -53,7 +54,23 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   const hybridReady = shellReady && (externalRefs.length > 0 || unresolved > 0 || hasApi);
   const mockReady = shellReady && apiEndpoints.length > 0 && (snapshots.length > 0 || Boolean(superReport));
   const gameplayReady = Boolean(browser.gameplayReady) || (mockReady && snapshots.length >= 3 && failed === 0);
-  const fullOfflineReady = Boolean(browser.gameplayReady && browser.networkIsolated && browser.status === "FULL_OFFLINE_READY" && unresolved === 0 && failed === 0 && criticalReplicationBlockers.length === 0);
+  const evidence = {
+    manifest: Boolean(manifestRaw),
+    apiMap: !hasApi || Boolean(apiMap),
+    offlineSuper: Boolean(superReport),
+    explanation: lowerNames.some((name) => /(^|\/)(keterangan|offline_readme|offline-audit|audit-offline|readme)\.(json|md|txt)$/i.test(name)),
+    analysis: Boolean(jsonFile(files, "analisis.json")) || lowerNames.some((name) => /(^|\/)analysis\//.test(name)),
+    browserProof: Boolean(browser.gameplayReady && browser.networkIsolated && browser.status === "FULL_OFFLINE_READY")
+  };
+  const strictBlockers = [];
+  for (const [name, ok] of Object.entries(evidence)) if (!ok) strictBlockers.push(`Evidence ${name} belum lengkap.`);
+  if (unresolved > 0) strictBlockers.push(`${unresolved} asset eksternal belum direwrite.`);
+  if (failed > 0) strictBlockers.push(`${failed} asset gagal dikoleksi.`);
+  if (hasApi && (!apiEndpoints.length || !snapshots.length || !Array.isArray(apiMap?.replaySequence) || apiMap.replaySequence.length === 0)) strictBlockers.push("Kontrak API/snapshot/replay belum lengkap.");
+  if (hasRealtime && (!hasRuntimeInterceptor || !Array.isArray(apiMap?.replaySequence) || apiMap.replaySequence.length === 0)) strictBlockers.push("Bukti realtime adapter/replay belum lengkap.");
+  if (criticalReplicationBlockers.length) strictBlockers.push(...criticalReplicationBlockers.map((item) => item.message || `Blocker kritis: ${item.kind || "unknown"}`));
+  const strictGate = { ready: strictBlockers.length === 0, blockers: strictBlockers, evidence };
+  const fullOfflineReady = strictGate.ready;
   const status = fullOfflineReady ? "FULL_OFFLINE_READY" : gameplayReady ? "GAMEPLAY_READY" : mockReady ? "MOCK_READY" : hybridReady ? "HYBRID_READY" : shellReady ? "SHELL_READY" : "NOT_READY";
   const blockers = [];
   if (!indexHtml) blockers.push("index.html tidak ditemukan");
@@ -79,8 +96,9 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
     assets: { files: names.length, indexHtml, unresolved, failed, externalRefs: externalRefs.length },
     api: { detected: hasApi, endpoints: apiEndpoints.length, snapshots: snapshots.length, contracts: Array.isArray(apiMap?.contracts) ? apiMap.contracts.length : 0, replaySequence: Array.isArray(apiMap?.replaySequence) ? apiMap.replaySequence.length : 0 },
     realtime: { detected: hasRealtime, adapterPresent: hasRuntimeInterceptor },
-    sourceReports: { hasManifest: Boolean(manifest), hasApiMap: Boolean(apiMap), hasOfflineSuper: Boolean(superReport), hasCollectStatus: Boolean(statusReport), hasReplicationReport: Boolean(replicationReport) },
-    blockers,
+    sourceReports: { hasManifest: Boolean(manifest), hasApiMap: Boolean(apiMap), hasOfflineSuper: Boolean(superReport), hasCollectStatus: Boolean(statusReport), hasReplicationReport: Boolean(replicationReport), hasAuthorizedResearch: Boolean(authorizedResearch) },
+    strictGate,
+    blockers: [...blockers, ...strictBlockers.filter((item) => !blockers.includes(item))],
     externalRefs
   };
 }
