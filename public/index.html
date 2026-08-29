@@ -9795,9 +9795,28 @@ function isApiLike(u){
         var rest = Array.prototype.slice.call(arguments, 2);
         if (resolved.kind === 'mock' || resolved.kind === 'blocked') {
           this.__gc_mock = true;
+          // URL root-relative tidak valid sebagai base URL pada dokumen blob.
+          // Gunakan target absolut yang valid; response tetap disimulasikan di send().
+          var mockOpenUrl = resolved.url;
+          try { mockOpenUrl = new URL(String(resolved.url || '/'), GC_ORIGIN + '/').href; }
+          catch (eMock) { mockOpenUrl = GC_ORIGIN + '/__gc_mock__'; }
+          try { return open.apply(this, [m, mockOpenUrl].concat(rest)); }
+          catch (eOpenMock) { return open.apply(this, [m, 'about:blank'].concat(rest)); }
+        }
+        var openUrl = resolved.url;
+        try {
+          // Semua URL yang dimulai slash harus absolut saat iframe memakai blob URL.
+          openUrl = new URL(String(openUrl || '/'), GC_ORIGIN + '/').href;
+        } catch (eAbs) {
+          openUrl = GC_ORIGIN + '/__gc_invalid__';
+        }
+        try { return open.apply(this, [m, openUrl].concat(rest)); }
+        catch (eOpen) {
+          this.__gc_mock = true;
+          this.__gc_kind = 'blocked';
+          this.__gc_url = String(u || '');
           return open.apply(this, [m, 'about:blank'].concat(rest));
         }
-        return open.apply(this, [m, resolved.url].concat(rest));
       };
       XO.prototype.send = function(body){
         var self = this;
