@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game Collector — Observability</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0b1020; color: #e8edf7; }
+    body { max-width: 1100px; margin: 0 auto; padding: 32px 20px; }
+    h1 { margin-bottom: 4px; } p { color: #9caaca; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 24px 0; }
+    .card { background: #151d33; border: 1px solid #293653; border-radius: 12px; padding: 18px; }
+    .label { color: #9caaca; font-size: 13px; } .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+    table { width: 100%; border-collapse: collapse; background: #151d33; border-radius: 12px; overflow: hidden; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #293653; }
+    th { color: #9caaca; font-weight: 500; }
+    .error { color: #ff9b9b; } button { padding: 10px 14px; border: 0; border-radius: 8px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Observability Game Collector</h1>
+  <p>Ringkasan agregat capture dari history KV. URL, token, dan secret tidak ditampilkan.</p>
+  <button id="refresh">Refresh</button>
+  <div id="status"></div>
+  <section class="grid" id="cards"></section>
+  <h2>Status</h2><table><thead><tr><th>Status</th><th>Jumlah</th></tr></thead><tbody id="statuses"></tbody></table>
+  <h2>Engine</h2><table><thead><tr><th>Engine</th><th>Jumlah</th></tr></thead><tbody id="engines"></tbody></table>
+  <script>
+    const fmt = n => n == null ? "—" : new Intl.NumberFormat("id-ID").format(n);
+    const card = (label, value) => `<article class="card"><div class="label">${label}</div><div class="value">${value}</div></article>`;
+    async function refresh() {
+      const status = document.querySelector("#status"); status.textContent = "Memuat…"; status.className = "";
+      try {
+        const res = await fetch("/api/metrics?limit=50", { cache: "no-store" });
+        const data = await res.json(); if (!res.ok || !data.ok) throw new Error(data.error || "metrics unavailable");
+        const m = data.metrics;
+        document.querySelector("#cards").innerHTML = [
+          card("Sample", fmt(m.sampleSize)), card("Success rate", m.successRate == null ? "—" : `${m.successRate}%`),
+          card("Success", fmt(m.success)), card("Failure", fmt(m.failure)), card("Partial", fmt(m.partial)),
+          card("Total files", fmt(m.totalFiles)), card("Avg. files", fmt(m.averageFiles)), card("Avg. score", m.averageOverallScore == null ? "—" : m.averageOverallScore)
+        ].join("");
+        const rows = (obj) => Object.entries(obj || {}).sort((a,b) => b[1]-a[1]).map(([k,v]) => `<tr><td>${k}</td><td>${fmt(v)}</td></tr>`).join("") || `<tr><td colspan="2">Belum ada data</td></tr>`;
+        document.querySelector("#statuses").innerHTML = rows(m.byStatus);
+        document.querySelector("#engines").innerHTML = rows(m.byEngine);
+        status.textContent = `Sumber: ${data.source} · diperbarui ${new Date(m.generatedAt).toLocaleString("id-ID")}`;
+      } catch (err) { status.textContent = `Gagal memuat metrics: ${err.message}`; status.className = "error"; }
+    }
+    document.querySelector("#refresh").addEventListener("click", refresh); refresh();
+  </script>
+</body>
+</html>

@@ -6,6 +6,8 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 
 **Repo:** https://github.com/frostbyte-lab/frostbyte-lab-game--collector
 
+**Observability:** `/observability.html` menampilkan metrik agregat capture dari KV tanpa URL atau secret.
+
 **Catatan URL:** Gunakan domain canonical di atas; domain lama `giesfrostbyte.workers.dev` tidak lagi menjadi alamat deployment aktif.
 
 ---

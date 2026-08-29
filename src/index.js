@@ -54,6 +54,7 @@ import {
   deleteSession
 } from "./history/kv.js";
 import { parseLogText } from "./history/log-parser.js";
+import { aggregateHistoryMetrics } from "./observability/metrics.js";
 const GC_BUILD_ID = "4a02a2b-replication";
 
 import {
@@ -680,6 +681,17 @@ export default {
       const saved = await putHistory(env, entry);
       if (!saved.ok && saved.reason === "no-kv") return Response.json({ ok: false, error: "NO_KV", message: "KV GC_HISTORY belum di-bind." }, { status: 503 });
       return Response.json({ ok: true, saved, entry, parsed: { ip: parsed.ip, page: parsed.page, errorCode: parsed.errorCode, time: parsed.time, userAgent: parsed.userAgent, errors: parsed.errors } });
+    }
+
+    // --- Observability metrics (aggregated; no URLs or secrets returned) ---
+    if (request.method === "GET" && url.pathname === "/api/metrics") {
+      const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 50)));
+      const history = await listHistory(env, limit);
+      return Response.json({
+        ok: true,
+        source: history.source,
+        metrics: aggregateHistoryMetrics(history.items)
+      }, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
 
     // --- History (KV) ---
