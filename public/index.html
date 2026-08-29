@@ -2774,10 +2774,26 @@
     }
     .gc-cockpit-codebody {
       display: grid;
-      grid-template-rows: auto minmax(230px, 1fr) auto;
+      grid-template-rows: auto auto minmax(190px, 1fr) auto;
       flex: 1;
       min-height: 0;
     }
+    .gc-cockpit-completeness {
+      margin: 0 14px 10px;
+      padding: 9px 10px;
+      border: 1px solid rgba(148,163,184,.16);
+      border-radius: 9px;
+      background: rgba(255,255,255,.025);
+      color: var(--text-muted);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+    .gc-cockpit-completeness strong { color: #e2e8f0; font-size: 11px; }
+    .gc-cockpit-completeness.is-ready { border-color: rgba(94,225,192,.35); }
+    .gc-cockpit-completeness.is-missing { border-color: rgba(251,191,36,.35); }
+    .gc-cockpit-checks { display:flex; flex-wrap:wrap; gap:4px 8px; margin-top:5px; }
+    .gc-cockpit-check { color: var(--accent); }
+    .gc-cockpit-check.missing { color: #fbbf24; }
     .gc-cockpit-stats {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3725,6 +3741,7 @@
                 <div class="gc-cockpit-stat"><strong id="gc-cockpit-code-count">0</strong><span>kode</span></div>
                 <div class="gc-cockpit-stat"><strong id="gc-cockpit-asset-count">0</strong><span>asset</span></div>
               </div>
+              <div id="gc-cockpit-completeness" class="gc-cockpit-completeness">Audit kelengkapan akan muncul setelah Collect selesai.<div class="gc-cockpit-checks">Preview → mainkan → auto-spin → Collect</div></div>
               <pre id="gc-cockpit-code" class="gc-cockpit-code is-empty">Belum ada paket.
 
 Setelah Collect selesai, file dan cuplikan kode akan muncul di sini.</pre>
@@ -14098,6 +14115,19 @@ function isApiLike(u){
         cl.innerHTML = (report.items || []).map(function (it) {
           return '<div class="' + (it.ok ? 'ok' : 'no') + '">' + (it.ok ? '✓' : '·') + ' ' + it.label + (it.optional && !it.ok ? ' (opsional)' : '') + '</div>';
         }).join('');
+      }
+      var cockpitAudit = document.getElementById('gc-cockpit-completeness');
+      if (cockpitAudit) {
+        var requiredItems = (report.items || []).filter(function (it) { return !it.optional; });
+        var missingItems = requiredItems.filter(function (it) { return !it.ok; });
+        var okItems = requiredItems.filter(function (it) { return it.ok; });
+        cockpitAudit.classList.toggle('is-ready', missingItems.length === 0 && requiredItems.length > 0);
+        cockpitAudit.classList.toggle('is-missing', missingItems.length > 0);
+        cockpitAudit.innerHTML = '<strong>' + (missingItems.length ? 'Paket belum lengkap' : 'Paket siap offline') + ' · ' + pct + '%</strong>' +
+          '<div class="gc-cockpit-checks">' +
+          okItems.map(function (it) { return '<span class="gc-cockpit-check">✓ ' + it.label + '</span>'; }).join('') +
+          missingItems.map(function (it) { return '<span class="gc-cockpit-check missing">! ' + it.label + '</span>'; }).join('') +
+          '</div>' + (missingItems.length ? '<div style="margin-top:5px">Mainkan fitur terkait lagi, jalankan auto-spin, lalu Collect ulang.</div>' : '<div style="margin-top:5px">kelengkapan.json dan api-map.json siap diperiksa di Workspace.</div>');
       }
       var tp = document.getElementById('gc-ct-pct');
       var tb = document.getElementById('gc-ct-bar');
