@@ -1,0 +1,7 @@
+# Default owner for all repository changes
+* @frostbyte-lab
+
+# Security and deployment changes require repository owner review
+/.github/ @frostbyte-lab
+/wrangler.jsonc @frostbyte-lab
+/src/ @frostbyte-lab
