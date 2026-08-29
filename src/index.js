@@ -31,6 +31,7 @@ import { buildUrlMap, formatStatusReport } from "./collect/url-map.js";
 import { sha256 } from "./offline/strict-collector.js";
 import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
+import { savePackageToGitHub, listGitHubPackages, downloadGitHubPackage } from "./collect/github-packages.js";
 import { runManusTask } from "./lib/manus-api.js";
 import {
   MAX_SINGLE_FILE,
@@ -528,6 +529,51 @@ export default {
           "Content-Disposition": `attachment; filename="${filename.replace(/[^\w.\-]+/g, "_")}"`,
           "X-GC-Artifact-Unwrapped": outBytes === outerBuf ? "0" : "1",
           "X-GC-Bytes": String(outBytes.byteLength)
+        }
+      });
+    }
+
+    // --- Editable collector packages di GitHub ---
+    if (request.method === "POST" && url.pathname === "/api/github/package/save") {
+      try {
+        const ct = (request.headers.get("content-type") || "").toLowerCase();
+        let bytes;
+        let options = {};
+        if (ct.includes("application/zip") || ct.includes("application/octet-stream")) {
+          bytes = new Uint8Array(await request.arrayBuffer());
+          options = {
+            packageId: request.headers.get("x-gc-package-id") || "",
+            source: request.headers.get("x-gc-source") || "collector",
+            targetUrl: request.headers.get("x-gc-target-url") || "",
+            message: request.headers.get("x-gc-commit-message") || ""
+          };
+        } else {
+          const body = await request.json();
+          const raw = String(body.base64 || "");
+          const bin = atob(raw.replace(/^data:.*?;base64,/, "").replace(/\\s/g, ""));
+          bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          options = body || {};
+        }
+        const result = await savePackageToGitHub(env, bytes, options);
+        return Response.json(result, { status: result.ok ? 200 : (result.status || 500) });
+      } catch (e) {
+        return Response.json({ ok: false, error: "Gagal membaca ZIP paket", detail: String(e?.message || e).slice(0, 300) }, { status: 400 });
+      }
+    }
+    if (request.method === "GET" && url.pathname === "/api/github/packages") {
+      const result = await listGitHubPackages(env);
+      return Response.json(result, { status: result.ok ? 200 : (result.status || 500) });
+    }
+    if (request.method === "GET" && url.pathname === "/api/github/package/download") {
+      const result = await downloadGitHubPackage(env, url.searchParams.get("id") || "");
+      if (!result.ok) return Response.json(result, { status: result.status || 404 });
+      return new Response(result.bytes, {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="${result.filename}"`,
+          "X-GC-Package-Id": result.package_id,
+          "X-GC-Package-Branch": result.branch
         }
       });
     }

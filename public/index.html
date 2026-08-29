@@ -3658,6 +3658,8 @@
           <button type="button" class="btn btn-secondary btn-sm" id="btn-analisa-game" onclick="runAnalisaGame()" title="Analisa dependency → offline sandbox">Analisa Game</button>
           <button type="button" class="btn btn-primary btn-sm" id="btn-offline-pipeline" onclick="runFullOfflinePipeline()" title="Collect→Analisa→Dep map→Sandbox→Preview">Pipeline Offline</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Login AI — sesi API">Login AI</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-github-save-package" onclick="gcSaveCurrentWorkspaceToGitHub()" title="Simpan paket hasil edit ke GitHub">Simpan ke GitHub</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-github-load-package" onclick="gcLoadGitHubPackage()" title="Muat paket dari GitHub">Muat GitHub</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
         </div>
       </div>
@@ -11235,6 +11237,77 @@ function isApiLike(u){
       return downloadWorkspaceZip('game-repacked.zip');
     }
 
+    /** Simpan ZIP hasil collect/edit ke branch editable GitHub tanpa menghapus unduhan lokal. */
+    async function gcSaveZipToGitHub(blob, source, targetUrl) {
+      if (!blob || !blob.size) return null;
+      var host = '';
+      try { host = new URL(targetUrl || document.getElementById('url')?.value || '').hostname; } catch (_) {}
+      var stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+      var id = ('game-' + (host || 'package') + '-' + stamp).toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 80);
+      try {
+        var res = await fetch('/api/github/package/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/zip',
+            'X-GC-Package-Id': id,
+            'X-GC-Source': source || 'collector',
+            'X-GC-Target-Url': targetUrl || ''
+          },
+          body: blob
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        window.__gcLastGitHubPackage = data;
+        appendLog('Salinan GitHub tersimpan: ' + data.path + ' · branch ' + data.branch, 'ok');
+        return data;
+      } catch (e) {
+        appendLog('Salinan GitHub gagal: ' + (e && e.message || e) + ' · ZIP lokal tetap tersedia', 'warn');
+        return null;
+      }
+    }
+
+    async function gcSaveCurrentWorkspaceToGitHub() {
+      if (!currentZip) { alert('Load ZIP dulu di Workspace.'); return null; }
+      var btn = document.getElementById('btn-github-save-package');
+      if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
+      try {
+        for (const [p, content] of openFiles.entries()) currentZip.file(p, content);
+        var blob = await currentZip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        var result = await gcSaveZipToGitHub(blob, 'workspace-edit', document.getElementById('url')?.value || '');
+        if (result && result.repo_url) window.open(result.repo_url, '_blank', 'noopener');
+        return result;
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Simpan ke GitHub'; }
+      }
+    }
+
+    async function gcLoadGitHubPackage() {
+      var listRes = await fetch('/api/github/packages');
+      var list = await listRes.json().catch(function () { return {}; });
+      if (!listRes.ok || !list.ok || !list.packages || !list.packages.length) {
+        alert((list.error || 'Belum ada paket di GitHub') + '.');
+        return null;
+      }
+      var choices = list.packages.map(function (p, i) { return (i + 1) + '. ' + p.package_id; }).join('\\n');
+      var answer = window.prompt('Pilih nomor paket GitHub:\\n\\n' + choices, '1');
+      var ix = Math.max(0, (parseInt(answer || '1', 10) || 1) - 1);
+      var selected = list.packages[ix];
+      if (!selected) return null;
+      var res = await fetch('/api/github/package/download?id=' + encodeURIComponent(selected.package_id));
+      if (!res.ok) { alert('Gagal memuat paket GitHub (HTTP ' + res.status + ').'); return null; }
+      var blob = await res.blob();
+      var input = document.getElementById('zip-input');
+      if (!input || typeof DataTransfer === 'undefined') { alert('Browser tidak mendukung pemuatan otomatis. Unduh paket secara manual.'); return null; }
+      var transfer = new DataTransfer();
+      transfer.items.add(new File([blob], selected.package_id + '.zip', { type: 'application/zip' }));
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      appendLog('Paket GitHub dimuat ke Workspace: ' + selected.package_id, 'ok');
+      return selected;
+    }
+    window.gcSaveCurrentWorkspaceToGitHub = gcSaveCurrentWorkspaceToGitHub;
+    window.gcLoadGitHubPackage = gcLoadGitHubPackage;
+
     /** Unduh seluruh ZIP Workspace (hasil edit / custom) — hosting manual di luar Collector */
     async function downloadWorkspaceZip(filename) {
       if (!currentZip) {
@@ -12920,6 +12993,10 @@ function isApiLike(u){
 
           const blob = await res.blob();
           try {
+            var cfSaved = await gcSaveZipToGitHub(blob, 'cloudflare-capture', gameUrl);
+            if (cfSaved) statusEl.textContent = 'Status: ZIP siap · salinan GitHub tersimpan di ' + cfSaved.path;
+          } catch (_) {}
+          try {
             gcRunOfflineReadinessAssistant(blob, 'game-package.zip', { source: 'Cloudflare Capture', urlHost: new URL(gameUrl).host, collectMeta: window.__gcLastCollectMeta }).catch(function () {});
           } catch (_) {}
           const a = document.createElement('a');
@@ -13156,6 +13233,10 @@ function isApiLike(u){
                   return;
                 }
                 var sizeMb = (blob.size / 1024 / 1024).toFixed(1);
+                try {
+                  var ghSaved = await gcSaveZipToGitHub(blob, 'github-actions-collect', document.getElementById('url')?.value || '');
+                  if (ghSaved) statusEl.textContent = 'Status: ZIP siap · salinan GitHub tersimpan di ' + ghSaved.path;
+                } catch (_) {}
                 try {
                   gcRunOfflineReadinessAssistant(blob, 'game-resources.zip', { source: 'GitHub Actions Collect', urlHost: new URL(document.getElementById('url')?.value || 'https://unknown.invalid').host, collectMeta: { runId: runId, github: true } }).catch(function () {});
                 } catch (_) {}
