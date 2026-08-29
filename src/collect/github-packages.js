@@ -92,6 +92,7 @@ export async function savePackageToGitHub(env, bytes, options = {}) {
   if (!ref.ok) return { ok: false, status: ref.status, error: "Gagal memperbarui branch paket", detail: ref.data };
   return {
     ok: true, package_id: id, branch: c.branch, path: `${prefix}/game-resources.zip`, bytes: data.byteLength,
+    saved_at: new Date().toISOString(), source: options.source || "collector", target_url: options.targetUrl || "",
     commit: commit.data.sha, commit_url: `https://github.com/${c.owner}/${c.repo}/commit/${commit.data.sha}`,
     repo_url: `https://github.com/${c.owner}/${c.repo}/tree/${encodeURIComponent(c.branch)}/${prefix}`
   };
@@ -106,10 +107,20 @@ export async function listGitHubPackages(env) {
   if (!commit.ok) return { ok: false, status: commit.status, error: "Gagal membaca branch paket" };
   const tree = await ghFetch(env, `/repos/${c.owner}/${c.repo}/git/trees/${commit.data.tree.sha}?recursive=1`);
   if (!tree.ok) return { ok: false, status: tree.status, error: "Gagal membaca daftar paket" };
-  const packages = (tree.data.tree || []).filter(x => /^packages\/[^/]+\/game-resources\.zip$/i.test(x.path)).map(x => ({
-    package_id: x.path.split("/")[1], path: x.path, sha: x.sha, size: x.size || 0,
-    branch: c.branch, repo_url: `https://github.com/${c.owner}/${c.repo}/tree/${encodeURIComponent(c.branch)}/packages/${x.path.split("/")[1]}`
-  }));
+  const packages = [];
+  for (const x of (tree.data.tree || []).filter(x => /^packages\/[^/]+\/game-resources\.zip$/i.test(x.path)).slice(-50).reverse()) {
+    const packageId = x.path.split("/")[1];
+    let meta = {};
+    try {
+      const mf = await ghFetch(env, `/repos/${c.owner}/${c.repo}/contents/packages/${encodeURIComponent(packageId)}/package.json?ref=${encodeURIComponent(c.branch)}`);
+      if (mf.ok && mf.data?.content) meta = JSON.parse(new TextDecoder().decode(fromB64(mf.data.content)));
+    } catch {}
+    packages.push({
+      package_id: packageId, path: x.path, sha: x.sha, size: x.size || 0,
+      saved_at: meta.saved_at || null, source: meta.source || null, target_url: meta.target_url || null,
+      branch: c.branch, repo_url: `https://github.com/${c.owner}/${c.repo}/tree/${encodeURIComponent(c.branch)}/packages/${packageId}`
+    });
+  }
   return { ok: true, branch: c.branch, packages };
 }
 
