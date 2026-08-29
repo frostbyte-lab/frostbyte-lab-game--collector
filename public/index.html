@@ -2671,6 +2671,11 @@
     #panel-collect.active .collect-hero p {
       font-size: 12px;
     }
+    .gc-primary-flow { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:14px; }
+    .gc-primary-preview { min-width:210px; font-weight:700; letter-spacing:.02em; }
+    .gc-primary-stop { min-width:170px; border-color:rgba(251,191,36,.5); color:#fbbf24; }
+    .gc-primary-progress { color:var(--text-muted); font-size:11px; min-width:210px; text-align:left; }
+    .gc-legacy-actions { display:none !important; }
     .gc-cockpit {
       display: grid;
       grid-template-columns: minmax(0, 1.12fr) minmax(360px, .88fr);
@@ -3703,7 +3708,12 @@
         <div class="collect-hero">
           <img src="/frostbyte-logo.png" alt="Frostbyte" class="hero-logo">
           <h2>Game Collector Pro</h2>
-          <p>Collect game resources from web browsers and preview them offline. Powered by Frostbyte Technologies.</p>
+          <p>Preview, capture, audit, dan siapkan paket offline dari satu alur.</p>
+          <div class="gc-primary-flow" aria-label="Kontrol capture utama">
+            <button type="button" class="btn btn-primary gc-primary-preview" id="gc-primary-preview" onclick="gcUnifiedPreview()">▶ PREVIEW &amp; CAPTURE</button>
+            <button type="button" class="btn btn-secondary gc-primary-stop" id="gc-primary-stop" onclick="gcUnifiedStop()" hidden>■ STOP &amp; FINALIZE</button>
+            <span class="gc-primary-progress" id="gc-primary-progress">0% · Belum ada sesi capture</span>
+          </div>
         </div>
 
         <div class="gc-cockpit" aria-label="Preview dan Kode & Asset">
@@ -3759,10 +3769,10 @@ Setelah Collect selesai, file dan cuplikan kode akan muncul di sini.</pre>
             <label class="gc-url-label" for="url"><span>URL</span><span>Tempel link game yang diizinkan untuk dikoleksi</span></label>
             <input id="url" type="url" placeholder="https://example.com/game" autocomplete="url">
           </div>
-          <div class="gc-url-actions">
-              <button type="button" class="btn btn-secondary" onclick="gcCockpitStartManualPreview()" title="Muat game agar dapat dimainkan sebelum capture">Preview &amp; Mainkan</button>
-              <button type="button" class="btn btn-primary" onclick="gcCockpitCollect('cloudflare')" title="Collect setelah preview manual selesai">COLLECT</button>
-              <button type="button" class="btn btn-secondary" onclick="gcCockpitCollect('github')" title="Collect melalui GitHub Actions setelah preview manual selesai">GitHub</button>
+          <div class="gc-url-actions gc-legacy-actions" aria-hidden="true">
+              <button type="button" class="btn btn-secondary" onclick="gcCockpitStartManualPreview()">Preview &amp; Mainkan</button>
+              <button type="button" class="btn btn-primary" onclick="gcCockpitCollect('cloudflare')">COLLECT</button>
+              <button type="button" class="btn btn-secondary" onclick="gcCockpitCollect('github')">GitHub</button>
           </div>
         </div>
 
@@ -5282,6 +5292,47 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       try { new URL(value); } catch (_) { alert('URL tidak valid (harus http/https).'); return null; }
       return value;
     }
+
+    var __gcUnifiedCaptureRunning = false;
+    var __gcUnifiedCapturePromise = null;
+    function gcSetUnifiedCaptureUi(running, label) {
+      var start = document.getElementById('gc-primary-preview');
+      var stop = document.getElementById('gc-primary-stop');
+      var progress = document.getElementById('gc-primary-progress');
+      if (start) { start.disabled = !!running; start.textContent = running ? '● CAPTURE BERJALAN' : '▶ PREVIEW & CAPTURE'; }
+      if (stop) stop.hidden = !running;
+      if (progress && label) progress.textContent = label;
+    }
+    function gcUnifiedPreview() {
+      if (__gcUnifiedCaptureRunning) return;
+      var started = gcCockpitStartManualPreview();
+      if (!started) return;
+      __gcUnifiedCaptureRunning = true;
+      gcSetUnifiedCaptureUi(true, '0% · Preview aktif · resource akan muncul saat capture');
+      try { appendLog('Sesi Preview & Capture dimulai. Mainkan game; resource yang tertangkap akan ditampilkan.', 'info'); } catch (_) {}
+      __gcUnifiedCapturePromise = Promise.resolve().then(function () { return runCollect(); }).finally(function () {
+        __gcUnifiedCaptureRunning = false;
+        __gcUnifiedCapturePromise = null;
+        gcSetUnifiedCaptureUi(false, 'Sesi selesai · periksa audit dan Workspace');
+      });
+      return __gcUnifiedCapturePromise;
+    }
+    async function gcUnifiedStop() {
+      var progressId = window.__gcActiveProgressId;
+      if (!progressId) {
+        gcSetUnifiedCaptureUi(false, 'Tidak ada sesi capture aktif');
+        return;
+      }
+      gcSetUnifiedCaptureUi(false, 'Menghentikan capture dan menyiapkan hasil yang sudah tertangkap…');
+      try {
+        await fetch('/api/collect/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ progressId: progressId }) });
+        try { appendLog('Capture dihentikan oleh pengguna. Menunggu hasil parsial untuk audit.', 'warn'); } catch (_) {}
+      } catch (_) {
+        try { appendLog('Permintaan Stop gagal dikirim; sesi mungkin tetap berjalan di server.', 'warn'); } catch (_) {}
+      }
+    }
+    window.gcUnifiedPreview = gcUnifiedPreview;
+    window.gcUnifiedStop = gcUnifiedStop;
 
     function gcCockpitStartManualPreview() {
       const value = gcCockpitReadUrl();
@@ -13643,8 +13694,10 @@ function isApiLike(u){
       try { gcPipelineSet('capture', 'run', 'Wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + (opts.unlimited ? ' · unlimited' : '')); } catch (_) {}
       statusEl.textContent = 'Status: [2/6 Capture] Collecting · wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + '...';
       let progressTimer = null;
+      let progressId = null;
       try {
-        const progressId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        progressId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        window.__gcActiveProgressId = progressId;
         gcShowLiveCapture(true);
         gcRenderLiveFiles([], 0, 2);
         // Poll progress + live file list
@@ -13663,6 +13716,7 @@ function isApiLike(u){
             if (pd) {
               gcRenderLiveFiles(pd.recentFiles || [], pd.files || 0, pd.pct || 0);
               gcUpdateCollectProgress({ pct: pd.pct || 0, fileCount: pd.files || 0, recentFiles: pd.recentFiles || [] }, pd.label || pd.phase || 'capture');
+              try { gcSetUnifiedCaptureUi(true, (pd.pct || 0) + '% · ' + (pd.files || 0) + ' resource tertangkap · ' + (pd.label || pd.phase || 'capture')); } catch (_) {}
               if (pd.done && pd.completeness && pd.completeness.incomplete) {
                 gcShowIncomplete(pd.completeness, pd.suggestions || []);
               }
@@ -13708,12 +13762,13 @@ function isApiLike(u){
               if (cfSaved) appendLog('Salinan GitHub tersimpan: ' + cfSaved.path, 'ok');
             }).catch(function () {});
           } catch (_) {}
+          var autoPackageName = gcAutoPackageName(gameUrl);
           try {
-            gcRunOfflineReadinessAssistant(blob, 'game-package.zip', { source: 'Cloudflare Capture', urlHost: new URL(gameUrl).host, collectMeta: window.__gcLastCollectMeta }).catch(function () {});
+            gcRunOfflineReadinessAssistant(blob, autoPackageName, { source: 'Cloudflare Capture', urlHost: new URL(gameUrl).host, collectMeta: window.__gcLastCollectMeta }).catch(function () {});
           } catch (_) {}
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
-          a.download = 'game-package.zip';
+          a.download = autoPackageName;
           document.body.appendChild(a);
           a.click();
           a.remove();
@@ -13724,7 +13779,7 @@ function isApiLike(u){
             const zipInput = document.getElementById('zip-input');
             if (zipInput) {
               const transfer = new DataTransfer();
-              transfer.items.add(new File([blob], 'game-package.zip', { type: 'application/zip' }));
+              transfer.items.add(new File([blob], autoPackageName, { type: 'application/zip' }));
               zipInput.files = transfer.files;
               zipInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
@@ -13767,7 +13822,7 @@ function isApiLike(u){
           statusEl.textContent = 'Status: Mengunduh ZIP...';
           const a = document.createElement('a');
           a.href = data.downloadUrl;
-          a.download = 'game-package.zip';
+          a.download = gcAutoPackageName(gameUrl);
           document.body.appendChild(a);
           a.click();
           a.remove();
@@ -13787,6 +13842,7 @@ function isApiLike(u){
         try { gcPipelineSet('capture', 'err', detail); } catch (_) {}
       } finally {
         if (progressTimer) clearInterval(progressTimer);
+        if (window.__gcActiveProgressId === progressId) window.__gcActiveProgressId = null;
       }
     }
 
@@ -14162,6 +14218,13 @@ function isApiLike(u){
       if (!/\.zip$/i.test(n)) n += '.zip';
       return n.replace(/[\\/:*?"<>|]+/g, '_');
     }
+    function gcAutoPackageName(gameUrl) {
+      var host = 'game';
+      try { host = new URL(gameUrl || '').hostname.replace(/^www\./i, '').replace(/[^a-z0-9.-]+/gi, '-').replace(/-+/g, '-').slice(0, 48) || 'game'; } catch (_) {}
+      var stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
+      return host + '-offline-' + stamp + '.zip';
+    }
+    window.gcAutoPackageName = gcAutoPackageName;
     async function gcDownloadBlobNamed(blob, fallbackName) {
       var name = gcGetDownloadName() || fallbackName || 'game-resources.zip';
       try {
