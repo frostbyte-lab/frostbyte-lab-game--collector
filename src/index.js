@@ -236,9 +236,14 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // Build probe — sengaja no-store agar tidak tertutup cache edge.
+    if (request.method === "GET" && url.pathname === "/api/build") {
+      return Response.json({ ok: true, service: "game-collector-pro", build: GC_BUILD_ID }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
+
     // Health
     if (request.method === "GET" && url.pathname === "/api/health") {
-      return Response.json({
+      const health = {
         ok: true,
         service: "game-collector-pro",
         version: "4.5-replication",
@@ -257,7 +262,18 @@ export default {
           progressKV: hasProgressStore(env),
           assetProxyMaxMB: 12
         }
-      });
+      };
+      return Response.json(health, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
+
+    // Alias fresh untuk menghindari HTML root lama yang mungkin masih berada di edge cache.
+    if (request.method === "GET" && (url.pathname === "/app" || url.pathname === "/app/")) {
+      const indexRequest = new Request(new URL("/index.html", request.url), request);
+      const appResponse = await env.ASSETS.fetch(indexRequest);
+      const headers = new Headers(appResponse.headers);
+      headers.set("Cache-Control", "no-store, max-age=0");
+      headers.set("X-GC-Build", GC_BUILD_ID);
+      return new Response(appResponse.body, { status: appResponse.status, statusText: appResponse.statusText, headers });
     }
 
     // Asset proxy same-origin (tanpa R2) — Hybrid online
