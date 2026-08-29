@@ -8100,6 +8100,15 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       return found;
     }
 
+    function gcFilterUnresolvedAssetUrls(urls) {
+      const localIndex = typeof gcBuildLocalAssetIndex === 'function' ? gcBuildLocalAssetIndex() : null;
+      if (!localIndex || typeof gcResolveLocalForUrl !== 'function') return urls || [];
+      return (urls || []).filter(function (item) {
+        const isAsset = item && (item.status === 'ASSET' || item.kind === 'ASSET' || item.kind === 'asset');
+        return !isAsset || !gcResolveLocalForUrl(item.url, '', localIndex);
+      });
+    }
+
     function formatUrlScanIssues(urls, fileLabel) {
       const issues = [];
       if (!urls.length) return issues;
@@ -8156,32 +8165,25 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (!/<html[\s>]/i.test(code) && code.length > 50) issues.push('HTML: tag <html> tidak ditemukan');
         const abs = extractAbsoluteUrls(code);
         if (abs.length) {
-          const localIndex = typeof gcBuildLocalAssetIndex === 'function' ? gcBuildLocalAssetIndex() : null;
-          const unresolved = abs.filter(function (item) {
-            const isAsset = item && (item.status === 'ASSET' || item.kind === 'ASSET' || item.kind === 'asset');
-            if (!isAsset || !localIndex || typeof gcResolveLocalForUrl !== 'function') return true;
-            return !gcResolveLocalForUrl(item.url, '', localIndex);
-          });
+          const unresolved = gcFilterUnresolvedAssetUrls(abs);
           if (unresolved.length) formatUrlScanIssues(unresolved, currentFile).forEach(function (line) { issues.push(line); });
         }
         if (/frame-bust|top\.location|parent\.location/i.test(code)) issues.push('HTML/JS: frame-buster terdeteksi — bisa di-neutralize');
       } else if (file.endsWith('.js') || file.endsWith('.mjs')) {
         if (/\bundefined is not a function\b/i.test(code)) issues.push('JS: pola error umum di kode');
-        const abs = extractAbsoluteUrls(code);
-        if (abs.length) {
-          formatUrlScanIssues(abs, currentFile).forEach(function (line) { issues.push(line); });
-        }
+        const abs = gcFilterUnresolvedAssetUrls(extractAbsoluteUrls(code));
+        if (abs.length) formatUrlScanIssues(abs, currentFile).forEach(function (line) { issues.push(line); });
         const open = (code.match(/\{/g) || []).length;
         const close = (code.match(/\}/g) || []).length;
         if (open !== close) issues.push('JS: jumlah { dan } tidak seimbang (' + open + ' vs ' + close + ')');
       } else if (file.endsWith('.css')) {
-        const abs = extractAbsoluteUrls(code);
+        const abs = gcFilterUnresolvedAssetUrls(extractAbsoluteUrls(code));
         if (abs.length) formatUrlScanIssues(abs, currentFile).forEach(function (line) { issues.push(line); });
         const open = (code.match(/\{/g) || []).length;
         const close = (code.match(/\}/g) || []).length;
         if (open !== close) issues.push('CSS: jumlah { dan } tidak seimbang');
       } else if (code.trim()) {
-        const abs = extractAbsoluteUrls(code);
+        const abs = gcFilterUnresolvedAssetUrls(extractAbsoluteUrls(code));
         if (abs.length) formatUrlScanIssues(abs, currentFile).forEach(function (line) { issues.push(line); });
       }
       if (!code.trim()) issues.push('File kosong');
@@ -8199,7 +8201,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (currentFile && String(currentFile).replace(/\\/g, '/') === entry) return extra;
       try {
         const code = openFiles.has(entry) ? openFiles.get(entry) : await zipFileMap[entry].async('string');
-        const abs = extractAbsoluteUrls(code);
+        const abs = gcFilterUnresolvedAssetUrls(extractAbsoluteUrls(code));
         if (abs.length) formatUrlScanIssues(abs, entry).forEach(function (line) { extra.push(line); });
       } catch (_) {}
       return extra;
