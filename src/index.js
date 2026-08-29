@@ -266,20 +266,6 @@ export default {
       return Response.json(health, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
 
-    // Alias fresh untuk menghindari HTML root lama yang mungkin masih berada di edge cache.
-    if (request.method === "GET" && (url.pathname === "/app" || url.pathname === "/app/")) {
-      try {
-        const indexRequest = new Request(new URL("/index.html", request.url).toString(), { method: "GET", headers: request.headers });
-        const appResponse = await env.ASSETS.fetch(indexRequest);
-        const headers = new Headers(appResponse.headers);
-        headers.set("Cache-Control", "no-store, max-age=0");
-        headers.set("X-GC-Build", GC_BUILD_ID);
-        return new Response(appResponse.body, { status: appResponse.status, statusText: appResponse.statusText, headers });
-      } catch (error) {
-        return new Response("App alias error: " + String(error?.message || error).slice(0, 180), { status: 502, headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=UTF-8" } });
-      }
-    }
-
     // Asset proxy same-origin (tanpa R2) — Hybrid online
     if (
       (request.method === "GET" || request.method === "HEAD") &&
