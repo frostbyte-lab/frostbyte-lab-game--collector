@@ -11245,6 +11245,8 @@ function isApiLike(u){
       var stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
       var id = ('game-' + (host || 'package') + '-' + stamp).toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 80);
       try {
+        var saveCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var saveTimeout = setTimeout(function () { try { if (saveCtrl) saveCtrl.abort(); } catch (_) {} }, 60000);
         var res = await fetch('/api/github/package/save', {
           method: 'POST',
           headers: {
@@ -11253,8 +11255,10 @@ function isApiLike(u){
             'X-GC-Source': source || 'collector',
             'X-GC-Target-Url': targetUrl || ''
           },
-          body: blob
+          body: blob,
+          signal: saveCtrl ? saveCtrl.signal : undefined
         });
+        clearTimeout(saveTimeout);
         var data = await res.json().catch(function () { return {}; });
         if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
         window.__gcLastGitHubPackage = data;
@@ -12992,9 +12996,11 @@ function isApiLike(u){
           window.__gcLastCollectMeta = { stillMissing, gameFiles, apiFiles, totalFiles, overall, incomplete };
 
           const blob = await res.blob();
+          // GitHub disimpan di latar belakang agar unduhan lokal tidak tertahan.
           try {
-            var cfSaved = await gcSaveZipToGitHub(blob, 'cloudflare-capture', gameUrl);
-            if (cfSaved) statusEl.textContent = 'Status: ZIP siap · salinan GitHub tersimpan di ' + cfSaved.path;
+            gcSaveZipToGitHub(blob, 'cloudflare-capture', gameUrl).then(function (cfSaved) {
+              if (cfSaved) appendLog('Salinan GitHub tersimpan: ' + cfSaved.path, 'ok');
+            }).catch(function () {});
           } catch (_) {}
           try {
             gcRunOfflineReadinessAssistant(blob, 'game-package.zip', { source: 'Cloudflare Capture', urlHost: new URL(gameUrl).host, collectMeta: window.__gcLastCollectMeta }).catch(function () {});
@@ -13233,9 +13239,11 @@ function isApiLike(u){
                   return;
                 }
                 var sizeMb = (blob.size / 1024 / 1024).toFixed(1);
+                // GitHub disimpan di latar belakang; tahap unduh/Workspace tetap segera berjalan.
                 try {
-                  var ghSaved = await gcSaveZipToGitHub(blob, 'github-actions-collect', document.getElementById('url')?.value || '');
-                  if (ghSaved) statusEl.textContent = 'Status: ZIP siap · salinan GitHub tersimpan di ' + ghSaved.path;
+                  gcSaveZipToGitHub(blob, 'github-actions-collect', document.getElementById('url')?.value || '').then(function (ghSaved) {
+                    if (ghSaved) appendLog('Salinan GitHub tersimpan: ' + ghSaved.path, 'ok');
+                  }).catch(function () {});
                 } catch (_) {}
                 try {
                   gcRunOfflineReadinessAssistant(blob, 'game-resources.zip', { source: 'GitHub Actions Collect', urlHost: new URL(document.getElementById('url')?.value || 'https://unknown.invalid').host, collectMeta: { runId: runId, github: true } }).catch(function () {});
