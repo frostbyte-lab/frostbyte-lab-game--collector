@@ -1,5 +1,5 @@
 /**
- * Batas platform Worker + mode unlimited (R2 / GitHub Actions).
+ * Batas platform Worker + mode besar melalui GitHub Actions.
  * Unlimited produk ≠ infinite RAM satu request.
  */
 
@@ -24,19 +24,6 @@ export const MAX_FILL_PASSES_CAP = 12;
 
 export function resolveLimits(env, opts = {}) {
   const unlimited = !!(opts.unlimited || opts.noLimit || opts.mode === "unlimited");
-  const hasR2 = !!(env && env.COLLECTOR_BUCKET);
-  if (unlimited && hasR2) {
-    return {
-      mode: "unlimited-r2",
-      maxSingleFile: UNLIMITED.maxSingleFile,
-      maxRawTotal: UNLIMITED.maxRawTotal,
-      maxZipResponse: UNLIMITED.maxZipResponse,
-      fillPerPass: UNLIMITED.fillPerPass,
-      fillPasses: UNLIMITED.fillPasses,
-      maxWaitSec: UNLIMITED.maxWaitSec,
-      maxSpins: UNLIMITED.maxSpins
-    };
-  }
   if (unlimited) {
     return {
       mode: "unlimited-worker",
@@ -69,7 +56,7 @@ export function tooLargeResponse(extra = {}) {
       error: "TOO_LARGE",
       code: "TOO_LARGE",
       message:
-        "Paket melebihi kapasitas Worker. Aktifkan R2 atau Collect via GitHub Actions (mode unlimited).",
+        "Paket melebihi kapasitas Worker. Gunakan Collect via GitHub Actions untuk package besar.",
       suggest: "github-actions",
       limits: {
         maxSingleFileMB: Math.round(MAX_SINGLE_FILE / 1024 / 1024),

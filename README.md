@@ -53,7 +53,7 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 - [x] **KETERANGAN.md** + **keterangan.json** (host, endpoint, total per kategori)
 - [x] **Auto-lengkapi** referensi yang belum terunduh (`fillMissingAssets`, max 40) + `kelengkapan.json`
 - [x] Header meta: `X-GC-Game-Files`, `X-GC-Api-Files`, `X-GC-Fill-Ok`, dll.
-- [x] ZIP binary langsung (tanpa R2); R2 opsional jika bucket di-bind
+- [x] ZIP binary langsung; package besar diarahkan ke GitHub Actions artifact
 
 ### Analisis slot (A.1–A.3)
 - [x] **Skor kelengkapan per kategori** di `kelengkapan.json` + panel UI: Symbols, Paytable, Audio events, Atlas/Spine, Features, Engine (0–100 + overall)
@@ -106,7 +106,7 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 ### Catatan batasan yang sudah disepakati di produk
 - Hanya resource yang sempat dikirim ke browser saat collect
 - API di `server/` = **snapshot**, bukan backend live
-- Tanpa R2, ZIP besar (>~30MB) rawan gagal
+- Tanpa R2, ZIP besar (>~30MB) diproses melalui GitHub Actions artifact
 - Logic hilang = game tidak bisa dimainkan
 - Offline 100% hanya realistis untuk game client-side lengkap
 
@@ -145,7 +145,7 @@ npm run deploy
 curl -s https://<worker>.workers.dev/api/health
 ```
 
-Secret: `GITHUB_TOKEN`. Binding: Browser `MYBROWSER`, KV `GC_HISTORY`, AI (opsional). R2 sengaja opsional.
+Secret: `GITHUB_TOKEN`. Binding: Browser `MYBROWSER`, KV `GC_HISTORY`, AI (opsional). GitHub Actions menjadi jalur package besar.
 
 ---
 
@@ -164,9 +164,9 @@ cd mobile-capacitor && npm install && npx cap add android && npx cap sync && npx
 
 ## Lanjut kerja (opsional / sengaja ditunda)
 
-1. R2 untuk ZIP sangat besar di Worker  
-2. Progress SSE penuh (sekarang poll)  
-3. Custom domain  
+1. Chunked GitHub artifact untuk ZIP sangat besar
+2. Progress SSE penuh (sekarang poll)
+3. Custom domain
 4. Mock per-provider lebih dalam (snapshot collect tetap prioritas)
 
 *Update catatan ini setiap selesai satu item prioritas.*

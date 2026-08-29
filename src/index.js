@@ -252,13 +252,10 @@ export default {
         github: Boolean(env.GITHUB_TOKEN),
         assetProxy: true,
         limits: {
-          mode: env.COLLECTOR_BUCKET
-            ? "worker + r2-large + github-actions-fallback"
-            : "worker-small + github-actions-large",
+          mode: "worker-small + github-actions-large",
           maxSingleFileMB: Math.round(MAX_SINGLE_FILE / 1024 / 1024),
           maxRawTotalMB: Math.round(MAX_RAW_TOTAL / 1024 / 1024),
           maxZipResponseMB: Math.round(MAX_ZIP_RESPONSE / 1024 / 1024),
-          r2: Boolean(env.COLLECTOR_BUCKET),
           historyKV: hasKV(env),
           progressKV: hasProgressStore(env),
           assetProxyMaxMB: 12
@@ -301,32 +298,6 @@ export default {
         return Response.json({ ok: false, error: "CODE_REQUIRED" }, { status: 400 });
       }
       return analyzeWithAI(env, body);
-    }
-
-    // --- R2 download (Poin 1) — stream ZIP besar dari R2 ---
-    if (request.method === "GET" && url.pathname === "/api/r2/download") {
-      const key = url.searchParams.get("key");
-      if (!key || key.includes("..") || key.startsWith("/")) {
-        return Response.json({ error: "key tidak valid" }, { status: 400 });
-      }
-      if (!env.COLLECTOR_BUCKET) {
-        return Response.json({ error: "R2 belum di-bind (COLLECTOR_BUCKET)" }, { status: 503 });
-      }
-      const obj = await env.COLLECTOR_BUCKET.get(key);
-      if (!obj) {
-        return Response.json({ error: "File tidak ditemukan di R2" }, { status: 404 });
-      }
-      const filename = key.split("/").pop() || "game-package.zip";
-      return new Response(obj.body, {
-        status: 200,
-        headers: {
-          "Content-Type": obj.httpMetadata?.contentType || "application/zip",
-          "Content-Disposition": obj.httpMetadata?.contentDisposition ||
-            `attachment; filename="${filename}"`,
-          "Cache-Control": "private, max-age=3600",
-          "X-GC-Via": "r2"
-        }
-      });
     }
 
 
@@ -1454,7 +1425,6 @@ export default {
           const localPath = name.startsWith(String(manifest.length + 1).padStart(4, "0"))
             ? `${folder}/${name}`
             : `${folder}/${String(manifest.length + 1).padStart(4, "0")}-${name}`;
-          const r2Key = `${id}/${localPath}`;
 
           // Poin 4: semantik API
           let apiMeta = null;
@@ -1475,12 +1445,6 @@ export default {
                 order: ++apiCaptureOrder
               });
             } catch {}
-          }
-
-          if (env.COLLECTOR_BUCKET) {
-            await env.COLLECTOR_BUCKET.put(r2Key, buffer, {
-              httpMetadata: { contentType: ct || "application/octet-stream" }
-            });
           }
 
           zipFiles[localPath] = new Uint8Array(buffer);
@@ -2242,11 +2206,9 @@ ${formatCollectAuditSummary(collectAudit)}
 
       // Hitung ukuran raw (masih di memory)
       const rawTotal = sumZipFilesBytes(zipFiles);
-      const hasR2 = Boolean(env.COLLECTOR_BUCKET);
 
-      // Guard raw total — hanya hard-fail jika TIDAK ada R2
-      // (dengan R2 kita tetap coba packaging, memory tetap batas praktis ~50-60MB)
-      if (!hasR2 && rawTotal > MAX_RAW_TOTAL * 1.15) {
+      // GitHub-only architecture: oversize packages use GitHub Actions fallback.
+      if (rawTotal > MAX_RAW_TOTAL * 1.15) {
         return tooLargeResponse({
           id,
           totalFiles: manifest.length,
@@ -2259,22 +2221,6 @@ ${formatCollectAuditSummary(collectAudit)}
       // Buat ZIP (level 7: lebih kecil, sedikit lebih CPU)
       await report(90, "zip", "Packaging ZIP...", { files: manifest.length });
       const zipData = zipSync(zipFiles, { level: 7 });
-      const zipKey = `${id}/game-package.zip`;
-
-      // Simpan ke R2 jika bucket sudah di-bind (selalu, baik kecil maupun besar)
-      if (hasR2) {
-        try {
-          await env.COLLECTOR_BUCKET.put(zipKey, zipData, {
-            httpMetadata: {
-              contentType: "application/zip",
-              contentDisposition: `attachment; filename="game-package-${id}.zip"`
-            }
-          });
-        } catch (r2err) {
-          console.error("R2 put failed:", r2err);
-          // Lanjut; kalau ZIP kecil tetap bisa kirim binary
-        }
-      }
 
       // History server-side (KV) jika tersedia
       try {
@@ -2289,7 +2235,7 @@ ${formatCollectAuditSummary(collectAudit)}
             overallScore: analysis?.scores?.overall ?? null,
             stillMissing: (fillReport.stillMissing || []).slice(0, 30),
             message: resumeSessionId ? `session ${resumeSessionId}` : null,
-            via: hasR2 && zipData.byteLength > MAX_ZIP_RESPONSE ? "r2" : "worker"
+            via: "worker-or-github-actions"
           });
         }
       } catch {}
@@ -2439,37 +2385,8 @@ ${formatCollectAuditSummary(collectAudit)}
         "X-GC-Select-Exclude": rawExclude.length ? rawExclude.join(",") : ""
       };
 
-      // ZIP terlalu besar untuk response Worker → pakai R2 (Poin 1)
+      // GitHub-only fallback: Worker never stores packages in R2.
       if (zipData.byteLength > MAX_ZIP_RESPONSE) {
-        if (hasR2) {
-          const downloadUrl = `/api/r2/download?key=${encodeURIComponent(zipKey)}`;
-          return Response.json(
-            {
-              ok: true,
-              via: "r2",
-              id,
-              downloadUrl,
-              zipSize: zipData.byteLength,
-              files: manifest.length,
-              gameFiles: gameCount,
-              apiFiles: apiCount,
-              serverFiles: serverCount,
-              stillMissing: (fillReport.stillMissing || []).length,
-              engine: analysis?.engine?.engine || "unknown",
-              message: `Capture berhasil via R2. ZIP ${(zipData.byteLength / 1024 / 1024).toFixed(1)} MB · game ${gameCount} · api ${apiCount}.`
-            },
-            {
-              status: 200,
-              headers: {
-                ...commonHeaders,
-                "X-GC-Via": "r2",
-                "X-GC-Download-Url": downloadUrl,
-                "X-GC-Message": `Capture berhasil via R2. ZIP ${(zipData.byteLength / 1024 / 1024).toFixed(1)} MB.`
-              }
-            }
-          );
-        }
-        // Tidak ada R2 → fallback lama (GitHub Actions)
         return tooLargeResponse({
           id,
           totalFiles: manifest.length,
@@ -2487,7 +2404,7 @@ ${formatCollectAuditSummary(collectAudit)}
           "Content-Type": "application/zip",
           "Content-Disposition": `attachment; filename="game-package-${id}.zip"`,
           ...commonHeaders,
-          "X-GC-Via": hasR2 ? "worker+r2" : "worker",
+          "X-GC-Via": "worker",
           "X-GC-Message": `Capture berhasil. ZIP ${Math.round(zipData.byteLength / 1024)} KB · game ${gameCount} · api ${apiCount} · engine ${analysis?.engine?.engine || "unknown"}.`
         }
       });
