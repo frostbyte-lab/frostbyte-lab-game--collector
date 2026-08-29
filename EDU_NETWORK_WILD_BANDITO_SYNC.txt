@@ -1,0 +1,95 @@
+EDU NETWORK / GAME COLLECTOR / WILD BANDITO
+SINGLE SYNCHRONIZATION NOTE
+==============================================
+
+Tanggal catatan: 29 Agustus 2026
+Target: Wild Bandito
+Source URL: https://m.eajzzxhro.com/104/index.html
+Collector workflow: GitHub Actions run 33262335917
+Collector commit: 3ba1e6021f7454ba86012f069ed49b800a19920a
+Collector result: 244 manifest resources, 252 ZIP entries including metadata, ZIP source 17.96 MB
+
+1. TUJUAN
+---------
+Catatan ini adalah sumber sinkronisasi tunggal untuk Game Collector Pro, repository Edu-network, dan ZIP hasil capture. Asset client-side disimpan lokal di ZIP/Cloudflare Pages. Kontrak API aktif mengikuti EduNetwork, bukan API provider asli.
+
+2. HASIL CAPTURE
+----------------
+Dokumen utama berhasil dengan HTTP 200. Sebanyak 97 kandidat static asset ditemukan; 8 asset tambahan berhasil diambil ulang dengan referer dokumen utama dan 89 asset telah digunakan kembali dari response capture. Tidak ada static asset yang gagal pada tahap proactive capture. Dua network failure hanya berasal dari Google Analytics.
+
+ZIP berisi asset HTML, JavaScript, data JSON, gambar, audio, serta metadata seperti manifest.json, api-map.json, realtime.json, replication-report.json, dan mock-offline-config.json. ZIP sinkron juga berisi edu-network-adapter.js dan EDU_NETWORK_SYNC.txt.
+
+Batasan: replication-report mendeteksi DRM/license dan alur autentikasi provider. Snapshot ini bukan backend provider dan tidak boleh dipakai untuk melewati login, DRM, license server, anti-cheat, CAPTCHA, atau kontrol akses. Hanya asset yang dikirim browser yang dicapture.
+
+3. HOSTING EDUNETWORK
+---------------------
+Edu-network memakai satu Cloudflare Pages project dengan game pada path /game-N/. Pages Functions menyediakan endpoint API dan D1 menyimpan player, saldo virtual, session, spin, result, history, dan statistik.
+
+ZIP harus diekstrak ke slot numerik yang dipilih, misalnya /game-12/. Nomor slot belum ditetapkan di catatan ini agar tidak menimpa game produksi yang sudah ada. Setelah pemasangan:
+
+  npm run prepare-deploy
+  git add game-N
+  git commit -m "feat(game-N): deploy Wild Bandito EduNetwork package"
+  git push origin main
+
+4. KONTRAK API AUTORITATIF
+--------------------------
+Base API menggunakan same-origin EduNetwork Pages domain. Endpoint yang harus dipakai game:
+
+GET  /api/game/config?game_id=game-N
+POST /api/game/init       {player_id, game_id, initial_balance?}
+POST /api/game/session    {player_id, game_id}
+GET  /api/game/balance?player_id=...
+POST /api/game/bet        {player_id, game_id, session_id, amount}
+POST /api/game/spin       {player_id, game_id, session_id, bet}
+GET  /api/game/result?spin_id=...
+GET  /api/game/history?player_id=...&game_id=game-N&limit=20
+POST /api/game/collect    {player_id, game_id, session_id}
+POST /api/game/bonus      {player_id, game_id, session_id, type, amount?}
+
+5. MAPPING PROVIDER KE EDUNETWORK
+---------------------------------
+Provider verifySession maps to the EduNetwork init/session flow.
+Provider GameName/Get maps to EduNetwork config.
+Provider GameWallet/Get maps to EduNetwork balance.
+Provider Resources/GetByResourcesTypeIds maps to local ZIP data and EduNetwork config when dynamic data is required.
+Provider bet/spin/result/history calls require an explicit schema adapter. URL replacement alone is not sufficient because request bodies and response schemas differ.
+
+6. ADAPTER
+----------
+File: edu-network-adapter.js
+
+The adapter exposes window.EduNetworkAdapter with config, init, session, balance, bet, spin, result, history, collect, and bonus methods. It uses window.__EDU_ORIGIN__, window.__EDU_GAME_ID__, and the official EduGameClient. It does not emulate provider backend or restore provider balances.
+
+Edu-network middleware injects edu-game-client.js and then edu-network-adapter.js on game slots. The game must call the adapter or EduGameClient; merely placing the file in the ZIP does not automatically translate arbitrary provider API calls.
+
+7. BALANCE AND SECURITY
+-----------------------
+EduNetwork starts a new player with virtual balance 0. Admin/teacher configuration must provision educational points before spin is playable. Provider real-money balances, credentials, signed CDN URLs, cookies, authorization headers, and license values must never be copied into the hosted package.
+
+8. VERIFICATION CHECKLIST
+-------------------------
+- Confirm selected game-N slot is unused.
+- Extract ZIP into the slot.
+- Run npm run prepare-deploy.
+- Confirm same game_id in config and client.
+- Verify config, init, session, balance, bet, spin, result, history, and collect.
+- Provision virtual balance through authorized admin controls.
+- Open the game on the Cloudflare Pages custom domain.
+- Test reload, asset loading, API errors, offline behavior, and mobile download.
+- Record slot, commit SHA, API origin, package version, and deployment date.
+
+9. REPOSITORY STATUS
+--------------------
+Game Collector changes are published on branch hardening/production-readiness. Edu-network changes are prepared locally at commit c086243 but direct push was rejected by GitHub with HTTP 403 because the current account lacks write permission. The portable patch is edu-network-sync.patch.
+
+10. CURRENT ARTIFACTS
+---------------------
+Original capture artifact: game-resources-1788020046978.zip
+EduNetwork-synchronized ZIP: wild-bandito-edunetwork-sync.zip
+Single synchronization note: EDU_NETWORK_WILD_BANDITO_SYNC.txt
+Edu-network patch: edu-network-sync.patch
+
+11. FINAL LIMITATION
+--------------------
+This synchronization makes the package and API contract consistent, but normal gameplay still depends on implementing the provider-to-EduNetwork schema adapter for the actual game runtime and selecting a valid EduNetwork slot. No production slot or custom domain is changed by this note alone.
