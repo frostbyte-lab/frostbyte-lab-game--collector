@@ -98,7 +98,7 @@ function neutralizeFrameBusters(text) {
   return { text: out, count: n };
 }
 
-async function captureMissingStaticAssets(page, resources, zipFiles, seen, failedRequests) {
+async function captureMissingStaticAssets(page, resources, zipFiles, seen, failedRequests, mainDocUrl = TARGET_URL) {
   const candidates = [];
   const seenCandidate = new Set();
   const add = (raw) => {
@@ -543,7 +543,7 @@ async function main() {
   // Proactive fallback: asset static signed yang tetap tertulis di HTML diambil
   // ulang dengan referer target, meskipun request tidak muncul sebagai response event.
   console.log("PROGRESS: proactive_static_assets");
-  const proactiveAssets = await captureMissingStaticAssets(page, resources, zipFiles, seen, failedRequests);
+  const proactiveAssets = await captureMissingStaticAssets(page, resources, zipFiles, seen, failedRequests, mainDocUrl);
   console.log("PROGRESS: proactive_static_assets_done", JSON.stringify(proactiveAssets));
 
   // HTML akhir
@@ -624,7 +624,7 @@ async function main() {
   zipFiles["replication-report.json"] = strToU8(JSON.stringify({
     version: 1, generatedAt: new Date().toISOString(), target: safeTargetUrl,
     status: blockerReport.some((item) => item.severity === 'critical') ? 'MANUAL_ACTION_REQUIRED' : blockerReport.length ? 'PARTIAL' : 'CAPTURED',
-    blockers: blockerReport, failedRequests, proactiveStaticAssets, realtime: { sessions: realtimeSummary.length, framesReceived: realtimeSummary.reduce((n, s) => n + s.received, 0), framesSent: realtimeSummary.reduce((n, s) => n + s.sent, 0) }
+    blockers: blockerReport, failedRequests, proactiveStaticAssets: proactiveAssets, realtime: { sessions: realtimeSummary.length, framesReceived: realtimeSummary.reduce((n, s) => n + s.received, 0), framesSent: realtimeSummary.reduce((n, s) => n + s.sent, 0) }
   }, null, 2));
 
   const manifest = {
