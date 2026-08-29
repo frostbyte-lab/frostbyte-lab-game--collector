@@ -1,0 +1,12 @@
+NATIVE GAME COLLECTOR LICENSES
+===============================
+
+Native shell and synthetic API adapter: MIT License, Copyright Frostbyte Technologies.
+
+No bundled third-party runtime, font, image, audio, video, or protected binary is
+required by this package. Platform browser APIs remain subject to their respective
+platform terms.
+
+The package is intended for lawful use with resources owned by, or licensed to,
+the operator. Redistribution and commercial use of collected third-party resources
+must be separately evidenced in the license ledger.

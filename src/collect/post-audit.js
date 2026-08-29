@@ -4,6 +4,7 @@
  */
 import { isExcluded, classifyResource, STRICT_STATUS } from "../classify/resource.js";
 import { extractReferencedUrls } from "./urls.js";
+import { detectProtectedResource } from "../security/protected-resource.js";
 
 function decodeText(data) {
   try {
@@ -35,6 +36,7 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
     apis: [],
     tracking: [],
     ignored: [],
+    protectedResources: [],
     rewrittenOk: 0,
     httpsAssetRemaining: 0,
     byStatus: {}
@@ -67,6 +69,10 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
     const text = decodeText(zipFiles[key]);
     if (!text || text.length > 2_000_000) continue;
     report.scannedFiles++;
+    const protection = detectProtectedResource(text, { path: key });
+    if (protection.blocked) {
+      report.protectedResources.push({ path: key.slice(0, 300), permission_status: "BLOCKED", protected_types: protection.protected_types, reasons: protection.reasons });
+    }
 
     try {
       for (const u of extractReferencedUrls(text, baseUrl || "https://local.invalid/")) {
@@ -117,6 +123,12 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
       continue;
     }
 
+    const protection = detectProtectedResource("", { url: u });
+    if (protection.blocked) {
+      report.protectedResources.push({ url: u.slice(0, 400), permission_status: "BLOCKED", protected_types: protection.protected_types, reasons: protection.reasons });
+      continue;
+    }
+
     const classified = classifyResource(u, "fetch", "", "");
     const item = {
       url: u.slice(0, 400),
@@ -162,6 +174,7 @@ export function postCollectAudit(zipFiles, manifest, seen, baseUrl) {
     tracking: report.tracking.length,
     downloadFailed: report.downloadFailed.length,
     ignored: report.ignored.length,
+    protectedResources: report.protectedResources.length,
     alreadyCollected: report.rewrittenOk
   };
 
@@ -184,6 +197,7 @@ export function formatCollectAuditSummary(audit) {
     `- API/backend (hybrid OK): ${audit.byStatus?.apis ?? 0}`,
     `- Tracking skipped: ${audit.byStatus?.tracking ?? 0}`,
     `- Download failed (≠ API): ${audit.byStatus?.downloadFailed ?? 0}`,
+    `- Protected resources blocked: ${audit.byStatus?.protectedResources ?? audit.protectedResources?.length ?? 0}`,
     `- Offline asset ready (https asset = 0): ${audit.offlineAssetReady || audit.ok ? "YES" : "NO"}`,
     `- Hybrid suggested: ${audit.hybridSuggested ? "YES" : "NO"}`
   ];
@@ -191,6 +205,12 @@ export function formatCollectAuditSummary(audit) {
     lines.push("", "### Unresolved assets (sample)");
     audit.unresolvedAssets.slice(0, 15).forEach((a) => {
       lines.push(`- ${a.url}`);
+    });
+  }
+  if (audit.protectedResources?.length) {
+    lines.push("", "### Protected resources blocked");
+    audit.protectedResources.slice(0, 10).forEach((item) => {
+      lines.push(`- ${item.path || item.url} [${(item.protected_types || []).join(", ")}]`);
     });
   }
   if (audit.downloadFailed?.length) {

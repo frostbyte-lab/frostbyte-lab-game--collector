@@ -7,6 +7,8 @@ import { zipSync, strToU8, unzipSync } from "fflate";
 import { uploadGameToEduNetwork, continueEduUpload, eduConfig } from "./hosting/edu-upload.js";
 
 import { safe } from "./lib/safe.js";
+import { detectProtectedResource, sanitizeProtectedText } from "./security/protected-resource.js";
+import { handleNativeApi } from "./native-api.js";
 import { TYPES, isExcluded, classifyResource } from "./classify/resource.js";
 import { classifySlotSubfolder, folderOf } from "./classify/slot-folder.js";
 import { buildAllowedSet, shouldIncludeResource } from "./classify/select-filter.js";
@@ -81,7 +83,7 @@ function redactCaptureValue(value, depth = 0) {
   if (depth > 4) return '[nested]';
   if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
   if (typeof value === 'string') {
-    return value.slice(0, 12000).replace(/((?:authorization|cookie|token|secret|password|signature|apikey|api_key)[=:]\s*)[^&,;\s]+/gi, '$1<redacted>');
+    return sanitizeProtectedText(value).value.slice(0, 12000).replace(/((?:authorization|cookie|token|secret|password|signature|apikey|api_key)[=:]\s*)[^&,;\s]+/gi, '$1<redacted>');
   }
   if (value instanceof Uint8Array) return { binary: true, bytes: value.byteLength };
   if (Array.isArray(value)) return value.slice(0, 60).map((item) => redactCaptureValue(item, depth + 1));
@@ -265,6 +267,12 @@ export default {
         }
       };
       return Response.json(health, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
+
+    // Native API substitute: authorized local session/wallet/ledger only.
+    // It never bypasses DRM or proxies a provider backend.
+    if (url.pathname.startsWith("/api/game")) {
+      return handleNativeApi(request, env);
     }
 
     // Asset proxy same-origin (tanpa R2) — Hybrid online
@@ -2029,12 +2037,21 @@ export default {
         framesReceived: session.framesReceived, framesSent: session.framesSent
       }));
       const replicationBlockers = [];
+      const protectedResources = [];
+      const addProtectedResource = (resource, metadata = {}) => {
+        const detection = detectProtectedResource(resource, metadata);
+        if (detection.blocked) protectedResources.push({ path: metadata.path || null, url: metadata.url ? redactCaptureUrl(metadata.url) : null, permission_status: "BLOCKED", protected_types: detection.protected_types, reasons: detection.reasons });
+        return detection;
+      };
+      addProtectedResource(html, { path: "index.html", url: target.href });
+      for (const item of manifest) addProtectedResource("", { path: item.localPath || null, url: item.url || "" });
       const addReplicationBlocker = (kind, severity, message, evidence = []) => {
         if (!replicationBlockers.some((item) => item.kind === kind)) replicationBlockers.push({ kind, severity, message, evidence: evidence.slice(0, 20) });
       };
       const htmlLowerForBlockers = String(html || '').toLowerCase();
       if (mainDocStatus === 401 || mainDocStatus === 403) addReplicationBlocker('auth_or_access', 'critical', 'Halaman utama membutuhkan autentikasi atau akses resmi.', [redactCaptureUrl(mainDocUrl)]);
       if (/captcha|turnstile|verify you are human|challenge-platform|hcaptcha|just a moment/i.test(htmlLowerForBlockers)) addReplicationBlocker('captcha_or_challenge', 'critical', 'CAPTCHA/challenge terdeteksi; selesaikan secara resmi lalu capture ulang.', [safeTargetUrl]);
+      if (protectedResources.length) addReplicationBlocker('protected_resource', 'critical', 'Komponen protected terdeteksi dan dikeluarkan dari jalur release; gunakan integrasi resmi atau native substitute milik sendiri.', protectedResources.slice(0, 20).map((item) => item.url || item.path || 'protected-resource'));
       if (/encryptedmedia|widevine|playready|fairplay|license server|drm/i.test(htmlLowerForBlockers) || manifest.some((item) => /drm|license|widevine|playready|fairplay/i.test(item.url || ''))) addReplicationBlocker('drm_or_license', 'critical', 'DRM atau license server terdeteksi; diperlukan integrasi resmi dan hak akses.', manifest.filter((item) => /drm|license|widevine|playready|fairplay/i.test(item.url || '')).map((item) => redactCaptureUrl(item.url)));
       if (failedRequests.some((item) => /captcha|challenge|cloudflare/i.test(item.url + ' ' + item.error))) addReplicationBlocker('captcha_or_challenge', 'critical', 'Request challenge gagal saat capture.', failedRequests.map((item) => item.url));
       if (failedRequests.length) addReplicationBlocker('network_failures', 'medium', 'Sebagian request gagal saat capture; cek failedRequests pada laporan.', failedRequests.map((item) => item.url));
@@ -2042,10 +2059,11 @@ export default {
       const replicationReport = {
         version: 1, generatedAt: new Date().toISOString(), target: safeTargetUrl,
         status: replicationBlockers.some((item) => item.severity === 'critical') ? 'MANUAL_ACTION_REQUIRED' : replicationBlockers.length ? 'PARTIAL' : 'CAPTURED',
-        blockers: replicationBlockers, failedRequests: sanitizeCaptureObject(failedRequests),
+        blockers: replicationBlockers, protectedResources: protectedResources.slice(0, 40), failedRequests: sanitizeCaptureObject(failedRequests),
         realtime: { sessions: safeRealtime.length, framesReceived: safeRealtime.reduce((total, item) => total + item.received, 0), framesSent: safeRealtime.reduce((total, item) => total + item.sent, 0) }
       };
       zipFiles['replication-report.json'] = strToU8(JSON.stringify(replicationReport, null, 2));
+      zipFiles['protected-resource-report.json'] = strToU8(JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), status: protectedResources.length ? 'BLOCKED' : 'PASS', resources: protectedResources.slice(0, 40), policy: 'detect-and-exclude; never bypass DRM or protected access controls' }, null, 2));
       zipFiles['realtime.json'] = strToU8(JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), sessions: safeRealtime }, null, 2));
       const manifestData = {
         target: safeTargetUrl,
@@ -2065,11 +2083,13 @@ export default {
           ? sanitizeCaptureObject({
               ok: collectAudit.ok,
               byStatus: collectAudit.byStatus,
+              protectedResources: (collectAudit.protectedResources || []).slice(0, 20),
               unresolvedSample: (collectAudit.unresolvedAssets || []).slice(0, 20)
             })
           : null,
         realtime: safeRealtime,
         blockers: replicationBlockers,
+        protectedResources: protectedResources.slice(0, 40),
         failedRequests: sanitizeCaptureObject(failedRequests),
         analysisSummary: analysis?.summary || null,
         note:

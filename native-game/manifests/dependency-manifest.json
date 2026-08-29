@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "lockfile": "package-lock.json",
+  "dependencies": [
+    { "name": "native-game-shell", "version": "1.0.0", "ecosystem": "local", "license": "MIT", "source": "repository", "relationship": "direct", "vulnerability_status": "not_applicable" },
+    { "name": "browser-runtime", "version": "platform", "ecosystem": "web", "license": "platform", "source": "user_agent", "relationship": "runtime", "vulnerability_status": "reviewed" }
+  ],
+  "floating_dependencies": false
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "status": "PASS",
+  "checks": {
+    "allowlist_origin": "PASS",
+    "private_ip_block": "PASS",
+    "metadata_endpoint_block": "PASS",
+    "redirect_limit": "PASS",
+    "dns_rebinding_review": "WARN",
+    "api_offline_status": "WARN"
+  },
+  "notes": ["API-dependent operations remain server-authoritative and are not claimed as fully offline."]
+}

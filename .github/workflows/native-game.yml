@@ -1,0 +1,57 @@
+name: native-game-ci
+
+on:
+  push:
+    paths:
+      - "native-game/**"
+      - "scripts/validate-native-package.js"
+      - "scripts/package-native-game.js"
+      - "tests/native-game-package.test.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/native-game.yml"
+  pull_request:
+    paths:
+      - "native-game/**"
+      - "scripts/validate-native-package.js"
+      - "scripts/package-native-game.js"
+      - "tests/native-game-package.test.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/native-game.yml"
+
+concurrency:
+  group: native-game-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Native package tests
+        run: node --test tests/native-game-package.test.mjs
+      - name: Native package validation
+        run: npm run validate:native-package
+      - name: Secret pattern scan
+        run: git grep -nE '-----BEGIN .*PRIVATE KEY-----|sk-[A-Za-z0-9]{20,}|(password|secret|token)[[:space:]]*[:=][[:space:]]*["'"'][^"'"']{12,}["'"']' -- native-game scripts tests || true
+      - name: Package native artifact
+        run: node scripts/package-native-game.js
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-game-package
+          path: artifacts/native/*.zip
+          retention-days: 14

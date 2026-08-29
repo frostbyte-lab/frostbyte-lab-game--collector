@@ -71,6 +71,8 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 - [x] **View kelengkapan** panel setelah load ZIP
 - [x] Packaging ulang
 - [x] AI Assistant (endpoint OpenAI-compatible / Groq)
+- [x] Protected-resource policy: deteksi DRM/license/token/cookie/private-key, sanitasi nilai sensitif, audit `protected-resource-report.json`, dan release gate `BLOCKED` tanpa bypass kontrol akses
+- [x] Native API substitute `/api/game/*`: session, player, balance, bet, spin, result, history, collect, bonus dengan idempotency dan ledger server-authoritative
 
 
 ### A.5–A.7 History KV · Resume · Custom domain
@@ -115,6 +117,14 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 ## Struktur repo
 
 ```
+├── native-game/              # Native shell, API contract, manifests, validation, legal
+│   ├── index.html
+│   ├── shell/
+│   ├── api/
+│   ├── config/
+│   ├── manifests/
+│   ├── validation/
+│   └── legal/
 ├── public/
 │   ├── index.html       # UI Collect + Workspace
 │   ├── manifest.json    # PWA
@@ -125,6 +135,21 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 ├── wrangler.jsonc
 └── README.md            # File ini
 ```
+
+## Native Game Collector package
+
+Spesifikasi native game collector kini diterapkan di **[native-game/](native-game/)** sebagai shell mandiri yang dapat dibuka langsung melalui browser. Paket ini memiliki bootstrap dan loading screen sendiri, routing dashboard/validation/history/runbook, service worker dengan cache berversi, telemetry tersanitasi, error boundary, config schema, kontrak API native, synthetic API adapter, ledger idempotent, manifest asset, SBOM, provenance, ownership record, laporan validasi, dan release gate.
+
+Package ini menggunakan **native substitute** yang dibuat sendiri. Ia tidak menyalin atau membawa token aktif, cookie, credential, private key, DRM, protected binary, anti-cheat, protocol privat, atau backend pihak lain. Operasi API yang bergantung pada server tetap diberi status `WARN` untuk offline readiness, bukan diklaim sebagai offline penuh.
+
+| Perintah | Fungsi |
+|---|---|
+| `npm run validate:native-package` | Menjalankan validasi struktur, config, kontrak API, secret scan, protected-resource policy, ownership, asset kritis, dan hash deterministik. |
+| `node --test tests/native-game-package.test.mjs` | Menguji package shell, endpoint coverage, server-authoritative transaction, dan idempotency. |
+| `npm run package:native` | Validasi lalu menghasilkan ZIP bernama `game_id-version-sha256pendek.zip` di `artifacts/native/`. |
+| `python3 -m http.server 4173 --directory native-game` | Membuka native shell secara lokal untuk preview browser. |
+
+Release hanya boleh dipromosikan jika pemeriksaan ownership, security, integrity, API transaction, dan reproducibility tidak menghasilkan `FAIL` atau `BLOCKED`. Artifact tidak boleh diedit setelah release; buat versi baru, validasi ulang, preview smoke test, lalu promote setelah approval manual.
 
 ## Cara pakai singkat
 

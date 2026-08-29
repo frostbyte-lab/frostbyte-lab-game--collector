@@ -1,0 +1,11 @@
+{
+  "name": "Frostbyte Native Game Collector",
+  "short_name": "Native Collector",
+  "start_url": "./index.html#/dashboard",
+  "display": "standalone",
+  "background_color": "#07101a",
+  "theme_color": "#08111c",
+  "lang": "id",
+  "description": "Native shell untuk validasi dan packaging resource game berizin.",
+  "icons": []
+}

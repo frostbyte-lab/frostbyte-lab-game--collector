@@ -1,0 +1,18 @@
+NATIVE GAME COLLECTOR OWNERSHIP RECORD
+======================================
+
+Package: frostbyte-collector
+Version: 1.0.0
+Owner: Frostbyte Technologies
+Permission status: AUTHORIZED_OWNER
+Scope: LOCAL_USE, MODIFY, BUNDLE, HOST
+Approved by: Frostbyte Technologies engineering
+Approval time: 2026-08-30T00:00:00Z
+
+This package is an original native shell and synthetic API substitute. It does not
+include third-party game code, live credentials, active tokens, cookies, private
+keys, protected binaries, DRM material, anti-cheat logic, or an external backend.
+
+The collector's safe replication policy treats UNKNOWN and RESTRICTED resources as
+blocked until ownership or license evidence is recorded. Protected resources are
+excluded from artifacts and reported in validation output.

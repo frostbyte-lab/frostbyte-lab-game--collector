@@ -1,0 +1,19 @@
+SECURITY POLICY
+===============
+
+The collector accepts only allowlisted origins configured by the deployment and
+must reject private IPs, cloud metadata endpoints, unbounded redirects, DNS
+rebinding, path traversal, symlinks, archive bombs, malformed files, and
+unapproved MIME types.
+
+The native package contains no secret. Logs are structured and sanitized: never
+record Authorization, Cookie, password, token, private key, full sensitive query,
+request body, or PII. Correlation IDs, error codes, status codes, durations, safe
+URLs, and hashes are permitted.
+
+Transactions are server-authoritative. The client cannot set final balances,
+results, or status. Every mutation uses request_id, idempotency_key, session_id,
+player_id, a server timestamp, before/after balances, status, and ledger reference.
+
+Report security issues privately to the repository owner. Do not include live
+credentials or personal data in issue reports.

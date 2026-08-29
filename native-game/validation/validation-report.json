@@ -1,0 +1,173 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-29T18:40:06.839Z",
+  "package_root": "/home/ubuntu/frostbyte-lab-game--collector/native-game",
+  "package_version": "1.0.0",
+  "checks": [
+    {
+      "check_name": "required:index.html",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:shell/bootstrap.js",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:shell/router.js",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:shell/state-store.js",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:shell/error-boundary.js",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:shell/telemetry.js",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:shell/accessibility.js",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:shell/app.js",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:api/api-contract.json",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:api/error-codes.json",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:api/edu-network-adapter.js",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:config/native-game-config.json",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:config/feature-flags.json",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:config/environment.schema.json",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:manifests/asset-manifest.json",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:manifests/dependency-manifest.json",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:legal/LICENSES.txt",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:legal/OWNERSHIP.txt",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:legal/NOTICE.txt",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:SECURITY.txt",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:CHANGELOG.txt",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "required:NATIVE_COLLECT_SYSTEM.txt",
+      "status": "PASS",
+      "details": "file present"
+    },
+    {
+      "check_name": "config.schema",
+      "status": "PASS",
+      "details": "native config satisfies release constraints"
+    },
+    {
+      "check_name": "api.contract",
+      "status": "PASS",
+      "details": "required native endpoints and transaction fields reviewed"
+    },
+    {
+      "check_name": "security.secret_scan",
+      "status": "PASS",
+      "details": "no credential-like literal detected"
+    },
+    {
+      "check_name": "security.path_traversal",
+      "status": "PASS",
+      "details": "package paths are local and normalized"
+    },
+    {
+      "check_name": "security.external_runtime",
+      "status": "PASS",
+      "details": "no external runtime reference in native shell"
+    },
+    {
+      "check_name": "security.protected_runtime",
+      "status": "PASS",
+      "details": "protected resources excluded or documented only"
+    },
+    {
+      "check_name": "asset.critical",
+      "status": "PASS",
+      "details": "all critical assets are present"
+    },
+    {
+      "check_name": "ownership.release_scope",
+      "status": "PASS",
+      "details": "all release assets have authorized ownership status"
+    },
+    {
+      "check_name": "integrity.package_hash",
+      "status": "PASS",
+      "details": "deterministic package hash b717c2a6eaad056a…",
+      "sha256": "b717c2a6eaad056a0bae1bf756008d2a35621237e3556e3761b11e450e493515"
+    }
+  ],
+  "summary": {
+    "total": 31,
+    "pass": 31,
+    "warn": 0,
+    "fail": 0,
+    "blocked": 0,
+    "release_gate": "PASS"
+  },
+  "package_sha256": "b717c2a6eaad056a0bae1bf756008d2a35621237e3556e3761b11e450e493515"
+}

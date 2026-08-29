@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "flags": {
+    "validation_center": { "enabled": true, "default": true },
+    "synthetic_api": { "enabled": true, "default": true },
+    "offline_preview": { "enabled": true, "default": true },
+    "production_transactions": { "enabled": false, "default": false }
+  }
+}

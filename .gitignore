@@ -3,3 +3,4 @@ node_modules/
 *.log
 *.readiness.json
 coverage/
+artifacts/native/
