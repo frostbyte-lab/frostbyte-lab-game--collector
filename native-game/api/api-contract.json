@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "base_path": "/api/game",
+  "authentication": "native-session",
+  "defaults": {
+    "timeout_ms": 5000,
+    "retry": { "max_attempts": 2, "safe_methods": ["GET"] },
+    "idempotency_header": "Idempotency-Key"
+  },
+  "endpoints": [
+    { "method": "GET", "path": "/health", "auth": false, "permission": "public", "idempotent": true, "audit_event": "health.read" },
+    { "method": "GET", "path": "/config", "auth": false, "permission": "public", "idempotent": true, "audit_event": "config.read" },
+    { "method": "POST", "path": "/init", "auth": false, "permission": "public", "idempotent": true, "audit_event": "game.init" },
+    { "method": "POST", "path": "/session", "auth": false, "permission": "session:create", "idempotent": true, "audit_event": "session.create" },
+    { "method": "POST", "path": "/session/refresh", "auth": true, "permission": "session:refresh", "idempotent": true, "audit_event": "session.refresh" },
+    { "method": "POST", "path": "/session/end", "auth": true, "permission": "session:end", "idempotent": true, "audit_event": "session.end" },
+    { "method": "GET", "path": "/player", "auth": true, "permission": "player:read", "idempotent": true, "audit_event": "player.read" },
+    { "method": "GET", "path": "/balance", "auth": true, "permission": "wallet:read", "idempotent": true, "audit_event": "balance.read" },
+    { "method": "POST", "path": "/bet", "auth": true, "permission": "wallet:write", "idempotent": true, "audit_event": "bet.authorize", "transaction": true },
+    { "method": "POST", "path": "/spin", "auth": true, "permission": "round:create", "idempotent": true, "audit_event": "round.spin", "transaction": true },
+    { "method": "GET", "path": "/result/{result_id}", "auth": true, "permission": "result:read", "idempotent": true, "audit_event": "result.read" },
+    { "method": "GET", "path": "/history", "auth": true, "permission": "history:read", "idempotent": true, "audit_event": "history.read" },
+    { "method": "POST", "path": "/collect", "auth": true, "permission": "collector:write", "idempotent": true, "audit_event": "collect.create" },
+    { "method": "POST", "path": "/bonus", "auth": true, "permission": "wallet:write", "idempotent": true, "audit_event": "bonus.claim", "transaction": true }
+  ],
+  "transaction_fields": ["request_id", "idempotency_key", "session_id", "player_id", "server_timestamp", "balance_before", "balance_after", "status", "ledger_reference"],
+  "client_authority": { "can_set_result": false, "can_set_balance_after": false, "can_set_transaction_status": false }
+}

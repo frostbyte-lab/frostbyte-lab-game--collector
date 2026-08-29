@@ -1,0 +1,9 @@
+NOTICE
+======
+
+Frostbyte Native Game Collector is an original native shell for lawful collection,
+validation, sanitization, and packaging of owned or licensed game resources.
+
+The synthetic API fixture is for local development and conformance testing only.
+It must not be interpreted as a production wallet, payment, identity, or gaming
+backend.

@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "game_id": "frostbyte-collector",
+  "package_version": "1.0.0",
+  "runtime": "native",
+  "asset_mode": "local",
+  "api_base": "/api/game",
+  "external_auth_required": false,
+  "external_runtime_required": false,
+  "currency": "points",
+  "limits": {
+    "min_bet": 1,
+    "max_bet": 500,
+    "default_bet": 10
+  },
+  "features": [
+    "collector-dashboard",
+    "validation-center",
+    "synthetic-native-api",
+    "offline-shell"
+  ],
+  "telemetry": {
+    "enabled": true,
+    "pii": false
+  },
+  "ownership": {
+    "permission_status": "AUTHORIZED_OWNER",
+    "owner": "Frostbyte Technologies",
+    "scope": ["LOCAL_USE", "MODIFY", "BUNDLE", "HOST"],
+    "redistribution_allowed": true,
+    "modification_allowed": true,
+    "commercial_use_allowed": false
+  }
+}

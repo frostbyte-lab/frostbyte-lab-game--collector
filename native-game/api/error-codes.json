@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "errors": {
+    "AUTH_REQUIRED": { "http_status": 401, "retryable": false, "severity": "warn" },
+    "SESSION_EXPIRED": { "http_status": 401, "retryable": false, "severity": "info" },
+    "INVALID_REQUEST": { "http_status": 400, "retryable": false, "severity": "warn" },
+    "BET_OUT_OF_RANGE": { "http_status": 422, "retryable": false, "severity": "warn" },
+    "INSUFFICIENT_BALANCE": { "http_status": 422, "retryable": false, "severity": "warn" },
+    "DUPLICATE_REQUEST": { "http_status": 409, "retryable": false, "severity": "info" },
+    "RATE_LIMITED": { "http_status": 429, "retryable": true, "severity": "warn" },
+    "MAINTENANCE": { "http_status": 503, "retryable": true, "severity": "warn" },
+    "INTERNAL_ERROR": { "http_status": 500, "retryable": false, "severity": "error" },
+    "PROTECTED_RESOURCE": { "http_status": 403, "retryable": false, "severity": "critical" }
+  }
+}

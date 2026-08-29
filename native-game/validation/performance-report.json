@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "status": "WARN",
+  "checks": {
+    "first_contentful_paint": "SKIPPED",
+    "time_to_interactive": "SKIPPED",
+    "package_size": "PASS",
+    "critical_asset_failure": "PASS",
+    "api_latency_p50": "SKIPPED",
+    "api_latency_p95": "SKIPPED",
+    "memory_cpu": "SKIPPED"
+  },
+  "notes": ["Browser and production baselines must be measured in preview and post-deploy smoke tests.", "WARN is intentional because this local package has no production traffic baseline."]
+}

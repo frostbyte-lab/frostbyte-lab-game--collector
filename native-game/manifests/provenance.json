@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "source_commit": "local",
+  "workflow": "local",
+  "builder_identity": "local",
+  "toolchain": {
+    "node": "v22.13.0"
+  },
+  "input_hash": "46e0ec4e41d2dbf45d3346ade1cebb0fe4afc26b0db12652e3809fd50e10e34a",
+  "output_hash": "46e0ec4e41d2dbf45d3346ade1cebb0fe4afc26b0db12652e3809fd50e10e34a",
+  "artifact_reference": "frostbyte-collector-1.0.0-46e0ec4e41d2.zip",
+  "generated_at": "2026-08-29T18:27:51.173Z"
+}

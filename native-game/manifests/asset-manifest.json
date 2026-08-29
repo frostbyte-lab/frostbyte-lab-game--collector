@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "package": "frostbyte-collector@1.0.0",
+  "assets": [
+    { "path": "index.html", "type": "entrypoint", "critical": true, "permission_status": "AUTHORIZED_OWNER" },
+    { "path": "shell/app.js", "type": "script", "critical": true, "permission_status": "AUTHORIZED_OWNER" },
+    { "path": "shell/bootstrap.js", "type": "script", "critical": true, "permission_status": "AUTHORIZED_OWNER" },
+    { "path": "api/edu-network-adapter.js", "type": "native-api", "critical": true, "permission_status": "AUTHORIZED_OWNER" },
+    { "path": "config/native-game-config.json", "type": "config", "critical": true, "permission_status": "AUTHORIZED_OWNER" }
+  ],
+  "excluded_classes": ["DRM", "TOKEN", "COOKIE", "CREDENTIAL", "PRIVATE_KEY", "PROTECTED_BINARY", "EXTERNAL_BACKEND"]
+}

@@ -21,7 +21,9 @@
     "test:manus-api": "node tests/manus-api.test.mjs",
     "test:collect-ai-assistant": "node tests/collect-ai-assistant.test.mjs",
     "test:conformance-lab": "node tests/conformance-lab.test.mjs",
-    "validate:offline-package": "node scripts/validate-offline-package.js"
+    "validate:offline-package": "node scripts/validate-offline-package.js",
+    "validate:native-package": "node scripts/validate-native-package.js",
+    "package:native": "node scripts/validate-native-package.js && node scripts/package-native-game.js"
   },
   "dependencies": {
     "@cloudflare/playwright": "^1.3.0",

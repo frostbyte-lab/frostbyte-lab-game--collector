@@ -1,0 +1,29 @@
+NATIVE COLLECT SYSTEM
+=====================
+
+Purpose
+-------
+Provide an auditable native shell for collecting, sanitizing, validating, and
+packaging game resources that the operator owns or is licensed to use.
+
+Boundary
+--------
+The native package owns its bootstrap, loader, UI flow, state machine, schemas,
+synthetic fixtures, validation reports, and operational records. External game
+backends are not bundled. API-dependent behavior remains WARN/OFFLINE_PARTIAL
+rather than claiming a full offline implementation.
+
+Protected-resource decision
+---------------------------
+DRM, active token, cookie, credential, private key, signed request, protected
+binary, anti-cheat, private protocol, and another provider's backend are detected
+for audit but excluded from release artifacts and marked BLOCKED. Equivalent
+product behavior is implemented only through documented native substitutes: a
+native session token, server-side wallet and ledger, native API schemas, checksum
+pipeline, server-side validation and rate limiting, and a native bootstrap.
+
+Release gates
+-------------
+Ownership, secret scan, protected-resource exclusion, manifest/checksum,
+transaction idempotency, security scan, preview smoke test, provenance, and
+rollback readiness must pass. A critical FAIL or BLOCKED result stops promotion.

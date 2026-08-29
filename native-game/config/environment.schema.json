@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostbyte.example/schemas/native-game-config.json",
+  "title": "Native Game Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "game_id", "package_version", "runtime", "asset_mode", "api_base", "currency", "limits", "telemetry", "ownership"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "game_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "package_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "runtime": { "type": "string", "const": "native" },
+    "asset_mode": { "type": "string", "enum": ["local", "hybrid"] },
+    "api_base": { "type": "string", "pattern": "^/" },
+    "external_auth_required": { "type": "boolean" },
+    "external_runtime_required": { "type": "boolean" },
+    "currency": { "type": "string", "enum": ["points"] },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_bet", "max_bet", "default_bet"],
+      "properties": {
+        "min_bet": { "type": "integer", "minimum": 1 },
+        "max_bet": { "type": "integer", "minimum": 1 },
+        "default_bet": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "features": { "type": "array", "items": { "type": "string" } },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "pii"],
+      "properties": { "enabled": { "type": "boolean" }, "pii": { "const": false } }
+    },
+    "ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["permission_status", "owner", "scope", "redistribution_allowed", "modification_allowed", "commercial_use_allowed"],
+      "properties": {
+        "permission_status": { "enum": ["AUTHORIZED_OWNER", "AUTHORIZED_LICENSE", "AUTHORIZED_API", "PUBLIC_USE"] },
+        "owner": { "type": "string", "minLength": 1 },
+        "scope": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "redistribution_allowed": { "type": "boolean" },
+        "modification_allowed": { "type": "boolean" },
+        "commercial_use_allowed": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+CHANGELOG
+=========
+
+1.0.0 — 2026-08-30
+
+Added the standalone native shell with loading, routing, accessibility, sanitized
+telemetry, error boundary, versioned service worker, validation center, artifact
+history, safe replication policy, and synthetic native API adapter. Added config,
+API, ownership, manifest, SBOM, provenance, validation, and release-gate records.
+
+Release policy: never edit a published artifact in place. Create a new version,
+re-run validation, deploy a preview, smoke test it, and promote only after manual
+approval. A BLOCKED or FAIL on ownership, security, integrity, transaction
+integrity, or reproducibility prevents release.

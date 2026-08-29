@@ -36,6 +36,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   const superReport = jsonFile(files, "offline-super.json");
   const statusReport = jsonFile(files, "collect-status.json");
   const replicationReport = jsonFile(files, "replication-report.json");
+  const protectedResourceReport = jsonFile(files, "protected-resource-report.json");
   const authorizedResearch = jsonFile(files, "authorized-research.json");
   const indexHtml = lowerNames.some((name) => /(^|\/)index\.html?$/.test(name));
   const texts = names.filter((name) => TEXT_EXT.test(name)).map((name) => textOf(files[name]).slice(0, 500000));
@@ -49,6 +50,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   // Sandbox aplikasi menginjeksi adapter; realtime.json adalah bukti bahwa data replay tersedia.
   const hasRuntimeInterceptor = lowerNames.some((name) => /runtime-interceptor|realtime-adapter|offline-validation/.test(name)) || lowerNames.some((name) => /(^|\/)realtime\.json$/.test(name));
   const criticalReplicationBlockers = Array.isArray(replicationReport?.blockers) ? replicationReport.blockers.filter((item) => item?.severity === "critical") : [];
+  const blockedProtectedResources = Array.isArray(protectedResourceReport?.resources) ? protectedResourceReport.resources.filter((item) => item?.permission_status === "BLOCKED" || item?.protected_component) : [];
   const browser = browserTest || { status: "NOT_RUN", networkIsolated: false, gameplayReady: false, failures: ["Browser test belum dijalankan"] };
   const shellReady = indexHtml && names.some((name) => /\.js$/i.test(name));
   const hybridReady = shellReady && (externalRefs.length > 0 || unresolved > 0 || hasApi);
@@ -69,6 +71,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   if (hasApi && (!apiEndpoints.length || !snapshots.length || !Array.isArray(apiMap?.replaySequence) || apiMap.replaySequence.length === 0)) strictBlockers.push("Kontrak API/snapshot/replay belum lengkap.");
   if (hasRealtime && (!hasRuntimeInterceptor || !Array.isArray(apiMap?.replaySequence) || apiMap.replaySequence.length === 0)) strictBlockers.push("Bukti realtime adapter/replay belum lengkap.");
   if (criticalReplicationBlockers.length) strictBlockers.push(...criticalReplicationBlockers.map((item) => item.message || `Blocker kritis: ${item.kind || "unknown"}`));
+  if (blockedProtectedResources.length) strictBlockers.push(`${blockedProtectedResources.length} protected resource terdeteksi; artifact tidak boleh dipromosikan.`);
   const strictGate = { ready: strictBlockers.length === 0, blockers: strictBlockers, evidence };
   const fullOfflineReady = strictGate.ready;
   const status = fullOfflineReady ? "FULL_OFFLINE_READY" : gameplayReady ? "GAMEPLAY_READY" : mockReady ? "MOCK_READY" : hybridReady ? "HYBRID_READY" : shellReady ? "SHELL_READY" : "NOT_READY";
@@ -81,6 +84,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   if (apiEndpoints.length > 0 && snapshots.length === 0) blockers.push("Tidak ada snapshot API nyata");
   if (hasRealtime && !hasRuntimeInterceptor) blockers.push("Realtime terdeteksi tetapi runtime/realtime adapter tidak ada di paket");
   for (const item of criticalReplicationBlockers) blockers.push(item.message || `Blocker kritis: ${item.kind || "unknown"}`);
+  if (blockedProtectedResources.length) blockers.push(`${blockedProtectedResources.length} protected resource diblokir oleh release gate`);
   if (!browser.gameplayReady) blockers.push("Browser gameplay test belum berhasil");
   if (!browser.networkIsolated) blockers.push("Network isolation belum terbukti");
   return {
@@ -96,7 +100,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
     assets: { files: names.length, indexHtml, unresolved, failed, externalRefs: externalRefs.length },
     api: { detected: hasApi, endpoints: apiEndpoints.length, snapshots: snapshots.length, contracts: Array.isArray(apiMap?.contracts) ? apiMap.contracts.length : 0, replaySequence: Array.isArray(apiMap?.replaySequence) ? apiMap.replaySequence.length : 0 },
     realtime: { detected: hasRealtime, adapterPresent: hasRuntimeInterceptor },
-    sourceReports: { hasManifest: Boolean(manifest), hasApiMap: Boolean(apiMap), hasOfflineSuper: Boolean(superReport), hasCollectStatus: Boolean(statusReport), hasReplicationReport: Boolean(replicationReport), hasAuthorizedResearch: Boolean(authorizedResearch) },
+    sourceReports: { hasManifest: Boolean(manifest), hasApiMap: Boolean(apiMap), hasOfflineSuper: Boolean(superReport), hasCollectStatus: Boolean(statusReport), hasReplicationReport: Boolean(replicationReport), hasProtectedResourceReport: Boolean(protectedResourceReport), hasAuthorizedResearch: Boolean(authorizedResearch) },
     strictGate,
     blockers: [...blockers, ...strictBlockers.filter((item) => !blockers.includes(item))],
     externalRefs
