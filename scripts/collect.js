@@ -15,6 +15,10 @@
  *   AUTO_HISTORY     default 1
  *   SPIN_DELAY_MS    default 2200
  *   SEED_ZIP         optional path to seed ZIP
+ *   AUTHORIZED_RESEARCH  1 to include authorized research metadata
+ *   LICENSE_REF      URL/ID license or written permission reference
+ *   CHALLENGE_MANUAL_COMPLETE  1 when user completed challenge manually
+ *   MOCK_OFFLINE     1 to include mock/replay preparation metadata
  */
 import { chromium } from "playwright";
 import { zipSync, strToU8 } from "fflate";
@@ -33,6 +37,10 @@ const WAIT_SECONDS = Math.max(5, parseInt(process.env.WAIT_SECONDS || "22", 10))
 const AUTO_SPINS = process.env.AUTO_SPINS || "6";
 const AUTO_HISTORY = process.env.AUTO_HISTORY || "1";
 const SPIN_DELAY_MS = process.env.SPIN_DELAY_MS || "2200";
+const AUTHORIZED_RESEARCH = process.env.AUTHORIZED_RESEARCH === "1";
+const LICENSE_REF = String(process.env.LICENSE_REF || "").trim().slice(0, 500);
+const CHALLENGE_MANUAL_COMPLETE = process.env.CHALLENGE_MANUAL_COMPLETE === "1";
+const MOCK_OFFLINE = process.env.MOCK_OFFLINE !== "0";
 
 if (!TARGET_URL) {
   console.error("ERROR: TARGET_URL tidak diisi");
@@ -552,6 +560,13 @@ async function main() {
     totalFiles: resources.length,
     criticalApis: criticalApis.length,
     smartRewrite: smart,
+    authorizedResearch: {
+      enabled: AUTHORIZED_RESEARCH,
+      licenseRef: LICENSE_REF,
+      challengeManualComplete: CHALLENGE_MANUAL_COMPLETE,
+      mockOffline: MOCK_OFFLINE,
+      attestedAt: AUTHORIZED_RESEARCH ? new Date().toISOString() : null
+    },
     via: "github-actions",
     autoInteract: {
       autoSpins: Number(AUTO_SPINS),
@@ -566,6 +581,8 @@ async function main() {
     failedRequests
   };
   zipFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
+  zipFiles["authorized-research.json"] = strToU8(JSON.stringify({ version: 1, enabled: AUTHORIZED_RESEARCH, licenseRef: LICENSE_REF, challengeManualComplete: CHALLENGE_MANUAL_COMPLETE, mockOffline: MOCK_OFFLINE, targetHost: new URL(TARGET_URL).host, note: "Self-attestation metadata; verify license independently before distribution." }, null, 2));
+  if (MOCK_OFFLINE) zipFiles["mock-offline-config.json"] = strToU8(JSON.stringify({ version: 1, enabled: true, source: "github-actions-collector", apiMap: "api-map.json", note: "Mock/replay preparation only; not a production backend." }, null, 2));
   zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
 Target: ${safeTargetUrl}
 Main document status: ${mainDocStatus}

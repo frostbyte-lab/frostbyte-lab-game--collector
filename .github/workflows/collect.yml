@@ -32,6 +32,26 @@ on:
         required: false
         default: ""
         type: string
+      authorized_research:
+        description: "Authorized Research Mode aktif"
+        required: false
+        default: "0"
+        type: string
+      license_ref:
+        description: "URL/ID license atau izin resmi"
+        required: false
+        default: ""
+        type: string
+      challenge_manual_complete:
+        description: "Challenge sudah diselesaikan manual"
+        required: false
+        default: "0"
+        type: string
+      mock_offline:
+        description: "Siapkan mock offline dan replay API"
+        required: false
+        default: "1"
+        type: string
 
 jobs:
   collect:
@@ -54,6 +74,10 @@ jobs:
           AUTO_HISTORY: ${{ github.event.inputs.auto_history }}
           SPIN_DELAY_MS: ${{ github.event.inputs.spin_delay_ms }}
           SEED_ZIP: ${{ github.event.inputs.seed_zip }}
+          AUTHORIZED_RESEARCH: ${{ github.event.inputs.authorized_research }}
+          LICENSE_REF: ${{ github.event.inputs.license_ref }}
+          CHALLENGE_MANUAL_COMPLETE: ${{ github.event.inputs.challenge_manual_complete }}
+          MOCK_OFFLINE: ${{ github.event.inputs.mock_offline }}
         run: node scripts/collect.js
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4

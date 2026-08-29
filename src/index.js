@@ -438,7 +438,11 @@ export default {
             auto_spins: String(body.auto_spins ?? body.autoSpins ?? "6"),
             auto_history: String(body.auto_history ?? body.autoHistory ?? "1"),
             spin_delay_ms: String(body.spin_delay_ms ?? body.spinDelayMs ?? "2200"),
-            seed_zip: String(body.seed_zip ?? body.seedZip ?? "")
+            seed_zip: String(body.seed_zip ?? body.seedZip ?? ""),
+            authorized_research: String(body.authorized_research ? "1" : "0"),
+            license_ref: String(body.license_ref || "").slice(0, 500),
+            challenge_manual_complete: String(body.challenge_manual_complete ? "1" : "0"),
+            mock_offline: String(body.mock_offline === false ? "0" : "1")
           }
         })
       });
@@ -1146,6 +1150,17 @@ export default {
       if (!["http:", "https:"].includes(target.protocol)) throw 0;
     } catch {
       return Response.json({ error: "URL http/https tidak valid" }, { status: 400 });
+    }
+
+    const researchMode = {
+      enabled: !!body.authorized_research,
+      licenseRef: String(body.license_ref || "").trim().slice(0, 500),
+      challengeManualComplete: !!body.challenge_manual_complete,
+      mockOffline: body.mock_offline !== false,
+      attestedAt: body.authorized_research ? new Date().toISOString() : null
+    };
+    if (researchMode.enabled && !researchMode.licenseRef) {
+      return Response.json({ error: "Authorized Research Mode memerlukan referensi license/izin resmi.", code: "LICENSE_REFERENCE_REQUIRED" }, { status: 400 });
     }
 
     // Selective collect filter (include/exclude by category or subfolder)
@@ -2037,6 +2052,7 @@ export default {
         },
         smartRewrite: smart,
         autoFill: fillReport,
+        authorizedResearch: researchMode,
         collectAudit: collectAudit
           ? sanitizeCaptureObject({
               ok: collectAudit.ok,
@@ -2053,6 +2069,8 @@ export default {
         resources: safeManifest
       };
       zipFiles["manifest.json"] = strToU8(JSON.stringify(manifestData, null, 2));
+      zipFiles["authorized-research.json"] = strToU8(JSON.stringify({ version: 1, ...researchMode, targetHost: target.host, note: "Self-attestation metadata; verify license independently before distribution." }, null, 2));
+      if (researchMode.mockOffline) zipFiles["mock-offline-config.json"] = strToU8(JSON.stringify({ version: 1, enabled: true, source: "collector", apiMap: "api-map.json", note: "Mock/replay preparation only; not a production backend." }, null, 2));
       zipFiles["keterangan.json"] = strToU8(JSON.stringify(ket.json, null, 2));
       // api-map.json — peta endpoint + snapshot untuk Sandbox mock (Sprint process 2)
       let apiMapFinal = null;

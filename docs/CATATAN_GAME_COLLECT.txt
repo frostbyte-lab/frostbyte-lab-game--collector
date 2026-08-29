@@ -149,3 +149,14 @@ Game yang wajib server tiap aksi → perlu mock/backend sendiri (sandbox).
   scripts/collect.js                ← collect GitHub Actions
 
 ================================================================================
+
+--------------------------------------------------------------------------------
+13. AUTHORIZED RESEARCH MODE
+--------------------------------------------------------------------------------
+Authorized Research Mode terintegrasi langsung di form Collect URL. Mode ini hanya untuk game yang dimiliki pengguna atau memiliki izin tertulis. Isi referensi license/izin resmi sebelum menjalankan Capture Cloudflare atau Collect via GitHub. Referensi dicatat sebagai metadata `authorized-research.json` di dalam ZIP dan tidak dianggap sebagai verifikasi legal otomatis.
+
+Jika halaman target menampilkan CAPTCHA, Cloudflare challenge, atau challenge lain, selesaikan secara manual pada browser/preview yang disediakan lalu tekan tombol `Challenge manual selesai`. Tombol ini hanya mencatat konfirmasi pengguna dan tidak melakukan bypass challenge, CAPTCHA, anti-bot, DRM, atau mekanisme keamanan pihak ketiga.
+
+Opsi `Siapkan mock offline dan replay API` menambahkan `mock-offline-config.json` serta membantu proses API map, replay request/response, dan stateful emulator. File ini hanya persiapan sandbox dan bukan backend production. Setelah ZIP selesai, buka Workspace/Sandbox atau Activity → FULL_OFFLINE_READY → Play Review, jalankan gameplay lokal, lalu lakukan browser test tanpa network.
+
+Alur: masukkan URL → aktifkan Authorized Research Mode → isi license/izin → Preview dan spin → selesaikan challenge manual jika muncul → aktifkan mock offline → Full Collect → periksa `authorized-research.json`, `api-map.json`, dan `mock-offline-config.json` → Play Review → Auto Repair bila diperlukan → browser test network-off. Status FULL_OFFLINE_READY tetap harus dibuktikan per ZIP.

@@ -3416,6 +3416,23 @@
           <label for="url">Game URL</label>
           <input id="url" type="url" placeholder="https://example.com/game">
 
+          <div class="gc-research-card" style="margin-top:12px;padding:11px;border:1px solid rgba(96,165,250,.32);border-radius:10px;background:rgba(96,165,250,.06);">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="gc-authorized-research" checked> <b>Authorized Research Mode</b></label>
+              <span style="font-size:11px;color:var(--text-muted);">Capture hanya untuk game yang Anda miliki atau memiliki izin tertulis.</span>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px;align-items:end;">
+              <label style="font-size:11px;color:var(--text-muted);">License / izin resmi (URL atau ID referensi)
+                <input id="gc-license-ref" type="text" placeholder="https://... atau LICENSE-REF-001" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+              </label>
+              <button type="button" class="btn btn-secondary btn-sm" id="gc-challenge-manual" onclick="gcMarkManualChallenge()" title="Tandai challenge sudah diselesaikan secara manual di browser">Challenge manual belum selesai</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);"><input type="checkbox" id="gc-mock-offline" checked> Siapkan mock offline dan replay API</label>
+              <span id="gc-research-status" style="font-size:11px;color:var(--text-muted);">Izin belum dicatat · challenge manual belum selesai</span>
+            </div>
+          </div>
+
           <!-- Alur baru: Paste → Preview → ±10 spin → Get data → Collect -->
           <div id="gc-flow-steps" class="gc-flow-steps" aria-label="Alur collect">
             <div class="gc-flow-step active" data-step="1"><span class="n">1</span><span class="l">Paste URL</span></div>
@@ -12900,13 +12917,36 @@ function isApiLike(u){
     // ========== Collect via Cloudflare (Playwright) ==========
     // ========== Collect via Cloudflare (Playwright) ==========
     // Semua status & unduhan tetap di web ini — tidak buka tab GitHub.
+    function gcValidateResearchOptions(opts) {
+      if (!opts || !opts.authorized_research) return true;
+      if (!opts.license_ref) {
+        var status = document.getElementById('gc-research-status');
+        if (status) status.textContent = 'Referensi license/izin resmi wajib diisi.';
+        alert('Authorized Research Mode aktif. Isi URL atau ID license/izin resmi terlebih dahulu.');
+        var field = document.getElementById('gc-license-ref');
+        if (field) field.focus();
+        return false;
+      }
+      return true;
+    }
+    function gcMarkManualChallenge() {
+      window.__gcManualChallengeComplete = true;
+      var btn = document.getElementById('gc-challenge-manual');
+      if (btn) { btn.textContent = 'Challenge manual selesai ✓'; btn.classList.add('is-done'); }
+      var status = document.getElementById('gc-research-status');
+      if (status) status.textContent = (document.getElementById('gc-license-ref')?.value || '').trim() ? 'Izin tercatat · challenge manual selesai' : 'Izin belum dicatat · challenge manual selesai';
+      try { if (typeof actRecord === 'function') actRecord('research', 'Challenge manual ditandai selesai', 'User mengonfirmasi challenge di browser.'); } catch (_) {}
+    }
     function gcCollectOptions() {
       const wait = String(Math.min(180, Math.max(3, Number(document.getElementById('collect-wait')?.value) || 22)));
       const spins = String(Math.min(50, Math.max(0, Number(document.getElementById('collect-spins')?.value) || 6)));
       const spinDelay = String(Math.min(8000, Math.max(500, Number(document.getElementById('collect-spin-delay')?.value) || 2200)));
       const history = String(document.getElementById('collect-history')?.value === '0' ? '0' : '1');
       const unlimited = !!(document.getElementById('collect-unlimited') && document.getElementById('collect-unlimited').checked);
-      return { wait_seconds: wait, auto_spins: spins, spin_delay_ms: spinDelay, auto_history: history, unlimited: unlimited, mode: unlimited ? 'unlimited' : undefined };
+      const authorizedResearch = !!document.getElementById('gc-authorized-research')?.checked;
+      const licenseRef = String(document.getElementById('gc-license-ref')?.value || '').trim().slice(0, 500);
+      const mockOffline = !!document.getElementById('gc-mock-offline')?.checked;
+      return { wait_seconds: wait, auto_spins: spins, spin_delay_ms: spinDelay, auto_history: history, unlimited: unlimited, mode: unlimited ? 'unlimited' : undefined, authorized_research: authorizedResearch, license_ref: licenseRef, challenge_manual_complete: !!window.__gcManualChallengeComplete, mock_offline: mockOffline };
     }
 
     function gcCollectAIEnabled() {
@@ -12993,6 +13033,7 @@ function isApiLike(u){
       const statusEl = document.getElementById('status');
       const gameUrl = (urlInput && urlInput.value || '').trim();
       const opts = gcCollectOptions();
+      if (!gcValidateResearchOptions(opts)) return;
 
       if (!gameUrl) {
         alert('Masukkan URL game dulu');
@@ -13205,6 +13246,7 @@ function isApiLike(u){
       const statusEl = document.getElementById('status');
       const gameUrl = (urlInput && urlInput.value || '').trim();
       const opts = gcCollectOptions();
+      if (!gcValidateResearchOptions(opts)) return;
 
       if (!gameUrl) {
         alert('Masukkan URL game dulu');
@@ -13232,7 +13274,11 @@ function isApiLike(u){
             wait_seconds: opts.wait_seconds,
             auto_spins: opts.auto_spins,
             spin_delay_ms: opts.spin_delay_ms,
-            auto_history: opts.auto_history
+            auto_history: opts.auto_history,
+            authorized_research: opts.authorized_research,
+            license_ref: opts.license_ref,
+            challenge_manual_complete: opts.challenge_manual_complete,
+            mock_offline: opts.mock_offline
           })
         });
 
