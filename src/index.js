@@ -53,7 +53,7 @@ import {
   deleteSession
 } from "./history/kv.js";
 import { parseLogText } from "./history/log-parser.js";
-const GC_BUILD_ID = "4114635-replication";
+const GC_BUILD_ID = "4a02a2b-replication";
 
 import {
   hasProgressStore,
@@ -268,12 +268,16 @@ export default {
 
     // Alias fresh untuk menghindari HTML root lama yang mungkin masih berada di edge cache.
     if (request.method === "GET" && (url.pathname === "/app" || url.pathname === "/app/")) {
-      const indexRequest = new Request(new URL("/index.html", request.url), request);
-      const appResponse = await env.ASSETS.fetch(indexRequest);
-      const headers = new Headers(appResponse.headers);
-      headers.set("Cache-Control", "no-store, max-age=0");
-      headers.set("X-GC-Build", GC_BUILD_ID);
-      return new Response(appResponse.body, { status: appResponse.status, statusText: appResponse.statusText, headers });
+      try {
+        const indexRequest = new Request(new URL("/index.html", request.url).toString(), { method: "GET", headers: request.headers });
+        const appResponse = await env.ASSETS.fetch(indexRequest);
+        const headers = new Headers(appResponse.headers);
+        headers.set("Cache-Control", "no-store, max-age=0");
+        headers.set("X-GC-Build", GC_BUILD_ID);
+        return new Response(appResponse.body, { status: appResponse.status, statusText: appResponse.statusText, headers });
+      } catch (error) {
+        return new Response("App alias error: " + String(error?.message || error).slice(0, 180), { status: 502, headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=UTF-8" } });
+      }
     }
 
     // Asset proxy same-origin (tanpa R2) — Hybrid online
