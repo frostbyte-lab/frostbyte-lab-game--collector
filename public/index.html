@@ -13766,24 +13766,27 @@ function isApiLike(u){
           try {
             gcRunOfflineReadinessAssistant(blob, autoPackageName, { source: 'Cloudflare Capture', urlHost: new URL(gameUrl).host, collectMeta: window.__gcLastCollectMeta }).catch(function () {});
           } catch (_) {}
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = autoPackageName;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(a.href);
+          // Hanya paket yang benar-benar lengkap yang diunduh dan dimasukkan ke Workspace.
+          if (!incomplete && stillMissing === 0) {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = autoPackageName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
 
-          // Auto-load ZIP ke Workspace
-          try {
-            const zipInput = document.getElementById('zip-input');
-            if (zipInput) {
-              const transfer = new DataTransfer();
-              transfer.items.add(new File([blob], autoPackageName, { type: 'application/zip' }));
-              zipInput.files = transfer.files;
-              zipInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-          } catch (_) {}
+            // Auto-load ZIP lengkap ke Workspace
+            try {
+              const zipInput = document.getElementById('zip-input');
+              if (zipInput) {
+                const transfer = new DataTransfer();
+                transfer.items.add(new File([blob], autoPackageName, { type: 'application/zip' }));
+                zipInput.files = transfer.files;
+                zipInput.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            } catch (_) {}
+          }
 
           if (incomplete || stillMissing > 0) {
             statusEl.textContent = 'Status: [3/6 ZIP] Selesai tapi BELUM LENGKAP — ' + totalFiles + ' file · missing ' + stillMissing + (overall ? ' · skor ' + overall : '');
