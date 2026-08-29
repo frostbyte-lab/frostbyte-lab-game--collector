@@ -45,11 +45,16 @@ const zipFiles = {
   "index.html": new TextEncoder().encode("<script src=\\\"assets/js/game.js\\\"></script>"),
   "assets/js/game.js": new TextEncoder().encode("fetch('/api/init'); fetch('/api/spin'); new WebSocket('/events')"),
   "assets/data/0001-init.json": new TextEncoder().encode('{"ok":true,"data":{"balance":100000}}'),
-  "assets/data/0002-spin.json": new TextEncoder().encode('{"ok":true,"data":{"winAmount":0}}')
+  "assets/data/0002-spin.json": new TextEncoder().encode('{"ok":true,"data":{"winAmount":0}}'),
+  "offline-super.json": new TextEncoder().encode('{"status":"READY"}'),
+  "realtime.json": new TextEncoder().encode('{"version":1,"sessions":[]}'),
+  "KETERANGAN.md": new TextEncoder().encode('Offline package evidence'),
+  "analisis.json": new TextEncoder().encode('{"ok":true}'),
+  "README.md": new TextEncoder().encode('# Offline package')
 };
 const apiMap = buildApiMap(resources, zipFiles);
 zipFiles["api-map.json"] = new TextEncoder().encode(JSON.stringify(apiMap));
-zipFiles["manifest.json"] = new TextEncoder().encode(JSON.stringify({ resources }));
+zipFiles["manifest.json"] = new TextEncoder().encode(JSON.stringify({ resources: resources.map((item) => ({ ...item, collectStatus: "VERIFIED" })) }));
 zipFiles["runtime-interceptor.js"] = new TextEncoder().encode("export function install() {}\n");
 zipFiles["realtime-adapter.js"] = new TextEncoder().encode("export class OfflineWebSocket {}\n");
 

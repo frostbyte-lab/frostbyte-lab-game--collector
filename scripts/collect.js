@@ -98,6 +98,75 @@ function neutralizeFrameBusters(text) {
   return { text: out, count: n };
 }
 
+async function captureMissingStaticAssets(page, resources, zipFiles, seen, failedRequests) {
+  const candidates = [];
+  const seenCandidate = new Set();
+  const add = (raw) => {
+    const url = String(raw || '').replace(/&amp;/gi, '&').trim();
+    if (!/^https?:\/\//i.test(url) || seenCandidate.has(url)) return;
+    if (!/\.(png|jpe?g|gif|webp|avif|svg|ico|bmp|woff2?|ttf|otf|mp3|ogg|wav|m4a|aac|mp4|webm|wasm|atlas)(?:[?#]|$)/i.test(url)) return;
+    if (EXCLUDE.some((re) => re.test(url))) return;
+    seenCandidate.add(url);
+    candidates.push(url);
+  };
+  for (const resource of resources) {
+    if (resource && resource.type === 'document' && resource.url) {
+      try { add(new URL(resource.url).toString()); } catch {}
+    }
+  }
+  try {
+    const html = await page.content();
+    const re = /https?:\/\/[^\s"'`<>]+/gi;
+    let match;
+    while ((match = re.exec(html))) add(match[0].replace(/[),;]+$/, ''));
+  } catch {}
+  try {
+    const runtimeUrls = await page.evaluate(() => {
+      const out = new Set();
+      try { performance.getEntriesByType('resource').forEach((entry) => out.add(entry.name)); } catch {}
+      try { document.querySelectorAll('[src],[href],[data-src],[poster]').forEach((el) => ['src', 'href', 'data-src', 'poster'].forEach((key) => { const value = el.getAttribute(key); if (value) out.add(new URL(value, location.href).href); })); } catch {}
+      return [...out];
+    });
+    for (const url of runtimeUrls || []) add(url);
+  } catch {}
+  let fetched = 0;
+  let reused = 0;
+  let failed = 0;
+  const details = [];
+  for (const url of candidates) {
+    const noQuery = url.split(/[?#]/, 1)[0];
+    const already = resources.find((r) => String(r.url || '').split(/[?#]/, 1)[0] === noQuery);
+    if (already && zipFiles[already.localPath]) { reused++; continue; }
+    let name = safe(new URL(url).pathname.split('/').pop() || 'asset');
+    if (!/\.[a-z0-9]{1,8}$/i.test(name)) name += '.bin';
+    const localPath = `assets/images/${String(Object.keys(zipFiles).length + 1).padStart(4, '0')}-${name}`;
+    try {
+      const response = await page.request.get(url, {
+        timeout: 30000,
+        failOnStatusCode: false,
+        headers: { Referer: mainDocUrl, Accept: 'image/*,audio/*,font/*,*/*;q=0.8' }
+      });
+      const status = response.status();
+      const body = await response.body();
+      if (status >= 200 && status < 300 && body && body.length > 0) {
+        zipFiles[localPath] = new Uint8Array(body);
+        resources.push({ url, type: 'image', status, localPath, size: body.length, contentType: response.headers()['content-type'] || 'application/octet-stream', capturedBy: 'proactive-static-asset' });
+        seen.add(url);
+        fetched++;
+        details.push(`GET ${url.split('/').pop().slice(0, 80)} → ${localPath}`);
+      } else {
+        failed++;
+        details.push(`FAIL ${url.split('/').pop().slice(0, 80)} HTTP ${status}`);
+      }
+    } catch (error) {
+      failed++;
+      details.push(`FAIL ${url.split('/').pop().slice(0, 80)} ${(error?.message || error).slice(0, 100)}`);
+      failedRequests.push({ url: redactUrl(url), type: 'image', method: 'GET', error: String(error?.message || error).slice(0, 240), capturedBy: 'proactive-static-asset' });
+    }
+  }
+  return { candidates: candidates.length, fetched, reused, failed, details };
+}
+
 function smartPackage(zipFiles, resources) {
   const urlMap = new Map();
   for (const r of resources) {
@@ -471,6 +540,12 @@ async function main() {
   await scrollPage(page);
   await page.waitForTimeout(2000);
 
+  // Proactive fallback: asset static signed yang tetap tertulis di HTML diambil
+  // ulang dengan referer target, meskipun request tidak muncul sebagai response event.
+  console.log("PROGRESS: proactive_static_assets");
+  const proactiveAssets = await captureMissingStaticAssets(page, resources, zipFiles, seen, failedRequests);
+  console.log("PROGRESS: proactive_static_assets_done", JSON.stringify(proactiveAssets));
+
   // HTML akhir
   console.log("PROGRESS: capture_html");
   let html = await page.content();
@@ -549,7 +624,7 @@ async function main() {
   zipFiles["replication-report.json"] = strToU8(JSON.stringify({
     version: 1, generatedAt: new Date().toISOString(), target: safeTargetUrl,
     status: blockerReport.some((item) => item.severity === 'critical') ? 'MANUAL_ACTION_REQUIRED' : blockerReport.length ? 'PARTIAL' : 'CAPTURED',
-    blockers: blockerReport, failedRequests, realtime: { sessions: realtimeSummary.length, framesReceived: realtimeSummary.reduce((n, s) => n + s.received, 0), framesSent: realtimeSummary.reduce((n, s) => n + s.sent, 0) }
+    blockers: blockerReport, failedRequests, proactiveStaticAssets, realtime: { sessions: realtimeSummary.length, framesReceived: realtimeSummary.reduce((n, s) => n + s.received, 0), framesSent: realtimeSummary.reduce((n, s) => n + s.sent, 0) }
   }, null, 2));
 
   const manifest = {
@@ -578,7 +653,8 @@ async function main() {
     replaySequence,
     realtime: realtimeSummary,
     blockers: blockerReport,
-    failedRequests
+    failedRequests,
+    proactiveStaticAssets: proactiveAssets
   };
   zipFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
   zipFiles["authorized-research.json"] = strToU8(JSON.stringify({ version: 1, enabled: AUTHORIZED_RESEARCH, licenseRef: LICENSE_REF, challengeManualComplete: CHALLENGE_MANUAL_COMPLETE, mockOffline: MOCK_OFFLINE, targetHost: new URL(TARGET_URL).host, note: "Self-attestation metadata; verify license independently before distribution." }, null, 2));
@@ -591,6 +667,7 @@ Total: ${resources.length} file
 Critical API: ${criticalApis.length}
 API contracts: ${apiContracts.length} · replay exchanges: ${replaySequence.length}
 Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
+Proactive static assets: ${proactiveAssets.fetched} fetched · ${proactiveAssets.reused} reused · ${proactiveAssets.failed} failed
 Auto spins: ${AUTO_SPINS} · history: ${AUTO_HISTORY}
 Realtime sessions: ${realtimeSummary.length} · received frames: ${realtimeSummary.reduce((n, s) => n + s.received, 0)}
 Blockers: ${blockerReport.length ? blockerReport.map((item) => item.kind).join(', ') : 'none'}
