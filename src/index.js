@@ -53,6 +53,8 @@ import {
   deleteSession
 } from "./history/kv.js";
 import { parseLogText } from "./history/log-parser.js";
+const GC_BUILD_ID = "4114635-replication";
+
 import {
   hasProgressStore,
   setProgress,
@@ -239,7 +241,8 @@ export default {
       return Response.json({
         ok: true,
         service: "game-collector-pro",
-        version: "4.4-proxy",
+        version: "4.5-replication",
+        build: GC_BUILD_ID,
         github: Boolean(env.GITHUB_TOKEN),
         assetProxy: true,
         limits: {
@@ -1111,9 +1114,18 @@ export default {
     }
 
     // Cloudflare browser collect
-    if (request.method !== "POST" || url.pathname !== "/api/collect") {
-      return env.ASSETS ? env.ASSETS.fetch(request) : new Response("Not found", { status: 404 });
-    }
+      if (request.method !== "POST" || url.pathname !== "/api/collect") {
+        if (!env.ASSETS) return new Response("Not found", { status: 404 });
+        const assetResponse = await env.ASSETS.fetch(request);
+        const contentType = assetResponse.headers.get("content-type") || "";
+        if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html" || contentType.includes("text/html"))) {
+          const headers = new Headers(assetResponse.headers);
+          headers.set("Cache-Control", "no-store, max-age=0");
+          headers.set("X-GC-Build", GC_BUILD_ID);
+          return new Response(assetResponse.body, { status: assetResponse.status, statusText: assetResponse.statusText, headers });
+        }
+        return assetResponse;
+      }
 
     let body;
     try {
