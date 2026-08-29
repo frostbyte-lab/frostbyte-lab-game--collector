@@ -143,8 +143,55 @@ function redactHeaders(headers = {}) {
 }
 function bodyPeek(value, limit = 4096) {
   if (value == null) return null;
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  let text = typeof value === 'string' ? value : JSON.stringify(value);
+  text = text.replace(/((?:authorization|cookie|token|secret|password|passwd|signature|apikey|api_key|access_key)["' ]*[:=]["' ]*)[^"'&,;\s}]+/gi, '$1<redacted>');
   return text.length > limit ? text.slice(0, limit) + '…' : text;
+}
+
+const REALTIME_MAX_EVENTS = 160;
+const REALTIME_MAX_PAYLOAD = 12000;
+const SECRET_KEY_RE = /authorization|cookie|set-cookie|token|secret|password|passwd|signature|api[-_]?key|access[-_]?key|private[-_]?key/i;
+
+function redactUrl(raw) {
+  try {
+    const u = new URL(String(raw));
+    for (const key of [...u.searchParams.keys()]) {
+      if (SECRET_KEY_RE.test(key)) u.searchParams.set(key, '<redacted>');
+    }
+    return u.toString();
+  } catch {
+    return String(raw || '').replace(/((?:token|secret|password|signature|apikey|api_key)[=:])[^&\s]+/gi, '$1<redacted>');
+  }
+}
+
+function redactRealtimeValue(value, depth = 0) {
+  if (depth > 4) return '[nested]';
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    let text = value.slice(0, REALTIME_MAX_PAYLOAD);
+    text = text.replace(/((?:authorization|cookie|token|secret|password|signature|apikey|api_key)[=:]\s*)[^&,;\s]+/gi, '$1<redacted>');
+    if (text.length < value.length) text += '…';
+    try {
+      const parsed = JSON.parse(text);
+      return redactRealtimeValue(parsed, depth + 1);
+    } catch {
+      return text;
+    }
+  }
+  if (value instanceof Uint8Array || Buffer.isBuffer(value)) return { binary: true, bytes: value.length };
+  if (Array.isArray(value)) return value.slice(0, 60).map((item) => redactRealtimeValue(item, depth + 1));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [key, item] of Object.entries(value).slice(0, 80)) {
+      out[key] = SECRET_KEY_RE.test(key) ? '<redacted>' : redactRealtimeValue(item, depth + 1);
+    }
+    return out;
+  }
+  return String(value).slice(0, REALTIME_MAX_PAYLOAD);
+}
+
+function realtimeFrame(data) {
+  return redactRealtimeValue(data);
 }
 function topKeys(value) {
   if (!value || typeof value !== 'object') return [];
@@ -224,10 +271,43 @@ async function main() {
   const criticalApis = [];
   const apiContracts = [];
   const replaySequence = [];
+  const realtimeSessions = [];
+  const failedRequests = [];
+  const blockerSignals = [];
   let apiOrder = 0;
   let detectProfile = null;
   let mainDocStatus = 0;
   let mainDocUrl = TARGET_URL;
+
+  page.on("requestfailed", (request) => {
+    try {
+      const failure = request.failure()?.errorText || "request failed";
+      failedRequests.push({ url: redactUrl(request.url()), type: request.resourceType(), method: request.method(), error: failure.slice(0, 240) });
+      if (failedRequests.length > 200) failedRequests.shift();
+    } catch {}
+  });
+
+  page.on("websocket", (socket) => {
+    const record = {
+      kind: "websocket", url: redactUrl(socket.url()), protocol: "", openedAt: new Date().toISOString(),
+      framesReceived: [], framesSent: [], closed: false
+    };
+    realtimeSessions.push(record);
+    const addFrame = (list, data) => {
+      if (list.length >= REALTIME_MAX_EVENTS) return;
+      list.push({ at: new Date().toISOString(), data: realtimeFrame(data) });
+    };
+    try { socket.on("framereceived", (data) => addFrame(record.framesReceived, data)); } catch {}
+    try { socket.on("framesent", (data) => addFrame(record.framesSent, data)); } catch {}
+    try { socket.on("close", () => { record.closed = true; record.closedAt = new Date().toISOString(); }); } catch {}
+  });
+
+  page.on("request", (request) => {
+    try {
+      if (request.resourceType() !== "eventsource") return;
+      realtimeSessions.push({ kind: "eventsource", url: redactUrl(request.url()), protocol: "sse", openedAt: new Date().toISOString(), framesReceived: [], framesSent: [], closed: false });
+    } catch {}
+  });
 
   page.on("response", async (response) => {
     try {
@@ -242,7 +322,10 @@ async function main() {
       if (url.startsWith("data:") || url.startsWith("blob:")) return;
 
       const status = response.status();
-      if (status >= 400) return;
+      if (status >= 400) {
+        blockerSignals.push({ kind: status === 401 || status === 403 ? "auth_or_access" : "http_error", url: redactUrl(url), type, status });
+        return;
+      }
       if (!duplicate) seen.add(url);
 
       const requestHeaders = redactHeaders(req.headers());
@@ -264,7 +347,7 @@ async function main() {
         const contract = {
           order: ++apiOrder,
           method: req.method(),
-          url,
+          url: redactUrl(url),
           origin: parsedUrl?.origin || null,
           path: parsedUrl?.pathname || null,
           query: parsedUrl ? Object.fromEntries(parsedUrl.searchParams.keys().map((key) => [key, '<captured>'])) : {},
@@ -386,12 +469,53 @@ async function main() {
   zipFiles["index.html"] = strToU8(html);
 
   const blockedPage = isBlockedHtml(html) || mainDocStatus >= 400;
+  const htmlLower = String(html || '').toLowerCase();
+  const blockerReport = [];
+  const addBlocker = (kind, severity, message, evidence = []) => {
+    if (blockerReport.some((item) => item.kind === kind)) return;
+    blockerReport.push({ kind, severity, message, evidence: evidence.slice(0, 20) });
+  };
+  if (mainDocStatus === 401 || mainDocStatus === 403) {
+    addBlocker('auth_or_access', 'critical', 'Halaman utama membutuhkan akses resmi atau autentikasi.', [mainDocUrl]);
+  }
+  if (/captcha|turnstile|verify you are human|challenge-platform|hcaptcha/i.test(htmlLower)) {
+    addBlocker('captcha_or_challenge', 'critical', 'Challenge/CAPTCHA terdeteksi; selesaikan secara resmi lalu capture ulang.', [mainDocUrl]);
+  }
+  if (/encryptedmedia|widevine|playready|fairplay|\.license|drm/i.test(htmlLower) || resources.some((r) => /drm|license|widevine|playready|fairplay/i.test(r.url))) {
+    addBlocker('drm_or_license', 'critical', 'DRM atau license server terdeteksi; replikasi penuh memerlukan hak dan integrasi resmi.', resources.filter((r) => /drm|license|widevine|playready|fairplay/i.test(r.url)).map((r) => redactUrl(r.url)));
+  }
+  for (const item of failedRequests) {
+    if (/captcha|turnstile|challenge|cloudflare/i.test(item.url + ' ' + item.error)) {
+      addBlocker('captcha_or_challenge', 'critical', 'Request challenge gagal atau diblokir.', [item.url]);
+    } else if (/401|403|forbidden|unauthorized|access denied/i.test(item.error)) {
+      addBlocker('auth_or_access', 'high', 'Resource memerlukan autentikasi atau ditolak server.', [item.url]);
+    } else {
+      addBlocker('network_failures', 'medium', 'Sebagian resource gagal diambil saat capture.', failedRequests.map((x) => x.url));
+    }
+  }
+  const realtimeSummary = realtimeSessions.map((session) => ({
+    kind: session.kind || "websocket", url: session.url, openedAt: session.openedAt, closed: session.closed,
+    received: session.framesReceived.length, sent: session.framesSent.length,
+    framesReceived: session.framesReceived, framesSent: session.framesSent
+  }));
+  if (realtimeSessions.length && realtimeSessions.every((session) => session.framesReceived.length === 0 && session.framesSent.length === 0)) {
+    addBlocker('realtime_no_frames', 'medium', 'WebSocket terdeteksi tetapi tidak ada frame yang berhasil direkam; mode Hybrid mungkin diperlukan.', realtimeSessions.map((session) => session.url));
+  }
+  if (failedRequests.length > 0 && !blockerReport.length) {
+    addBlocker('network_failures', 'medium', 'Sebagian request gagal saat capture.', failedRequests.map((x) => x.url));
+  }
 
   console.log("PROGRESS: rewrite");
   const smart = smartPackage(zipFiles, resources);
+  const safeTargetUrl = redactUrl(TARGET_URL);
+  const safeResources = resources.map((resource) => ({
+    ...resource,
+    url: redactUrl(resource.url),
+    apiContract: resource.apiContract ? { ...resource.apiContract, url: redactUrl(resource.apiContract.url) } : resource.apiContract
+  }));
 
   // api-map resmi: endpoint + snapshot + contract + replay sequence
-  const apiMap = buildApiMap(resources, zipFiles);
+  const apiMap = buildApiMap(safeResources, zipFiles);
   apiMap.generatedAt = new Date().toISOString();
   apiMap.criticalCount = criticalApis.length;
   apiMap.contracts = apiContracts;
@@ -407,12 +531,23 @@ async function main() {
     autoHistory: interactResult?.autoHistory,
     spinDelayMs: interactResult?.spinDelayMs
   };
+  apiMap.realtime = {
+    detected: realtimeSummary.length > 0,
+    sessions: realtimeSummary.map((session) => ({ kind: session.kind, url: session.url, openedAt: session.openedAt, closed: session.closed, received: session.received, sent: session.sent }))
+  };
+  apiMap.blockers = blockerReport;
   zipFiles["api-map.json"] = strToU8(JSON.stringify(apiMap, null, 2));
+  zipFiles["realtime.json"] = strToU8(JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), sessions: realtimeSummary }, null, 2));
+  zipFiles["replication-report.json"] = strToU8(JSON.stringify({
+    version: 1, generatedAt: new Date().toISOString(), target: safeTargetUrl,
+    status: blockerReport.some((item) => item.severity === 'critical') ? 'MANUAL_ACTION_REQUIRED' : blockerReport.length ? 'PARTIAL' : 'CAPTURED',
+    blockers: blockerReport, failedRequests, realtime: { sessions: realtimeSummary.length, framesReceived: realtimeSummary.reduce((n, s) => n + s.received, 0), framesSent: realtimeSummary.reduce((n, s) => n + s.sent, 0) }
+  }, null, 2));
 
   const manifest = {
-    target: TARGET_URL,
+    target: safeTargetUrl,
     mainDocStatus,
-    mainDocUrl,
+    mainDocUrl: redactUrl(mainDocUrl),
     collectedAt: new Date().toISOString(),
     totalFiles: resources.length,
     criticalApis: criticalApis.length,
@@ -423,13 +558,16 @@ async function main() {
       autoHistory: AUTO_HISTORY !== "0",
       spinDelayMs: Number(SPIN_DELAY_MS)
     },
-    resources,
+    resources: safeResources,
     apiContracts,
-    replaySequence
+    replaySequence,
+    realtime: realtimeSummary,
+    blockers: blockerReport,
+    failedRequests
   };
   zipFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
   zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
-Target: ${TARGET_URL}
+Target: ${safeTargetUrl}
 Main document status: ${mainDocStatus}
 Tanggal: ${new Date().toISOString()}
 Total: ${resources.length} file
@@ -437,6 +575,8 @@ Critical API: ${criticalApis.length}
 API contracts: ${apiContracts.length} · replay exchanges: ${replaySequence.length}
 Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
 Auto spins: ${AUTO_SPINS} · history: ${AUTO_HISTORY}
+Realtime sessions: ${realtimeSummary.length} · received frames: ${realtimeSummary.reduce((n, s) => n + s.received, 0)}
+Blockers: ${blockerReport.length ? blockerReport.map((item) => item.kind).join(', ') : 'none'}
 Via: GitHub Actions (auto-detect + strict interact)
 
 Cara pakai: extract → npx serve . → buka browser
@@ -459,9 +599,9 @@ Atau load di Workspace Game Collector Pro.
           ok: false,
           reason,
           message,
-          target: TARGET_URL,
+          target: safeTargetUrl,
           mainDocStatus,
-          mainDocUrl,
+          mainDocUrl: redactUrl(mainDocUrl),
           totalFiles: resources.length,
           at: new Date().toISOString()
         },

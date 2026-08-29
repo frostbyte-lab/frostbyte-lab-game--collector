@@ -62,6 +62,49 @@ import {
   clearStop
 } from "./progress/store.js";
 
+const CAPTURE_SECRET_KEY = /authorization|cookie|set-cookie|token|secret|password|passwd|signature|api[-_]?key|access[-_]?key|private[-_]?key/i;
+function redactCaptureUrl(raw) {
+  try {
+    const u = new URL(String(raw));
+    for (const key of [...u.searchParams.keys()]) {
+      if (CAPTURE_SECRET_KEY.test(key)) u.searchParams.set(key, '<redacted>');
+    }
+    return u.toString();
+  } catch {
+    return String(raw || '').replace(/((?:token|secret|password|signature|apikey|api_key)[=:])[^&\s]+/gi, '$1<redacted>');
+  }
+}
+function redactCaptureValue(value, depth = 0) {
+  if (depth > 4) return '[nested]';
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    return value.slice(0, 12000).replace(/((?:authorization|cookie|token|secret|password|signature|apikey|api_key)[=:]\s*)[^&,;\s]+/gi, '$1<redacted>');
+  }
+  if (value instanceof Uint8Array) return { binary: true, bytes: value.byteLength };
+  if (Array.isArray(value)) return value.slice(0, 60).map((item) => redactCaptureValue(item, depth + 1));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [key, item] of Object.entries(value).slice(0, 80)) out[key] = CAPTURE_SECRET_KEY.test(key) ? '<redacted>' : redactCaptureValue(item, depth + 1);
+    return out;
+  }
+  return String(value).slice(0, 12000);
+}
+function sanitizeCaptureObject(value, key = '', depth = 0) {
+  if (depth > 6) return '[nested]';
+  if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') return /url|target|origin|endpoint/i.test(key) ? redactCaptureUrl(value) : redactCaptureValue(value, depth);
+  if (value instanceof Uint8Array) return { binary: true, bytes: value.byteLength };
+  if (Array.isArray(value)) return value.slice(0, 240).map((item) => sanitizeCaptureObject(item, key, depth + 1));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [childKey, item] of Object.entries(value).slice(0, 240)) {
+      out[childKey] = CAPTURE_SECRET_KEY.test(childKey) ? '<redacted>' : sanitizeCaptureObject(item, childKey, depth + 1);
+    }
+    return out;
+  }
+  return String(value).slice(0, 12000);
+}
+
 /** Portable GH config — override via wrangler vars (domain/server baru) */
 function ghConfig(env = {}) {
   return {
@@ -1161,6 +1204,8 @@ export default {
     const expectedRefs = new Set(); // skema/referensi yang ditemukan di HTML/JS
     // Tracker ukuran untuk guard tanpa R2
     const sizeState = { rawBytes: 0, skippedLarge: 0, stoppedForSize: false };
+    const realtimeSessions = [];
+    const failedRequests = [];
 
     let browser;
     try {
@@ -1183,6 +1228,29 @@ export default {
       await report(8, "browser", "Browser siap, membuka halaman...");
       const page = await browser.newPage();
       await report(12, "page", "Navigasi ke URL game...");
+
+      page.on("requestfailed", (request) => {
+        try {
+          failedRequests.push({ url: redactCaptureUrl(request.url()), type: request.resourceType(), method: request.method(), error: String(request.failure()?.errorText || "request failed").slice(0, 240) });
+          if (failedRequests.length > 200) failedRequests.shift();
+        } catch (_) {}
+      });
+      page.on("websocket", (socket) => {
+        const record = { kind: "websocket", url: redactCaptureUrl(socket.url()), openedAt: new Date().toISOString(), framesReceived: [], framesSent: [], closed: false };
+        realtimeSessions.push(record);
+        const addFrame = (list, data) => {
+          if (list.length >= 160) return;
+          list.push({ at: new Date().toISOString(), data: redactCaptureValue(data) });
+        };
+        try { socket.on("framereceived", (data) => addFrame(record.framesReceived, data)); } catch (_) {}
+        try { socket.on("framesent", (data) => addFrame(record.framesSent, data)); } catch (_) {}
+        try { socket.on("close", () => { record.closed = true; record.closedAt = new Date().toISOString(); }); } catch (_) {}
+      });
+      page.on("request", (request) => {
+        try {
+          if (request.resourceType() === "eventsource") realtimeSessions.push({ kind: "eventsource", url: redactCaptureUrl(request.url()), openedAt: new Date().toISOString(), framesReceived: [], framesSent: [], closed: false });
+        } catch (_) {}
+      });
 
       // Collect network resources
       page.on("response", async (response) => {
@@ -1250,6 +1318,7 @@ export default {
 
           // Gagal download: catat sebagai DOWNLOAD_FAILED — BUKAN API
           if (response.status() >= 400) {
+            failedRequests.push({ url: redactCaptureUrl(u), type, method: req.method(), error: "http " + response.status(), status: response.status() });
             if (!seen.has(u)) {
               seen.add(u);
               const fail = markDownloadFailed(u, response.status(), "http " + response.status());
@@ -1911,8 +1980,34 @@ export default {
       const failCount = manifest.filter(
         (r) => r.collectStatus === STRICT_STATUS.DOWNLOAD_FAILED || r.strictStatus === STRICT_STATUS.DOWNLOAD_FAILED
       ).length;
+      const safeTargetUrl = redactCaptureUrl(target.href);
+      const safeManifest = sanitizeCaptureObject(manifest);
+      const safeRealtime = realtimeSessions.map((session) => sanitizeCaptureObject({
+        kind: session.kind || 'websocket', url: session.url, openedAt: session.openedAt, closed: session.closed,
+        received: session.framesReceived.length, sent: session.framesSent.length,
+        framesReceived: session.framesReceived, framesSent: session.framesSent
+      }));
+      const replicationBlockers = [];
+      const addReplicationBlocker = (kind, severity, message, evidence = []) => {
+        if (!replicationBlockers.some((item) => item.kind === kind)) replicationBlockers.push({ kind, severity, message, evidence: evidence.slice(0, 20) });
+      };
+      const htmlLowerForBlockers = String(html || '').toLowerCase();
+      if (mainDocStatus === 401 || mainDocStatus === 403) addReplicationBlocker('auth_or_access', 'critical', 'Halaman utama membutuhkan autentikasi atau akses resmi.', [redactCaptureUrl(mainDocUrl)]);
+      if (/captcha|turnstile|verify you are human|challenge-platform|hcaptcha|just a moment/i.test(htmlLowerForBlockers)) addReplicationBlocker('captcha_or_challenge', 'critical', 'CAPTCHA/challenge terdeteksi; selesaikan secara resmi lalu capture ulang.', [safeTargetUrl]);
+      if (/encryptedmedia|widevine|playready|fairplay|license server|drm/i.test(htmlLowerForBlockers) || manifest.some((item) => /drm|license|widevine|playready|fairplay/i.test(item.url || ''))) addReplicationBlocker('drm_or_license', 'critical', 'DRM atau license server terdeteksi; diperlukan integrasi resmi dan hak akses.', manifest.filter((item) => /drm|license|widevine|playready|fairplay/i.test(item.url || '')).map((item) => redactCaptureUrl(item.url)));
+      if (failedRequests.some((item) => /captcha|challenge|cloudflare/i.test(item.url + ' ' + item.error))) addReplicationBlocker('captcha_or_challenge', 'critical', 'Request challenge gagal saat capture.', failedRequests.map((item) => item.url));
+      if (failedRequests.length) addReplicationBlocker('network_failures', 'medium', 'Sebagian request gagal saat capture; cek failedRequests pada laporan.', failedRequests.map((item) => item.url));
+      if (safeRealtime.length && safeRealtime.every((session) => !session.received && !session.sent)) addReplicationBlocker('realtime_no_frames', 'medium', 'Realtime terdeteksi tetapi tidak ada frame yang dapat direplay.', safeRealtime.map((session) => session.url));
+      const replicationReport = {
+        version: 1, generatedAt: new Date().toISOString(), target: safeTargetUrl,
+        status: replicationBlockers.some((item) => item.severity === 'critical') ? 'MANUAL_ACTION_REQUIRED' : replicationBlockers.length ? 'PARTIAL' : 'CAPTURED',
+        blockers: replicationBlockers, failedRequests: sanitizeCaptureObject(failedRequests),
+        realtime: { sessions: safeRealtime.length, framesReceived: safeRealtime.reduce((total, item) => total + item.received, 0), framesSent: safeRealtime.reduce((total, item) => total + item.sent, 0) }
+      };
+      zipFiles['replication-report.json'] = strToU8(JSON.stringify(replicationReport, null, 2));
+      zipFiles['realtime.json'] = strToU8(JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), sessions: safeRealtime }, null, 2));
       const manifestData = {
-        target: target.href,
+        target: safeTargetUrl,
         collectedAt: new Date().toISOString(),
         totalFiles: manifest.length,
         totals: {
@@ -1925,16 +2020,19 @@ export default {
         smartRewrite: smart,
         autoFill: fillReport,
         collectAudit: collectAudit
-          ? {
+          ? sanitizeCaptureObject({
               ok: collectAudit.ok,
               byStatus: collectAudit.byStatus,
               unresolvedSample: (collectAudit.unresolvedAssets || []).slice(0, 20)
-            }
+            })
           : null,
+        realtime: safeRealtime,
+        blockers: replicationBlockers,
+        failedRequests: sanitizeCaptureObject(failedRequests),
         analysisSummary: analysis?.summary || null,
         note:
           "Klasifikasi: Content-Type dulu (CDN+image=ASSET). DOWNLOAD_FAILED ≠ API. Spin=Interaction Discovery opsional. Lihat collect-audit.json.",
-        resources: manifest
+        resources: safeManifest
       };
       zipFiles["manifest.json"] = strToU8(JSON.stringify(manifestData, null, 2));
       zipFiles["keterangan.json"] = strToU8(JSON.stringify(ket.json, null, 2));
@@ -1945,7 +2043,7 @@ export default {
         apiMap = ensureCriticalApiMocks(apiMap);
         apiMap.replaySequence = buildReplaySequence(manifest);
         apiMapFinal = apiMap;
-        zipFiles["api-map.json"] = strToU8(JSON.stringify(apiMap, null, 2));
+        zipFiles["api-map.json"] = strToU8(JSON.stringify(sanitizeCaptureObject({ ...apiMap, realtime: safeRealtime, blockers: replicationBlockers }), null, 2));
       } catch (e) {
         apiMapFinal = ensureCriticalApiMocks({
           version: 2,

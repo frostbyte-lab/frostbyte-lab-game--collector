@@ -9246,6 +9246,16 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           }
         }
         await gcEnrichAssetAliases();
+        // Load frame replay jika collector menyimpan realtime.json.
+        let realtimePayload = { sessions: [] };
+        try {
+          const rtPath = names.find(n => /(^|\/)realtime\.json$/i.test(n));
+          if (rtPath && zipFileMap[rtPath]) {
+            const rawRt = openFiles.has(rtPath) ? openFiles.get(rtPath) : await zipFileMap[rtPath].async('string');
+            const parsedRt = JSON.parse(rawRt);
+            if (parsedRt && Array.isArray(parsedRt.sessions)) realtimePayload = parsedRt;
+          }
+        } catch (_) {}
         const previewBaseUrl = window.location.origin + '/';
         const sandboxMode = activePreviewMode !== 'web';
         const hybridMode = Boolean(window.__gcHybridPreview);
@@ -9423,6 +9433,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
   var GC_ASSET_MAP = ${JSON.stringify(previewAssetMap)};
   var GC_ASSET_NAMES = ${JSON.stringify(previewAssetNames)};
   var GC_API_MAP = ${JSON.stringify(apiMapPayload)};
+  var GC_REALTIME = ${JSON.stringify(realtimePayload)};
   var stats = { local: 0, mocked: 0, external: 0, blocked: 0, proxied: 0, urls: [] };
   function send(type, msg, extra){
     try { parent.postMessage({ source:'gc-preview', type:type, msg:String(msg||''), extra:extra||null }, '*'); } catch(e){}
@@ -9847,6 +9858,66 @@ function isApiLike(u){
       };
     }
   } catch(e){}
+  // Realtime adapter: replay frame yang tersimpan; tidak membypass auth/DRM/CAPTCHA.
+  function gcRtSession(url){
+    var s = String(url || '').toLowerCase();
+    var list = GC_REALTIME && Array.isArray(GC_REALTIME.sessions) ? GC_REALTIME.sessions : [];
+    for (var i = 0; i < list.length; i++) {
+      var x = String(list[i].url || '').toLowerCase();
+      if (x === s || (x && s && (x.indexOf(s) >= 0 || s.indexOf(x) >= 0))) return list[i];
+      try { if (new URL(x).pathname === new URL(s, GC_BASE_URL).pathname) return list[i]; } catch (_) {}
+    }
+    return null;
+  }
+  function gcRtData(item){
+    var d = item && Object.prototype.hasOwnProperty.call(item, 'data') ? item.data : item;
+    if (d && typeof d === 'object' && d.binary) return '';
+    return typeof d === 'string' ? d : JSON.stringify(d == null ? '' : d);
+  }
+  function gcEmitRt(obj, type, init){
+    try { obj.dispatchEvent(new MessageEvent(type, init || {})); } catch (_) { try { obj.dispatchEvent(new Event(type)); } catch (__) {} }
+    try { if (typeof obj['on' + type] === 'function') obj['on' + type](init || {}); } catch (_) {}
+  }
+  if (GC_SANDBOX && !GC_HYBRID) {
+    var NativeWebSocket = window.WebSocket;
+    window.WebSocket = class GCOfflineWebSocket extends EventTarget {
+      static CONNECTING = 0; static OPEN = 1; static CLOSING = 2; static CLOSED = 3;
+      constructor(url, protocols){
+        super(); this.url = String(url || ''); this.protocol = Array.isArray(protocols) ? String(protocols[0] || '') : String(protocols || '');
+        this.readyState = 0; this.bufferedAmount = 0; this.extensions = ''; this.binaryType = 'blob'; this.sent = [];
+        this.__gcSession = gcRtSession(this.url);
+        var self = this;
+        setTimeout(function(){
+          if (self.readyState !== 0) return;
+          self.readyState = 1; gcEmitRt(self, 'open', {});
+          var events = self.__gcSession && Array.isArray(self.__gcSession.framesReceived) ? self.__gcSession.framesReceived : [];
+          if (!events.length) send('warn', 'Realtime WebSocket tanpa frame replay — ' + self.url.slice(0, 140));
+          events.slice(0, 160).forEach(function(item, index){
+            setTimeout(function(){ if (self.readyState === 1) gcEmitRt(self, 'message', { data: gcRtData(item) }); }, Math.min(5000, 30 + index * 80));
+          });
+        }, 0);
+      }
+      send(data){ if (this.readyState !== 1) throw new Error('INVALID_STATE: WebSocket offline belum OPEN'); this.sent.push(data); }
+      close(code, reason){ if (this.readyState === 3) return; this.readyState = 2; this.readyState = 3; gcEmitRt(this, 'close', { code: code || 1000, reason: reason || 'offline replay complete', wasClean: true }); }
+    };
+    // Jangan mengganti prototype class; metode send/close harus tetap tersedia di Sandbox.
+    var NativeEventSource = window.EventSource;
+    window.EventSource = class GCOfflineEventSource extends EventTarget {
+      static CONNECTING = 0; static OPEN = 1; static CLOSED = 2;
+      constructor(url, options){
+        super(); this.url = String(url || ''); this.withCredentials = Boolean(options && options.withCredentials); this.readyState = 0;
+        this.__gcSession = gcRtSession(this.url); var self = this;
+        setTimeout(function(){
+          if (self.readyState !== 0) return;
+          self.readyState = 1; gcEmitRt(self, 'open', {});
+          var events = self.__gcSession && Array.isArray(self.__gcSession.framesReceived) ? self.__gcSession.framesReceived : [];
+          events.slice(0, 160).forEach(function(item, index){ setTimeout(function(){ if (self.readyState === 1) gcEmitRt(self, 'message', { data: gcRtData(item), lastEventId: String(item && item.id || '') }); }, Math.min(5000, 30 + index * 80)); });
+        }, 0);
+      }
+      close(){ if (this.readyState === 2) return; this.readyState = 2; this.readyState = 0 + 2; }
+    };
+    send('info', 'Realtime offline adapter aktif · session=' + ((GC_REALTIME && GC_REALTIME.sessions || []).length));
+  }
   document.addEventListener('securitypolicyviolation', function(ev){
     send('warn', 'CSP: '+ (ev.blockedURI||'') + ' ('+(ev.violatedDirective||'')+')');
   });

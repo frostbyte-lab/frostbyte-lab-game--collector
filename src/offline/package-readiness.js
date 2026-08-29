@@ -35,6 +35,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   const apiMap = jsonFile(files, "api-map.json");
   const superReport = jsonFile(files, "offline-super.json");
   const statusReport = jsonFile(files, "collect-status.json");
+  const replicationReport = jsonFile(files, "replication-report.json");
   const indexHtml = lowerNames.some((name) => /(^|\/)index\.html?$/.test(name));
   const texts = names.filter((name) => TEXT_EXT.test(name)).map((name) => textOf(files[name]).slice(0, 500000));
   const externalRefs = listExternalRefs(files);
@@ -43,14 +44,16 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   const unresolved = Array.isArray(manifest) ? manifest.filter((entry) => /https?:\/\//i.test(String(entry?.url || "")) && !entry?.localPath).length : 0;
   const failed = Array.isArray(manifest) ? manifest.filter((entry) => /FAILED|INVALID|ERROR/i.test(String(entry?.collectStatus || entry?.strictStatus || ""))).length : 0;
   const hasApi = apiEndpoints.length > 0 || texts.some((text) => API_MARKER.test(text));
-  const hasRealtime = texts.some((text) => REALTIME_MARKER.test(text));
-  const hasRuntimeInterceptor = lowerNames.some((name) => /runtime-interceptor|realtime-adapter|offline-validation/.test(name));
+  const hasRealtime = texts.some((text) => REALTIME_MARKER.test(text)) || Boolean(replicationReport?.realtime?.sessions);
+  // Sandbox aplikasi menginjeksi adapter; realtime.json adalah bukti bahwa data replay tersedia.
+  const hasRuntimeInterceptor = lowerNames.some((name) => /runtime-interceptor|realtime-adapter|offline-validation/.test(name)) || lowerNames.some((name) => /(^|\/)realtime\.json$/.test(name));
+  const criticalReplicationBlockers = Array.isArray(replicationReport?.blockers) ? replicationReport.blockers.filter((item) => item?.severity === "critical") : [];
   const browser = browserTest || { status: "NOT_RUN", networkIsolated: false, gameplayReady: false, failures: ["Browser test belum dijalankan"] };
   const shellReady = indexHtml && names.some((name) => /\.js$/i.test(name));
   const hybridReady = shellReady && (externalRefs.length > 0 || unresolved > 0 || hasApi);
   const mockReady = shellReady && apiEndpoints.length > 0 && (snapshots.length > 0 || Boolean(superReport));
   const gameplayReady = Boolean(browser.gameplayReady) || (mockReady && snapshots.length >= 3 && failed === 0);
-  const fullOfflineReady = Boolean(browser.gameplayReady && browser.networkIsolated && browser.status === "FULL_OFFLINE_READY" && unresolved === 0 && failed === 0);
+  const fullOfflineReady = Boolean(browser.gameplayReady && browser.networkIsolated && browser.status === "FULL_OFFLINE_READY" && unresolved === 0 && failed === 0 && criticalReplicationBlockers.length === 0);
   const status = fullOfflineReady ? "FULL_OFFLINE_READY" : gameplayReady ? "GAMEPLAY_READY" : mockReady ? "MOCK_READY" : hybridReady ? "HYBRID_READY" : shellReady ? "SHELL_READY" : "NOT_READY";
   const blockers = [];
   if (!indexHtml) blockers.push("index.html tidak ditemukan");
@@ -60,6 +63,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
   if (hasApi && apiEndpoints.length === 0) blockers.push("API terdeteksi tetapi api-map.json kosong");
   if (apiEndpoints.length > 0 && snapshots.length === 0) blockers.push("Tidak ada snapshot API nyata");
   if (hasRealtime && !hasRuntimeInterceptor) blockers.push("Realtime terdeteksi tetapi runtime/realtime adapter tidak ada di paket");
+  for (const item of criticalReplicationBlockers) blockers.push(item.message || `Blocker kritis: ${item.kind || "unknown"}`);
   if (!browser.gameplayReady) blockers.push("Browser gameplay test belum berhasil");
   if (!browser.networkIsolated) blockers.push("Network isolation belum terbukti");
   return {
@@ -75,7 +79,7 @@ export function validatePackageFiles(files = {}, { browserTest = null } = {}) {
     assets: { files: names.length, indexHtml, unresolved, failed, externalRefs: externalRefs.length },
     api: { detected: hasApi, endpoints: apiEndpoints.length, snapshots: snapshots.length, contracts: Array.isArray(apiMap?.contracts) ? apiMap.contracts.length : 0, replaySequence: Array.isArray(apiMap?.replaySequence) ? apiMap.replaySequence.length : 0 },
     realtime: { detected: hasRealtime, adapterPresent: hasRuntimeInterceptor },
-    sourceReports: { hasManifest: Boolean(manifest), hasApiMap: Boolean(apiMap), hasOfflineSuper: Boolean(superReport), hasCollectStatus: Boolean(statusReport) },
+    sourceReports: { hasManifest: Boolean(manifest), hasApiMap: Boolean(apiMap), hasOfflineSuper: Boolean(superReport), hasCollectStatus: Boolean(statusReport), hasReplicationReport: Boolean(replicationReport) },
     blockers,
     externalRefs
   };
