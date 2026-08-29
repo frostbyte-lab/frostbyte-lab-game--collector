@@ -10867,6 +10867,21 @@ function isApiLike(u){
           continue;
         }
         try {
+          // Signed CDN tertentu (termasuk static.eajzzxhro.com) menolak URL tanpa
+          // token yang masih berlaku. Jangan mengulang request yang pasti 403.
+          let protectedCdn = false;
+          let hasSignedAuth = false;
+          try {
+            const candidate = new URL(url);
+            protectedCdn = /^(?:static\.)?eajzzxhro\.com$/i.test(candidate.hostname) && /^static\./i.test(candidate.hostname);
+            hasSignedAuth = /(?:^|[?&])(sign|signature|token|expires|exp|auth|key)=/i.test(candidate.search);
+          } catch (_) {}
+          if (protectedCdn && !hasSignedAuth) {
+            skipped++;
+            details.push('SKIP stale protected CDN URL (token tidak ada): ' + base);
+            continue;
+          }
+
           const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
           const timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (_) {} }, 25000) : null;
           // Prefer same-origin Worker proxy (hindari CORS CDN)
@@ -10888,23 +10903,34 @@ function isApiLike(u){
               headers: { 'X-GC-Referer': gameRef, 'Accept': 'image/*,*/*' }
             });
           } catch (_) { res = null; }
+          if (timer) clearTimeout(timer);
+          // For protected CDN, a proxy 502 normally wraps an upstream 403. A
+          // direct browser retry cannot add the missing CDN token and only
+          // creates a second noisy failure, so stop after one proxy attempt.
           if (!res || !res.ok) {
+            if (protectedCdn) {
+              failed++;
+              details.push('FAIL protected CDN HTTP ' + (res ? res.status : 'network') + ': ' + base + ' (URL/token perlu diperbarui)');
+              continue;
+            }
+            const directCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const directTimer = directCtrl ? setTimeout(function () { try { directCtrl.abort(); } catch (_) {} }, 25000) : null;
             try {
               res = await fetch(url, {
                 method: 'GET',
                 mode: 'cors',
                 credentials: 'omit',
-                signal: ctrl ? ctrl.signal : undefined,
+                signal: directCtrl ? directCtrl.signal : undefined,
                 headers: { Accept: 'image/*,*/*' }
               });
             } catch (e2) {
-              if (timer) clearTimeout(timer);
+              if (directTimer) clearTimeout(directTimer);
               failed++;
               details.push('FAIL fetch: ' + base + ' — ' + String(e2 && e2.message || e2).slice(0, 60));
               continue;
             }
+            if (directTimer) clearTimeout(directTimer);
           }
-          if (timer) clearTimeout(timer);
           if (!res.ok) {
             failed++;
             details.push('FAIL HTTP ' + res.status + ': ' + base);
@@ -11390,9 +11416,9 @@ function isApiLike(u){
       try { host = new URL(targetUrl || document.getElementById('url')?.value || '').hostname; } catch (_) {}
       var stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
       var id = ('game-' + (host || 'package') + '-' + stamp).toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 80);
+      var saveCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var saveTimeout = setTimeout(function () { try { if (saveCtrl) saveCtrl.abort(); } catch (_) {} }, 180000);
       try {
-        var saveCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        var saveTimeout = setTimeout(function () { try { if (saveCtrl) saveCtrl.abort(); } catch (_) {} }, 60000);
         var res = await fetch('/api/github/package/save', {
           method: 'POST',
           headers: {
@@ -11405,12 +11431,14 @@ function isApiLike(u){
           signal: saveCtrl ? saveCtrl.signal : undefined
         });
         clearTimeout(saveTimeout);
+        saveTimeout = null;
         var data = await res.json().catch(function () { return {}; });
         if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
         window.__gcLastGitHubPackage = data;
         appendLog('Salinan GitHub tersimpan: ' + data.path + ' · branch ' + data.branch, 'ok');
         return data;
       } catch (e) {
+        if (saveTimeout) clearTimeout(saveTimeout);
         appendLog('Salinan GitHub gagal: ' + (e && e.message || e) + ' · ZIP lokal tetap tersedia', 'warn');
         return null;
       }
