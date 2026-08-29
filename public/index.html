@@ -3702,11 +3702,12 @@
             <div class="gc-cockpit-preview">
               <iframe id="gc-cockpit-frame" class="gc-cockpit-frame" title="Preview game" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
               <div class="gc-cockpit-placeholder" id="gc-cockpit-placeholder">
-                <div><strong>Preview akan tampil di sini</strong><span>Tempel URL game di bawah, lalu tekan COLLECT untuk memuat preview dan mengambil resource.</span></div>
+                <div><strong>Preview akan tampil di sini</strong><span>Tempel URL game di bawah, tekan Preview &amp; Mainkan, lalu mainkan beberapa ronde sebelum COLLECT.</span></div>
               </div>
             </div>
             <div class="gc-cockpit-footer">
               <span class="gc-cockpit-status" id="gc-cockpit-preview-status">Menunggu URL game…</span>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="gcCockpitMarkPlayed()" title="Tandai sesi preview sudah dimainkan">Get Data ✓</button>
               <button type="button" class="btn btn-secondary btn-sm" onclick="gcCockpitOpenInTab()" title="Buka URL game di tab baru">Buka tab</button>
             </div>
           </section>
@@ -3742,8 +3743,9 @@ Setelah Collect selesai, file dan cuplikan kode akan muncul di sini.</pre>
             <input id="url" type="url" placeholder="https://example.com/game" autocomplete="url">
           </div>
           <div class="gc-url-actions">
-            <button type="button" class="btn btn-primary" onclick="gcCockpitCollect('cloudflare')" title="Preview lalu collect dengan Cloudflare">COLLECT</button>
-            <button type="button" class="btn btn-secondary" onclick="gcCockpitCollect('github')" title="Preview lalu collect melalui GitHub Actions">GitHub</button>
+              <button type="button" class="btn btn-secondary" onclick="gcCockpitStartManualPreview()" title="Muat game agar dapat dimainkan sebelum capture">Preview &amp; Mainkan</button>
+              <button type="button" class="btn btn-primary" onclick="gcCockpitCollect('cloudflare')" title="Collect setelah preview manual selesai">COLLECT</button>
+              <button type="button" class="btn btn-secondary" onclick="gcCockpitCollect('github')" title="Collect melalui GitHub Actions setelah preview manual selesai">GitHub</button>
           </div>
         </div>
 
@@ -5256,17 +5258,66 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       } catch (_) {}
     }
 
-    function gcCockpitCollect(kind) {
+    function gcCockpitReadUrl() {
       const input = document.getElementById('url');
       const value = String(input && input.value || '').trim();
-      if (!value) { alert('Masukkan URL game terlebih dahulu.'); if (input) input.focus(); return; }
-      try { new URL(value); } catch (_) { alert('URL tidak valid (harus http/https).'); return; }
+      if (!value) { alert('Masukkan URL game terlebih dahulu.'); if (input) input.focus(); return null; }
+      try { new URL(value); } catch (_) { alert('URL tidak valid (harus http/https).'); return null; }
+      return value;
+    }
+
+    function gcCockpitStartManualPreview() {
+      const value = gcCockpitReadUrl();
+      if (!value) return false;
+      window.__gcManualPreviewUrl = value;
+      window.__gcManualPreviewStartedAt = Date.now();
+      window.__gcManualPreviewReady = false;
+      try { gcSetFlowStep(2); } catch (_) {}
+      gcCockpitSetPreview(value, 'Preview aktif · mainkan game sebelum capture…');
+      const statusEl = document.getElementById('gc-cockpit-preview-status');
+      if (statusEl) statusEl.textContent = 'Mainkan game beberapa ronde, lalu tekan Get Data ✓';
+      try { appendLog('Preview & Mainkan aktif. Mainkan game sebelum Get Data / COLLECT.', 'info'); } catch (_) {}
+      return true;
+    }
+
+    function gcCockpitMarkPlayed() {
+      const value = gcCockpitReadUrl();
+      if (!value) return;
+      if (!window.__gcManualPreviewStartedAt || window.__gcManualPreviewUrl !== value) {
+        gcCockpitStartManualPreview();
+        alert('Preview sudah dimuat. Mainkan game terlebih dahulu, lalu tekan Get Data ✓.');
+        return;
+      }
+      window.__gcManualPreviewReady = true;
+      try { gcSetFlowStep(3); } catch (_) {}
+      const statusEl = document.getElementById('gc-cockpit-preview-status');
+      const badge = document.getElementById('gc-cockpit-preview-badge');
+      if (statusEl) { statusEl.textContent = 'Data sesi siap · tekan COLLECT untuk capture'; statusEl.classList.add('is-ready'); }
+      if (badge) { badge.textContent = 'READY'; badge.classList.add('is-live'); }
+      try { appendLog('Get data selesai. Sesi preview siap dipakai sebagai acuan Full Collect.', 'ok'); } catch (_) {}
+    }
+
+    function gcCockpitCollect(kind) {
+      const value = gcCockpitReadUrl();
+      if (!value) return;
+      if (!window.__gcManualPreviewStartedAt || window.__gcManualPreviewUrl !== value) {
+        gcCockpitStartManualPreview();
+        alert('Preview & Mainkan sudah dimuat. Mainkan game dahulu, lalu tekan Get Data ✓ sebelum COLLECT.');
+        return;
+      }
+      if (!window.__gcManualPreviewReady) {
+        alert('Mainkan game di Preview terlebih dahulu, lalu tekan Get Data ✓ sebelum COLLECT.');
+        return;
+      }
       gcCockpitSetPreview(value, 'Preview aktif · proses collect dimulai…');
       const assetStatus = document.getElementById('gc-cockpit-asset-status');
-      if (assetStatus) { assetStatus.textContent = 'Mengambil kode, asset, API, dan ZIP…'; assetStatus.classList.remove('is-ready'); }
+      if (assetStatus) { assetStatus.textContent = 'Mengambil kode, asset, API, dan ZIP dari sesi game…'; assetStatus.classList.remove('is-ready'); }
+      try { gcSetFlowStep(4); } catch (_) {}
       return kind === 'github' ? runGitHubCollect() : runCollect();
     }
     window.gcCockpitCollect = gcCockpitCollect;
+    window.gcCockpitStartManualPreview = gcCockpitStartManualPreview;
+    window.gcCockpitMarkPlayed = gcCockpitMarkPlayed;
 
     function renderFileTree(paths) {
       // Build a nested tree object from flat zip paths
