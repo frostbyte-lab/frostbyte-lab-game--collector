@@ -8156,7 +8156,13 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (!/<html[\s>]/i.test(code) && code.length > 50) issues.push('HTML: tag <html> tidak ditemukan');
         const abs = extractAbsoluteUrls(code);
         if (abs.length) {
-          formatUrlScanIssues(abs, currentFile).forEach(function (line) { issues.push(line); });
+          const localIndex = typeof gcBuildLocalAssetIndex === 'function' ? gcBuildLocalAssetIndex() : null;
+          const unresolved = abs.filter(function (item) {
+            const isAsset = item && (item.status === 'ASSET' || item.kind === 'ASSET' || item.kind === 'asset');
+            if (!isAsset || !localIndex || typeof gcResolveLocalForUrl !== 'function') return true;
+            return !gcResolveLocalForUrl(item.url, '', localIndex);
+          });
+          if (unresolved.length) formatUrlScanIssues(unresolved, currentFile).forEach(function (line) { issues.push(line); });
         }
         if (/frame-bust|top\.location|parent\.location/i.test(code)) issues.push('HTML/JS: frame-buster terdeteksi — bisa di-neutralize');
       } else if (file.endsWith('.js') || file.endsWith('.mjs')) {
@@ -9566,6 +9572,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
   }
   function gcSafeUrl(u){
     if (typeof u !== 'string' || !u) return u;
+    // Host malformed tidak boleh keluar ke network pada Sandbox.
+    if (/^https?:\/\/api\./i.test(u)) {
+      if (/what-is-my-ip/i.test(u)) return '/sandbox/what-is-my-ip';
+      var malformedRest = u.replace(/^https?:\/\/api\.?/i, '') || '/';
+      return malformedRest.charAt(0) === '/' ? malformedRest : '/' + malformedRest;
+    }
     // Host rusak: https://api./path atau https://api.
     if (/^https?:\\/\\/api\\.(\\/|$)/i.test(u) || /^https?:\\/\\/api\\.$/i.test(u)) {
       var rest = u.replace(/^https?:\\/\\/api\\.?/i, '') || '/';
@@ -9782,6 +9794,10 @@ function isApiLike(u){
     var asset = gcAssetUrl(rawStr);
     if (asset) return { kind: 'local', url: asset };
     var u = rawStr || '';
+    // Root-relative resource tanpa file lokal wajib masuk mock, bukan XHR mentah dari blob.
+    if (GC_SANDBOX && !GC_HYBRID && (u.indexOf('/shared/') === 0 || u.indexOf('/assets/') === 0 || u.indexOf('/static/') === 0 || u.indexOf('/resource/') === 0 || u.indexOf('/resources/') === 0)) {
+      return { kind: 'mock', url: u };
+    }
     // Path /shared/... tanpa file lokal → tetap relative valid (hindari Invalid URL)
     if (/^\\/(shared|assets|static|resource|resources)\\//i.test(u)) {
       if (GC_SANDBOX && !GC_HYBRID) return { kind: 'mock', url: u };
@@ -11293,6 +11309,12 @@ function isApiLike(u){
         }
         if (typeof renderFileTree === 'function') {
           try { renderFileTree(Object.keys(zipFileMap)); } catch (_) {}
+        }
+        // Refresh hasil scan setelah rewrite agar UI tidak memakai laporan URL lama.
+        try {
+          if (typeof runAnalysis === 'function') await runAnalysis();
+        } catch (refreshError) {
+          appendLog('Refresh analisa setelah Auto Repair gagal: ' + (refreshError && refreshError.message || refreshError), 'warn');
         }
         if (!window.__gcAutoRepairSilent) {
           appendLog('Selesai. Jalankan Deteksi AI lagi untuk verifikasi.', 'ok');
