@@ -2677,8 +2677,12 @@
     .gc-primary-progress { color:var(--text-muted); font-size:11px; min-width:210px; text-align:left; }
     .gc-legacy-actions, .gc-legacy-hidden { display:none !important; }
     .gc-advanced-card { margin-top:16px; }
-    .gc-advanced-card .gc-advanced-heading { cursor:default; }
-    .gc-advanced-card .gc-flow-steps, .gc-advanced-card .collect-options, .gc-advanced-card > p, .gc-advanced-card #collect-help { display:none !important; }
+    .gc-advanced-card .gc-advanced-heading { cursor:default; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .gc-advanced-card .gc-flow-steps, .gc-advanced-card .collect-options, .gc-advanced-card > p { display:none !important; }
+    .gc-accordion-toggle { margin-left:auto; border:0; background:transparent; color:var(--text-muted); cursor:pointer; padding:4px 8px; font-size:12px; }
+    .gc-accordion-toggle:hover { color:var(--accent); }
+    .gc-fold-body.is-collapsed { display:none !important; }
+    .gc-help-professional { margin-top:12px; }
     #gc-ops-fab { display:none !important; }
     .gc-cockpit {
       display: grid;
@@ -3779,8 +3783,8 @@ Setelah Collect selesai, file dan cuplikan kode akan muncul di sini.</pre>
         </div>
 
         <div class="collect-card gc-advanced-card">
-          <div class="gc-advanced-heading"><strong>Research &amp; keamanan</strong><span>Otorisasi dan perlindungan capture otomatis.</span></div>
-          <div class="gc-research-card" style="margin-top:12px;padding:11px;border:1px solid rgba(96,165,250,.32);border-radius:10px;background:rgba(96,165,250,.06);">
+          <div class="gc-advanced-heading"><span><strong>Research &amp; keamanan</strong><span>Otorisasi dan perlindungan capture otomatis.</span></span><button type="button" class="gc-accordion-toggle" onclick="gcToggleFold('gc-research-card', this)" aria-controls="gc-research-card" aria-expanded="true">v</button></div>
+          <div class="gc-research-card gc-fold-body" id="gc-research-card" style="margin-top:12px;padding:11px;border:1px solid rgba(96,165,250,.32);border-radius:10px;background:rgba(96,165,250,.06);">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="gc-authorized-research" checked> <b>Authorized Research Mode</b></label>
               <span style="font-size:11px;color:var(--text-muted);">Capture hanya untuk game yang Anda miliki atau memiliki izin tertulis.</span>
@@ -3866,7 +3870,7 @@ Setelah Collect selesai, file dan cuplikan kode akan muncul di sini.</pre>
             <button class="btn btn-secondary" onclick="clearStatus()">Clear</button>
           </div>
 
-          <div class="collect-help" id="collect-help">
+          <div class="collect-help gc-help-professional" id="collect-help">
             <button type="button" class="collect-help-toggle" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
               <span>Cara pakai fitur Collect</span>
               <span class="chev" aria-hidden="true">▾</span>
@@ -3878,12 +3882,12 @@ Setelah Collect selesai, file dan cuplikan kode akan muncul di sini.</pre>
               </details>
               <details class="collect-help-item" open>
                 <summary>Alur offline (tanpa EDU)</summary>
-                <p>1) <b>Paste URL</b> game.<br>
-                2) Klik <b>Preview Game</b> → putar ±10× (lihat API/asset hidup).<br>
-                3) <b>Get data ✓</b> lalu <b>Full Collect</b> (Cloudflare atau GitHub, Auto-spins 10).<br>
-                4) AI Offline Readiness Assistant mengaudit ZIP dan memberi saran repair.<br>
-                5) ZIP → Workspace → Sandbox / Auto Repair → browser test tanpa network.<br>
-                6) Download ZIP → hosting / EDU.</p>
+                <p>1) Masukkan URL dan referensi izin.<br>
+                2) Klik <b>PREVIEW &amp; CAPTURE</b>; game tampil dan capture berjalan otomatis.<br>
+                3) Mainkan fitur utama dan pantau resource di panel Kode &amp; Asset.<br>
+                4) Tekan <b>STOP &amp; FINALIZE</b> untuk mengakhiri sesi.<br>
+                5) Audit memeriksa file, asset, API, <b>kelengkapan.json</b>, dan <b>api-map.json</b>.<br>
+                6) ZIP hanya dibuat dan masuk Workspace jika audit wajib mencapai 100%.</p>
               </details>
               <details class="collect-help-item">
                 <summary>Wait after load (detik)</summary>
@@ -5331,6 +5335,14 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
     window.gcUnifiedPreview = gcUnifiedPreview;
     window.gcUnifiedStop = gcUnifiedStop;
+
+    function gcToggleFold(targetId, button) {
+      var target = document.getElementById(targetId);
+      if (!target) return;
+      var collapsed = target.classList.toggle('is-collapsed');
+      if (button) { button.textContent = collapsed ? '›' : 'v'; button.setAttribute('aria-expanded', collapsed ? 'false' : 'true'); }
+    }
+    window.gcToggleFold = gcToggleFold;
 
     function gcCockpitStartManualPreview() {
       const value = gcCockpitReadUrl();
