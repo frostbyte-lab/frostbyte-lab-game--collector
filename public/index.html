@@ -2647,7 +2647,7 @@
       margin: 0 auto;
     }
 
-    /* ===== Collector cockpit: Preview | Kode & Asset ===== */
+    /* ===== Collector cockpit: Preview capture → Download ZIP → Workspace ===== */
     #panel-collect.active {
       padding: 20px 24px 32px;
     }
@@ -2686,7 +2686,7 @@
     #gc-ops-fab { display:none !important; }
     .gc-cockpit {
       display: grid;
-      grid-template-columns: minmax(0, 1.12fr) minmax(360px, .88fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 14px;
       align-items: stretch;
       margin-bottom: 14px;
@@ -2762,9 +2762,12 @@
     }
     @media (max-width: 768px) {
       .gc-cockpit { grid-template-columns: 1fr; }
-      .gc-cockpit-card { min-height: 0; }
+      .gc-cockpit-card, .gc-preview-capture-card { min-height: 0; }
       .gc-cockpit-preview { min-height: min(76svh, 700px); justify-content: center; align-items: stretch; }
       .gc-cockpit-frame { width: min(100%, 390px); height: min(76svh, 700px); min-height: 560px; margin: 0 auto; flex: 0 1 390px; }
+      .gc-capture-footer { grid-template-columns: 1fr; }
+      .gc-capture-actions { width: 100%; }
+      .gc-capture-actions .btn { flex: 1 1 0; }
     }
     .gc-cockpit-placeholder {
       position: absolute;
@@ -2880,6 +2883,53 @@
       white-space: nowrap;
     }
     .gc-cockpit-status.is-ready { color: var(--accent); }
+    .gc-preview-capture-card { min-height: clamp(500px, 72vh, 780px); }
+    .gc-capture-footer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 14px;
+    }
+    .gc-capture-status-group { min-width: 0; }
+    .gc-capture-status-group .gc-cockpit-status {
+      display: block;
+      width: 100%;
+      white-space: normal;
+    }
+    .gc-capture-progress-track {
+      width: 100%;
+      height: 6px;
+      margin-top: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(148,163,184,.16);
+    }
+    .gc-capture-progress-bar {
+      display: block;
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #5ee1c0, #60a5fa);
+      transition: width 180ms cubic-bezier(.23,1,.32,1);
+    }
+    .gc-capture-progress-label {
+      display: block;
+      margin-top: 5px;
+      overflow: hidden;
+      color: var(--text-muted);
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gc-capture-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .gc-capture-actions .btn { white-space: nowrap; }
+    .gc-capture-actions .btn:disabled { cursor: not-allowed; opacity: .48; }
     .gc-url-bar {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -3711,7 +3761,7 @@
       </div>
       <nav>
         <button class="nav-btn active" data-panel="collect">COLLECT</button>
-        <button class="nav-btn" data-panel="workspace">Kode &amp; Asset</button>
+        <button class="nav-btn" data-panel="workspace">Workspace</button>
         <button class="nav-btn" data-panel="history">Activity</button>
       </nav>
     </header>
@@ -3730,12 +3780,12 @@
           </div>
         </div>
 
-        <div class="gc-cockpit" aria-label="Preview dan Kode & Asset">
-          <section class="gc-cockpit-card" aria-labelledby="gc-cockpit-preview-title">
+        <div class="gc-cockpit" aria-label="Preview capture">
+          <section class="gc-cockpit-card gc-preview-capture-card" aria-labelledby="gc-cockpit-preview-title">
             <div class="gc-cockpit-head">
               <div class="gc-cockpit-title" id="gc-cockpit-preview-title">
                 <span aria-hidden="true">▶</span>
-                <span>Preview Game<span class="eyebrow">Mainkan dan cek sumber sebelum collect</span></span>
+                <span>Preview Game<span class="eyebrow">Mainkan game dan pantau proses capture di sini</span></span>
               </div>
               <span class="gc-cockpit-badge" id="gc-cockpit-preview-badge">IDLE</span>
             </div>
@@ -3745,32 +3795,17 @@
                 <div><strong>Preview akan tampil di sini</strong><span>Masukkan URL di bawah, lalu tekan Preview &amp; Capture untuk memulai sesi.</span></div>
               </div>
             </div>
-            <div class="gc-cockpit-footer">
-              <span class="gc-cockpit-status" id="gc-cockpit-preview-status">Masukkan URL, lalu tekan Preview &amp; Capture.</span>
-            </div>
-          </section>
-          <section class="gc-cockpit-card" aria-labelledby="gc-cockpit-assets-title">
-            <div class="gc-cockpit-head">
-              <div class="gc-cockpit-title" id="gc-cockpit-assets-title">
-                <span aria-hidden="true">{ }</span>
-                <span>Kode &amp; Asset<span class="eyebrow">Resource nyata dari sesi capture</span></span>
+            <div class="gc-cockpit-footer gc-capture-footer">
+              <div class="gc-capture-status-group">
+                <span class="gc-cockpit-status" id="gc-cockpit-preview-status">Masukkan URL, lalu tekan Preview &amp; Capture.</span>
+                <div class="gc-capture-progress-track" role="progressbar" aria-label="Progress capture" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <span class="gc-capture-progress-bar" id="gc-capture-progress-bar"></span>
+                </div>
+                <span class="gc-capture-progress-label" id="gc-capture-progress-label">0% · Menunggu sesi capture</span>
               </div>
-              <span class="gc-cockpit-badge" id="gc-cockpit-asset-badge">0 file</span>
-            </div>
-            <div class="gc-cockpit-codebody">
-              <div class="gc-cockpit-stats" aria-label="Ringkasan asset">
-                <div class="gc-cockpit-stat"><strong id="gc-cockpit-file-count">0</strong><span>file</span></div>
-                <div class="gc-cockpit-stat"><strong id="gc-cockpit-code-count">0</strong><span>kode</span></div>
-                <div class="gc-cockpit-stat"><strong id="gc-cockpit-asset-count">0</strong><span>asset</span></div>
-              </div>
-              <div id="gc-cockpit-completeness" class="gc-cockpit-completeness">Audit kelengkapan akan muncul setelah Collect selesai.<div class="gc-cockpit-checks">Preview → mainkan → auto-spin → Collect</div></div>
-              <pre id="gc-cockpit-code" class="gc-cockpit-code is-empty">Belum ada paket.
-
-Setelah Collect selesai, file dan cuplikan kode akan muncul di sini.</pre>
-              <div class="gc-cockpit-footer">
-                <span class="gc-cockpit-status" id="gc-cockpit-asset-status">Menunggu hasil collect…</span>
-                <button type="button" class="btn btn-secondary btn-sm" onclick="gcCockpitOpenWorkspace()">Buka Workspace</button>
-                <button type="button" class="btn btn-secondary btn-sm" onclick="gcCockpitCopyCode()">Copy code</button>
+              <div class="gc-capture-actions" aria-label="Aksi hasil capture">
+                <button type="button" class="btn btn-secondary btn-sm" id="gc-capture-download" onclick="gcDownloadLastCapture()" hidden disabled>Download ZIP</button>
+                <button type="button" class="btn btn-primary btn-sm" id="gc-capture-workspace" onclick="gcCockpitOpenWorkspace()" disabled>Buka Workspace</button>
               </div>
             </div>
           </section>
@@ -3890,10 +3925,10 @@ Setelah Collect selesai, file dan cuplikan kode akan muncul di sini.</pre>
                 <summary>Alur offline (tanpa EDU)</summary>
                 <p>1) Masukkan URL dan referensi izin.<br>
                 2) Klik <b>PREVIEW &amp; CAPTURE</b>; game tampil dan capture berjalan otomatis.<br>
-                3) Mainkan fitur utama dan pantau resource di panel Kode &amp; Asset.<br>
+                3) Mainkan fitur utama dan pantau progress capture di Preview.<br>
                 4) Tekan <b>STOP &amp; FINALIZE</b> untuk mengakhiri sesi.<br>
-                5) Audit memeriksa file, asset, API, <b>kelengkapan.json</b>, dan <b>api-map.json</b>.<br>
-                6) ZIP hanya dibuat dan masuk Workspace jika audit wajib mencapai 100%.</p>
+                5) Setelah ZIP siap, unduh paket atau buka <b>Workspace</b> untuk memeriksa hasilnya.<br>
+                6) Audit memeriksa file, asset, API, <b>kelengkapan.json</b>, dan <b>api-map.json</b>.</p>
               </details>
               <details class="collect-help-item">
                 <summary>Wait after load (detik)</summary>
@@ -5303,6 +5338,69 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
     var __gcUnifiedCaptureRunning = false;
     var __gcUnifiedCapturePromise = null;
+    function gcUpdateCapturePreviewProgress(pct, label) {
+      var value = pct == null ? null : Math.max(0, Math.min(100, Number(pct) || 0));
+      var bar = document.getElementById('gc-capture-progress-bar');
+      var track = bar && bar.parentElement;
+      var text = document.getElementById('gc-capture-progress-label');
+      if (value != null) {
+        if (bar) bar.style.width = value + '%';
+        if (track) track.setAttribute('aria-valuenow', String(value));
+      }
+      if (text && label) text.textContent = String(label);
+    }
+
+    function gcSetCaptureResultActions(hasPackage, workspaceReady) {
+      var download = document.getElementById('gc-capture-download');
+      var workspace = document.getElementById('gc-capture-workspace');
+      if (download) {
+        download.hidden = !hasPackage;
+        download.disabled = !hasPackage;
+      }
+      if (workspace) workspace.disabled = !workspaceReady;
+    }
+
+    function gcRememberLastCapture(blob, filename, downloadUrl) {
+      window.__gcLastCaptureBlob = blob && blob.size ? blob : null;
+      window.__gcLastCaptureName = filename || 'game-resources.zip';
+      window.__gcLastCaptureDownloadUrl = downloadUrl || '';
+      gcSetCaptureResultActions(!!(window.__gcLastCaptureBlob || window.__gcLastCaptureDownloadUrl), false);
+    }
+
+    async function gcDownloadLastCapture() {
+      var blob = window.__gcLastCaptureBlob;
+      var name = window.__gcLastCaptureName || 'game-resources.zip';
+      var downloadUrl = window.__gcLastCaptureDownloadUrl;
+      if (blob && blob.size) {
+        var blobUrl = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { try { URL.revokeObjectURL(blobUrl); } catch (_) {} }, 4000);
+        appendLog('Download ZIP capture: ' + name, 'ok');
+        return blob;
+      }
+      if (downloadUrl) {
+        var remoteLink = document.createElement('a');
+        remoteLink.href = downloadUrl;
+        remoteLink.download = name;
+        remoteLink.target = '_blank';
+        remoteLink.rel = 'noopener';
+        document.body.appendChild(remoteLink);
+        remoteLink.click();
+        remoteLink.remove();
+        appendLog('Download ZIP capture dimulai: ' + name, 'ok');
+        return downloadUrl;
+      }
+      if (typeof currentZip !== 'undefined' && currentZip) return downloadWorkspaceZip(name);
+      appendLog('Belum ada ZIP capture untuk diunduh.', 'warn');
+      return null;
+    }
+    window.gcDownloadLastCapture = gcDownloadLastCapture;
+
     function gcSetUnifiedCaptureUi(running, label) {
       var start = document.getElementById('gc-primary-preview');
       var stop = document.getElementById('gc-primary-stop');
@@ -5310,13 +5408,16 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (start) { start.disabled = !!running; start.textContent = running ? '● CAPTURE BERJALAN' : '▶ PREVIEW & CAPTURE'; }
       if (stop) stop.hidden = !running;
       if (progress && label) progress.textContent = label;
+      if (running) gcSetCaptureResultActions(false, false);
+      var match = String(label || '').match(/(\d{1,3})%/);
+      gcUpdateCapturePreviewProgress(match ? Number(match[1]) : null, label);
     }
     function gcUnifiedPreview() {
       if (__gcUnifiedCaptureRunning) return;
       var started = gcCockpitStartManualPreview();
       if (!started) return;
       __gcUnifiedCaptureRunning = true;
-      gcSetUnifiedCaptureUi(true, '0% · Preview aktif · resource akan muncul saat capture');
+      gcSetUnifiedCaptureUi(true, '0% · Preview aktif · progress capture tampil di bawah preview');
       try { appendLog('Sesi Preview & Capture dimulai. Mainkan game; resource yang tertangkap akan ditampilkan.', 'info'); } catch (_) {}
       __gcUnifiedCapturePromise = Promise.resolve().then(function () { return runCollect(); }).finally(function () {
         __gcUnifiedCaptureRunning = false;
@@ -5394,8 +5495,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         return;
       }
       gcCockpitSetPreview(value, 'Preview aktif · proses collect dimulai…');
-      const assetStatus = document.getElementById('gc-cockpit-asset-status');
-      if (assetStatus) { assetStatus.textContent = 'Mengambil kode, asset, API, dan ZIP dari sesi game…'; assetStatus.classList.remove('is-ready'); }
+      const previewStatus = document.getElementById('gc-cockpit-preview-status');
+      if (previewStatus) { previewStatus.textContent = 'Capture berjalan · progress dan status hasil tampil di bawah preview.'; previewStatus.classList.remove('is-ready'); }
       try { gcSetFlowStep(4); } catch (_) {}
       return kind === 'github' ? runGitHubCollect() : runCollect();
     }
@@ -13704,6 +13805,10 @@ function isApiLike(u){
         return;
       }
       try { gcCockpitSetPreview(gameUrl, 'Preview aktif · proses collect dimulai…'); } catch (_) {}
+      try {
+        gcSetCaptureResultActions(false, false);
+        gcUpdateCapturePreviewProgress(0, '0% · Menyiapkan capture…');
+      } catch (_) {}
 
       try { gcPipelineReset(); } catch (_) {}
       try { gcPipelineSet('online', 'ok', 'URL siap · sign diharapkan valid'); } catch (_) {}
@@ -13793,15 +13898,25 @@ function isApiLike(u){
             URL.revokeObjectURL(a.href);
 
             // Auto-load ZIP lengkap ke Workspace
+            var loadedWorkspace = false;
             try {
               const zipInput = document.getElementById('zip-input');
-              if (zipInput) {
+              if (zipInput && typeof DataTransfer !== 'undefined') {
                 const transfer = new DataTransfer();
                 transfer.items.add(new File([blob], autoPackageName, { type: 'application/zip' }));
                 zipInput.files = transfer.files;
                 zipInput.dispatchEvent(new Event('change', { bubbles: true }));
+                loadedWorkspace = true;
               }
             } catch (_) {}
+            gcRememberLastCapture(blob, autoPackageName, '');
+            gcSetCaptureResultActions(true, loadedWorkspace);
+            gcUpdateCapturePreviewProgress(100, loadedWorkspace ? '100% · ZIP siap · paket dimuat ke Workspace' : '100% · ZIP siap diunduh');
+            var captureStatus = document.getElementById('gc-cockpit-preview-status');
+            if (captureStatus) {
+              captureStatus.textContent = loadedWorkspace ? 'Capture selesai · ZIP diunduh dan dimuat ke Workspace.' : 'Capture selesai · ZIP siap diunduh.';
+              captureStatus.classList.add('is-ready');
+            }
           }
 
           if (incomplete || stillMissing > 0) {
@@ -13838,6 +13953,9 @@ function isApiLike(u){
         // JSON response (mis. too large → failover GitHub, atau R2 link)
         const data = await res.json();
         if (data.downloadUrl) {
+          var remotePackageName = gcAutoPackageName(gameUrl);
+          gcRememberLastCapture(null, remotePackageName, data.downloadUrl);
+          gcUpdateCapturePreviewProgress(100, '100% · ZIP siap diunduh');
           statusEl.textContent = 'Status: Mengunduh ZIP...';
           const a = document.createElement('a');
           a.href = data.downloadUrl;
@@ -13926,6 +14044,10 @@ function isApiLike(u){
         return;
       }
       try { gcCockpitSetPreview(gameUrl, 'Preview aktif · proses GitHub dimulai…'); } catch (_) {}
+      try {
+        gcSetCaptureResultActions(false, false);
+        gcUpdateCapturePreviewProgress(5, '5% · Menyiapkan Collect via GitHub…');
+      } catch (_) {}
 
       if (_ghPollTimer) {
         clearInterval(_ghPollTimer);
@@ -14035,6 +14157,10 @@ function isApiLike(u){
                 try {
                   gcRunOfflineReadinessAssistant(blob, 'game-resources.zip', { source: 'GitHub Actions Collect', urlHost: new URL(document.getElementById('url')?.value || 'https://unknown.invalid').host, collectMeta: { runId: runId, github: true } }).catch(function () {});
                 } catch (_) {}
+                gcRememberLastCapture(blob, 'game-resources.zip', '');
+                gcUpdateCapturePreviewProgress(92, '92% · ZIP diterima · menyiapkan unduhan dan Workspace…');
+                var capturePreviewStatus = document.getElementById('gc-cockpit-preview-status');
+                if (capturePreviewStatus) capturePreviewStatus.textContent = 'Capture selesai · ZIP diterima, menyiapkan unduhan dan Workspace.';
                 // 1) Unduh file ke HP (cadangan kalau auto-load Workspace gagal di Android)
                 try {
                   try { gcCollectToastShow('Mengunduh & cek paket…'); } catch (_) {}
@@ -14073,6 +14199,13 @@ function isApiLike(u){
                     } catch (_) {}
                   }
                 } catch (_) { loadedWs = false; }
+                gcSetCaptureResultActions(true, loadedWs);
+                gcUpdateCapturePreviewProgress(100, loadedWs ? '100% · ZIP diunduh · paket siap di Workspace' : '100% · ZIP diunduh · buka Workspace untuk Load ZIP');
+                var githubPreviewStatus = document.getElementById('gc-cockpit-preview-status');
+                if (githubPreviewStatus) {
+                  githubPreviewStatus.textContent = loadedWs ? 'Capture selesai · ZIP diunduh dan dimuat ke Workspace.' : 'Capture selesai · ZIP diunduh; buka Workspace untuk memuat paket.';
+                  githubPreviewStatus.classList.add('is-ready');
+                }
                 if (loadedWs) {
                   statusEl.textContent = 'Status: Selesai — ZIP ' + sizeMb + ' MB diunduh & dimuat ke Workspace';
                 try {
@@ -14177,6 +14310,11 @@ function isApiLike(u){
     function gcUpdateCollectProgress(report, statusLabel) {
       if (!report) return;
       var pct = report.pct || 0;
+      try {
+        gcUpdateCapturePreviewProgress(pct, pct + '% · ' + (report.fileCount || 0) + ' file tertangkap · ' + (statusLabel || 'capture'));
+        var previewStatus = document.getElementById('gc-cockpit-preview-status');
+        if (previewStatus && statusLabel) previewStatus.textContent = 'Capture ' + pct + '% · ' + statusLabel;
+      } catch (_) {}
       var meta = document.getElementById('gc-collect-meta');
       if (meta) meta.classList.remove('hidden');
       var p1 = document.getElementById('gc-cm-pct');
