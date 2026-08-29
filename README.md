@@ -2,8 +2,11 @@
 
 Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource game web (client-side) secara offline / hybrid.
 
-**Live:** https://game-resource-collector.technologiesfrostbyte.workers.dev  
+**Live (canonical):** https://game-resource-collector.technologiesfrostbyte.workers.dev
+
 **Repo:** https://github.com/frostbyte-lab/frostbyte-lab-game--collector
+
+**Catatan URL:** Gunakan domain canonical di atas; domain lama `giesfrostbyte.workers.dev` tidak lagi menjadi alamat deployment aktif.
 
 ---
 
@@ -13,14 +16,14 @@ Tools untuk **mengumpulkan, memisahkan, memperbaiki, dan menjalankan** resource 
 | No | Item | Status | Catatan untuk langkah berikutnya |
 |----|------|--------|----------------------------------|
 | 1.1 | **ZIP besar (>~25MB)** | ✅ via GitHub | Tanpa R2. Capture Worker → TOO_LARGE → auto-failover **Collect via GitHub Actions** (artifact). |
-| 1.2 | **History server-side (KV)** | ⚠️ Kode siap; bind KV di Dashboard | Tambah KV namespace `GC_HISTORY`, API `POST/GET /api/history`, ganti `localStorage` di frontend. Schema: `{ id, url, ts, status, files, zipSize, totals }`. |
-| 1.3 | **Progress collect real (stream)** | ⚠️ Estimasi UI saja | Ganti long-request tunggal dengan SSE atau Durable Object status + poll. Frontend `startProgress()` sudah ada; tinggal sumber % dari server. |
+| 1.2 | **History server-side (KV)** | ✅ Aktif | KV `GC_HISTORY` dan progress store terdeteksi aktif pada health check live; API history tersedia untuk sesi capture. |
+| 1.3 | **Progress collect real (polling)** | ✅ Aktif | Frontend memakai polling `/api/progress`; progress capture, file tertangkap, dan fase pipeline ditampilkan pada Preview. |
 
 ### Prioritas 2 — Offline & Preview lebih stabil
 | No | Item | Status | Catatan untuk langkah berikutnya |
 |----|------|--------|----------------------------------|
-| 2.1 | **Service Worker asset di Preview** | ⚠️ PWA SW dasar ada | Perluas `sw.js` untuk cache blob/asset map saat preview, bukan hanya shell app. |
-| 2.2 | **Proxy asset same-origin** | ❌ Belum | Endpoint Worker `/api/asset-proxy` atau serve dari R2 agar path/cookie lebih stabil daripada murni `blob:`. |
+| 2.1 | **Service Worker asset di Preview** | ✅ Aktif | Service Worker mendukung cache asset ZIP dan kebijakan preview offline/hybrid. |
+| 2.2 | **Proxy asset same-origin** | ✅ Aktif | Worker menyediakan endpoint `/api/asset-proxy`; health live mengonfirmasi asset proxy aktif. |
 | 2.3 | **Auto-fill lebih dalam** | ⚠️ Max 40 file | Naikkan limit bertahap, multi-pass (scan lagi setelah fill), ikut URL dari source map / CSS nested. Kode: `fillMissingAssets()` di `src/index.js`. |
 | 2.4 | **Engine-specific repair** | ⚠️ Deteksi engine ada; auto-repair khusus belum | Deteksi Phaser / Unity WebGL / Pixi / Construct → template path + loader fix khusus di Auto Repair Deep. |
 

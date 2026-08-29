@@ -2568,7 +2568,7 @@
 
     /* ===== COLLECT PANEL ===== */
 
-    /* Alur Paste → Preview → Get data → Collect */
+    /* Alur Paste → Preview & Capture → ZIP → Workspace */
     .gc-flow-steps {
       display: flex;
       flex-wrap: wrap;
@@ -2794,76 +2794,6 @@
       font-size: 12px;
       line-height: 1.55;
     }
-    .gc-cockpit-codebody {
-      display: grid;
-      grid-template-rows: auto auto minmax(190px, 1fr) auto;
-      flex: 1;
-      min-height: 0;
-    }
-    .gc-cockpit-completeness {
-      margin: 0 14px 10px;
-      padding: 9px 10px;
-      border: 1px solid rgba(148,163,184,.16);
-      border-radius: 9px;
-      background: rgba(255,255,255,.025);
-      color: var(--text-muted);
-      font-size: 10px;
-      line-height: 1.45;
-    }
-    .gc-cockpit-completeness strong { color: #e2e8f0; font-size: 11px; }
-    .gc-cockpit-completeness.is-ready { border-color: rgba(94,225,192,.35); }
-    .gc-cockpit-completeness.is-missing { border-color: rgba(251,191,36,.35); }
-    .gc-cockpit-checks { display:flex; flex-wrap:wrap; gap:4px 8px; margin-top:5px; }
-    .gc-cockpit-check { color: var(--accent); }
-    .gc-cockpit-check.missing { color: #fbbf24; }
-    .gc-cockpit-stats {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--border);
-    }
-    .gc-cockpit-stat {
-      min-width: 0;
-      padding: 8px 9px;
-      border: 1px solid rgba(148,163,184,.14);
-      border-radius: 9px;
-      background: rgba(255,255,255,.025);
-    }
-    .gc-cockpit-stat strong {
-      display: block;
-      color: #f8fafc;
-      font-size: 16px;
-      line-height: 1.1;
-    }
-    .gc-cockpit-stat span {
-      display: block;
-      overflow: hidden;
-      color: var(--text-muted);
-      font-size: 10px;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .gc-cockpit-code {
-      min-height: 0;
-      margin: 0;
-      padding: 14px;
-      overflow: auto;
-      color: #cbd5e1;
-      background: #0a0f17;
-      font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      white-space: pre;
-      tab-size: 2;
-    }
-    .gc-cockpit-code.is-empty {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-muted);
-      font-family: inherit;
-      text-align: center;
-      white-space: pre-wrap;
-    }
     .gc-cockpit-footer {
       display: flex;
       align-items: center;
@@ -3005,8 +2935,6 @@
       .gc-url-actions { display: grid; grid-template-columns: 1fr 1fr; }
       .gc-url-actions .btn { width: 100%; }
       .gc-cockpit-head { padding: 10px 11px; }
-      .gc-cockpit-stats { padding: 10px 11px; gap: 6px; }
-      .gc-cockpit-code { padding: 11px; font-size: 10px; }
       .gc-cockpit-footer { padding: 9px 11px; }
     }
 
@@ -3842,12 +3770,12 @@
             </div>
           </div>
 
-          <!-- Alur baru: Paste → Preview → ±10 spin → Get data → Collect -->
-          <div id="gc-flow-steps" class="gc-flow-steps" aria-label="Alur collect">
+          <!-- Compatibility flow: Preview & Capture → ZIP → Workspace -->
+          <div id="gc-flow-steps" class="gc-flow-steps" aria-label="Tahapan capture">
             <div class="gc-flow-step active" data-step="1"><span class="n">1</span><span class="l">Paste URL</span></div>
             <div class="gc-flow-step" data-step="2"><span class="n">2</span><span class="l">Preview + spin</span></div>
-            <div class="gc-flow-step" data-step="3"><span class="n">3</span><span class="l">Get data</span></div>
-            <div class="gc-flow-step" data-step="4"><span class="n">4</span><span class="l">Full Collect</span></div>
+            <div class="gc-flow-step" data-step="3"><span class="n">3</span><span class="l">Siap capture</span></div>
+            <div class="gc-flow-step" data-step="4"><span class="n">4</span><span class="l">ZIP → Workspace</span></div>
           </div>
 
           <div class="collect-options" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 4px;">
@@ -3872,15 +3800,10 @@
             </div>
           </div>
           <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">
-            Alur: <b>Paste URL</b> → <b>Preview</b> (putar ±10× di jendela game) → <b>Get data</b> → <b>Full Collect</b>.
-            Preview di sini sebelum collect penuh. Auto-spins default 10.
+            Alur: <b>Paste URL</b> → <b>Preview &amp; Capture</b> → <b>Download ZIP</b> → <b>Workspace</b>.
+            Preview tetap aktif selama proses capture. Auto-spins default 10.
           </p>
 
-          <div class="collect-actions collect-actions-preview gc-legacy-hidden" style="margin-bottom:8px;">
-            <button type="button" class="btn btn-secondary" id="btn-preview-before-collect" onclick="openPreCollectPreview()">▶ Preview Game</button>
-            <button type="button" class="btn btn-secondary" id="btn-get-data-hint" onclick="markGetDataStep()">Get data ✓</button>
-          </div>
-          
           <div class="collect-ai-assist gc-legacy-hidden" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 10px;padding:10px;border:1px solid rgba(94,225,192,.28);border-radius:10px;background:rgba(94,225,192,.06);">
             <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-secondary);cursor:pointer;">
               <input type="checkbox" id="collect-ai-readiness" checked>
@@ -5216,7 +5139,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           if (nameLower.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
             setLoading(true, 'Membuka ZIP', 'Memvalidasi daftar file tanpa mengekstrak semuanya...'); const zip = await JSZip.loadAsync(file, { checkCRC32: false, createFolders: false }); currentZip = zip;
             const paths = []; zip.forEach((relativePath, zipEntry) => { if (zipEntry.dir) return; const normalizedPath = String(relativePath).replaceAll('\\', '/').replace(/^\.\//, '').replace(/^\/+/, ''); if (!normalizedPath) return; paths.push(normalizedPath); zipFileMap[normalizedPath] = zipEntry; });
-            paths.sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); renderFileTree(paths); gcCockpitUpdateAssets(paths, file.name, file.size); if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file · ' + formatBytes(file.size) + ')'; appendLog('ZIP siap dibaca: ' + file.name + ' — ' + paths.length + ' file · ' + formatBytes(file.size) + ' (ekstraksi saat file dibuka)', 'ok');
+            paths.sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); renderFileTree(paths); if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file · ' + formatBytes(file.size) + ')'; appendLog('ZIP siap dibaca: ' + file.name + ' — ' + paths.length + ' file · ' + formatBytes(file.size) + ' (ekstraksi saat file dibuka)', 'ok');
             const fp = document.getElementById('file-panel'); if (fp && fp.classList.contains('collapsed')) toggleFilePanel(); if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 100); setLoading(true, 'ZIP siap diedit', paths.length + ' file ditemukan · klik file untuk membukanya'); setTimeout(() => setLoading(false), 550);
             // Process 5: clear cache lama + (opsional) cache paket kecil ke SW untuk preview offline
             try {
@@ -5230,7 +5153,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
               }
             } catch (_) {}
           } else {
-            setLoading(true, 'Membuka file', file.name + ' · membaca isi...'); const content = await file.text(); currentZip = new JSZip(); currentZip.file(file.name, content); zipFileMap[file.name] = { async: async (type) => type === 'string' ? content : new Blob([content]) }; openFiles.set(file.name, content); renderFileTree([file.name]); gcCockpitUpdateAssets([file.name], file.name, file.size); if (projectNameEl) projectNameEl.textContent = file.name + ' (1 file)'; openFile(file.name, content, content.length); appendLog('File dimuat: ' + file.name, 'ok'); setLoading(false);
+            setLoading(true, 'Membuka file', file.name + ' · membaca isi...'); const content = await file.text(); currentZip = new JSZip(); currentZip.file(file.name, content); zipFileMap[file.name] = { async: async (type) => type === 'string' ? content : new Blob([content]) }; openFiles.set(file.name, content); renderFileTree([file.name]); if (projectNameEl) projectNameEl.textContent = file.name + ' (1 file)'; openFile(file.name, content, content.length); appendLog('File dimuat: ' + file.name, 'ok'); setLoading(false);
           }
           const bf = document.getElementById('breadcrumb-file'); if (bf) bf.textContent = '—'; const bc = document.getElementById('breadcrumb'); if (bc) bc.classList.remove('active'); const fi = document.getElementById('file-info'); if (fi) fi.textContent = 'No file selected';
         } catch (err) { setLoading(false); if (projectNameEl) projectNameEl.textContent = 'Gagal memuat'; console.error('ZIP/file load failed', err); appendLog('Gagal membuka file: ' + (err.message || err), 'err'); alert('Gagal membuka file: ' + (err.message || err)); } finally { e.target.value = ''; }
@@ -5271,63 +5194,6 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (nav) nav.click();
     }
 
-    async function gcCockpitCopyCode() {
-      const code = document.getElementById('gc-cockpit-code');
-      const value = String(code && code.textContent || '').trim();
-      if (!value || /^Belum ada paket\./.test(value)) {
-        appendLog('Belum ada cuplikan kode untuk disalin.', 'warn');
-        return;
-      }
-      try {
-        await navigator.clipboard.writeText(value);
-        appendLog('Cuplikan kode berhasil disalin.', 'ok');
-      } catch (_) {
-        appendLog('Clipboard tidak tersedia pada browser ini.', 'warn');
-      }
-    }
-
-    function gcCockpitSetCode(filename, content) {
-      const codeEl = document.getElementById('gc-cockpit-code');
-      if (!codeEl) return;
-      const text = String(content == null ? '' : content);
-      codeEl.classList.remove('is-empty');
-      codeEl.textContent = (filename ? '// ' + filename + '\\n\\n' : '') + text.slice(0, 16000) + (text.length > 16000 ? '\\n\\n// … cuplikan dipotong; buka Workspace untuk seluruh kode' : '');
-    }
-
-    async function gcCockpitUpdateAssets(paths, filename, sizeBytes) {
-      const list = (paths || []).filter(function (p) { return p && !String(p).endsWith('/'); });
-      const codeRe = /\.(html?|xhtml|css|s[ac]ss|less|js|mjs|cjs|jsx|ts|tsx|json|jsonc|xml|svg|vue|svelte|py|php|rb|go|rs|java|kt|swift|lua|sql|graphql|gql|md|txt)$/i;
-      const assetRe = /\.(png|jpe?g|gif|webp|avif|ico|bmp|svg|mp3|ogg|wav|m4a|aac|mp4|webm|wasm|woff2?|ttf|otf|atlas)$/i;
-      const codeCount = list.filter(function (p) { return codeRe.test(p); }).length;
-      const assetCount = list.filter(function (p) { return assetRe.test(p); }).length;
-      const fileCount = document.getElementById('gc-cockpit-file-count');
-      const codeCountEl = document.getElementById('gc-cockpit-code-count');
-      const assetCountEl = document.getElementById('gc-cockpit-asset-count');
-      const badge = document.getElementById('gc-cockpit-asset-badge');
-      const statusEl = document.getElementById('gc-cockpit-asset-status');
-      if (fileCount) fileCount.textContent = String(list.length);
-      if (codeCountEl) codeCountEl.textContent = String(codeCount);
-      if (assetCountEl) assetCountEl.textContent = String(assetCount);
-      if (badge) badge.textContent = list.length + ' file';
-      if (statusEl) {
-        statusEl.textContent = list.length ? ('Paket siap · ' + (sizeBytes ? formatBytes(sizeBytes) + ' · ' : '') + 'buka file untuk edit') : 'Menunggu hasil collect…';
-        statusEl.classList.toggle('is-ready', list.length > 0);
-      }
-      if (!list.length) return;
-
-      let candidate = currentFile && list.includes(currentFile) ? currentFile : null;
-      if (!candidate) candidate = list.find(function (p) { return /(^|\/)(index|main|app)\.(html?|js|ts|json)$/i.test(p); });
-      if (!candidate) candidate = list.find(function (p) { return codeRe.test(p); });
-      if (!candidate) return;
-      try {
-        let text = openFiles && openFiles.has(candidate) ? openFiles.get(candidate) : '';
-        if (!text && zipFileMap && zipFileMap[candidate] && typeof zipFileMap[candidate].async === 'function') {
-          text = await zipFileMap[candidate].async('string');
-        }
-        if (text) gcCockpitSetCode(candidate, text);
-      } catch (_) {}
-    }
-
     function gcCockpitReadUrl() {
       const input = document.getElementById('url');
       const value = String(input && input.value || '').trim();
@@ -5353,6 +5219,11 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     function gcSetCaptureResultActions(hasPackage, workspaceReady) {
       var download = document.getElementById('gc-capture-download');
       var workspace = document.getElementById('gc-capture-workspace');
+      if (!hasPackage) {
+        window.__gcLastCaptureBlob = null;
+        window.__gcLastCaptureName = 'game-resources.zip';
+        window.__gcLastCaptureDownloadUrl = '';
+      }
       if (download) {
         download.hidden = !hasPackage;
         download.disabled = !hasPackage;
@@ -5365,6 +5236,38 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       window.__gcLastCaptureName = filename || 'game-resources.zip';
       window.__gcLastCaptureDownloadUrl = downloadUrl || '';
       gcSetCaptureResultActions(!!(window.__gcLastCaptureBlob || window.__gcLastCaptureDownloadUrl), false);
+    }
+
+    async function gcLoadCaptureBlobToWorkspace(blob, filename, focusWorkspace) {
+      if (!blob || !blob.size) return false;
+      var input = document.getElementById('zip-input');
+      if (!input || typeof DataTransfer === 'undefined') return false;
+      try {
+        var transfer = new DataTransfer();
+        transfer.items.add(new File([blob], filename || 'game-resources.zip', { type: 'application/zip' }));
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        if (focusWorkspace) {
+          var nav = document.querySelector('[data-panel="workspace"]');
+          if (nav) nav.click();
+        }
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function gcSetCapturePreviewStatus(message, state) {
+      var status = document.getElementById('gc-cockpit-preview-status');
+      var badge = document.getElementById('gc-cockpit-preview-badge');
+      if (status && message) {
+        status.textContent = String(message);
+        status.classList.toggle('is-ready', state === 'ready');
+      }
+      if (badge && state) {
+        badge.textContent = state === 'error' ? 'ERROR' : state === 'ready' ? 'READY' : 'LIVE';
+        badge.classList.toggle('is-live', state !== 'error');
+      }
     }
 
     async function gcDownloadLastCapture() {
@@ -5477,9 +5380,9 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       try { gcSetFlowStep(3); } catch (_) {}
       const statusEl = document.getElementById('gc-cockpit-preview-status');
       const badge = document.getElementById('gc-cockpit-preview-badge');
-      if (statusEl) { statusEl.textContent = 'Data sesi siap · tekan COLLECT untuk capture'; statusEl.classList.add('is-ready'); }
+      if (statusEl) { statusEl.textContent = 'Preview siap · tekan PREVIEW & CAPTURE untuk mulai capture'; statusEl.classList.add('is-ready'); }
       if (badge) { badge.textContent = 'READY'; badge.classList.add('is-live'); }
-      try { appendLog('Get data selesai. Sesi preview siap dipakai sebagai acuan Full Collect.', 'ok'); } catch (_) {}
+      try { appendLog('Preview selesai. Sesi siap dipakai untuk Full Collect.', 'ok'); } catch (_) {}
     }
 
     function gcCockpitCollect(kind) {
@@ -5911,7 +5814,6 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
       openFiles.set(filename, textContent);
       updateEditorTabs(filename);
-      try { gcCockpitSetCode(filename, textContent); } catch (_) {}
     }
 
     function updateEditorTabs(activePath) {
@@ -13588,7 +13490,8 @@ function isApiLike(u){
     }
 
 
-    // ========== Pre-collect flow: Preview → Get data → Full Collect ==========
+    // ========== Compatibility pre-collect flow ==========
+
     function gcSetFlowStep(n) {
       try {
         var steps = document.querySelectorAll('#gc-flow-steps .gc-flow-step');
@@ -13628,7 +13531,7 @@ function isApiLike(u){
         modal.setAttribute('aria-hidden', 'false');
       }
       try {
-        if (typeof appendLog === 'function') appendLog('Preview dibuka. Putar ±10× lalu Get data / Full Collect.', 'info');
+        if (typeof appendLog === 'function') appendLog('Preview dibuka. Putar fitur utama lalu lanjutkan Full Collect.', 'info');
       } catch (e2) {}
     }
     function openPreCollectInTab() {
@@ -13659,7 +13562,7 @@ function isApiLike(u){
     function markGetDataStep() {
       gcSetFlowStep(3);
       try {
-        if (typeof appendLog === 'function') appendLog('Get data: siap Full Collect (Auto-spins ±10).', 'ok');
+        if (typeof appendLog === 'function') appendLog('Preview selesai: siap Full Collect (Auto-spins ±10).', 'ok');
       } catch (e) {}
       var spins = document.getElementById('collect-spins');
       if (spins && (!spins.value || Number(spins.value) < 5)) spins.value = '10';
@@ -13860,7 +13763,12 @@ function isApiLike(u){
             errMsg = err.error || err.message || errMsg;
           } catch (_) {}
           statusEl.textContent = 'Status: Gagal — ' + errMsg;
-          try { gcPipelineSet('capture', 'err', errMsg); } catch (_) {}
+          try {
+            gcSetCaptureResultActions(false, false);
+            gcUpdateCapturePreviewProgress(0, '0% · Capture gagal · ' + errMsg);
+            gcSetCapturePreviewStatus('Capture gagal · ' + errMsg, 'error');
+            gcPipelineSet('capture', 'err', errMsg);
+          } catch (_) {}
           return;
         }
 
@@ -13898,17 +13806,7 @@ function isApiLike(u){
             URL.revokeObjectURL(a.href);
 
             // Auto-load ZIP lengkap ke Workspace
-            var loadedWorkspace = false;
-            try {
-              const zipInput = document.getElementById('zip-input');
-              if (zipInput && typeof DataTransfer !== 'undefined') {
-                const transfer = new DataTransfer();
-                transfer.items.add(new File([blob], autoPackageName, { type: 'application/zip' }));
-                zipInput.files = transfer.files;
-                zipInput.dispatchEvent(new Event('change', { bubbles: true }));
-                loadedWorkspace = true;
-              }
-            } catch (_) {}
+            var loadedWorkspace = await gcLoadCaptureBlobToWorkspace(blob, autoPackageName, false);
             gcRememberLastCapture(blob, autoPackageName, '');
             gcSetCaptureResultActions(true, loadedWorkspace);
             gcUpdateCapturePreviewProgress(100, loadedWorkspace ? '100% · ZIP siap · paket dimuat ke Workspace' : '100% · ZIP siap diunduh');
@@ -13954,16 +13852,31 @@ function isApiLike(u){
         const data = await res.json();
         if (data.downloadUrl) {
           var remotePackageName = gcAutoPackageName(gameUrl);
-          gcRememberLastCapture(null, remotePackageName, data.downloadUrl);
-          gcUpdateCapturePreviewProgress(100, '100% · ZIP siap diunduh');
           statusEl.textContent = 'Status: Mengunduh ZIP...';
-          const a = document.createElement('a');
-          a.href = data.downloadUrl;
-          a.download = gcAutoPackageName(gameUrl);
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          statusEl.textContent = 'Status: Selesai — ZIP diunduh';
+          try {
+            var remoteRes = await fetch(data.downloadUrl);
+            if (!remoteRes.ok) throw new Error('HTTP ' + remoteRes.status);
+            var remoteBlob = await remoteRes.blob();
+            gcRememberLastCapture(remoteBlob, remotePackageName, '');
+            var remoteLoaded = await gcLoadCaptureBlobToWorkspace(remoteBlob, remotePackageName, false);
+            await gcDownloadLastCapture();
+            gcSetCaptureResultActions(true, remoteLoaded);
+            gcUpdateCapturePreviewProgress(100, remoteLoaded ? '100% · ZIP siap · paket dimuat ke Workspace' : '100% · ZIP siap diunduh');
+            gcSetCapturePreviewStatus(remoteLoaded ? 'Capture selesai · ZIP diunduh dan dimuat ke Workspace.' : 'Capture selesai · ZIP siap diunduh.', 'ready');
+            statusEl.textContent = remoteLoaded ? 'Status: Selesai — ZIP diunduh & dimuat ke Workspace' : 'Status: Selesai — ZIP diunduh';
+          } catch (remoteErr) {
+            gcRememberLastCapture(null, remotePackageName, data.downloadUrl);
+            gcSetCaptureResultActions(true, false);
+            gcUpdateCapturePreviewProgress(100, '100% · ZIP siap diunduh');
+            gcSetCapturePreviewStatus('Capture selesai · ZIP siap diunduh dari link hasil server.', 'ready');
+            const a = document.createElement('a');
+            a.href = data.downloadUrl;
+            a.download = remotePackageName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            statusEl.textContent = 'Status: Selesai — ZIP diunduh; buka Workspace untuk Load ZIP';
+          }
           return;
         }
         // Failover ke GitHub dari server — lanjut poll di web ini
@@ -13976,7 +13889,12 @@ function isApiLike(u){
       } catch (e) {
         var detail = gcDescribeCollectError(e, '/api/collect');
         statusEl.textContent = 'Status: Error — ' + detail;
-        try { gcPipelineSet('capture', 'err', detail); } catch (_) {}
+        try {
+          gcSetCaptureResultActions(false, false);
+          gcUpdateCapturePreviewProgress(0, '0% · Capture error · ' + detail);
+          gcSetCapturePreviewStatus('Capture error · ' + detail, 'error');
+          gcPipelineSet('capture', 'err', detail);
+        } catch (_) {}
       } finally {
         if (progressTimer) clearInterval(progressTimer);
         if (window.__gcActiveProgressId === progressId) window.__gcActiveProgressId = null;
@@ -14078,6 +13996,9 @@ function isApiLike(u){
         if (!res.ok || !data.ok) {
           const msg = data.error || (data.detail && JSON.stringify(data.detail)) || res.status;
           statusEl.textContent = 'Status: Gagal trigger — ' + msg;
+          gcSetCaptureResultActions(false, false);
+          gcUpdateCapturePreviewProgress(0, '0% · Collect GitHub gagal · ' + msg);
+          gcSetCapturePreviewStatus('Collect via GitHub gagal · ' + msg, 'error');
           return;
         }
 
@@ -14086,10 +14007,17 @@ function isApiLike(u){
         if (data.run_id) {
           pollGitHubStatus(data.run_id);
         } else {
-          statusEl.textContent = 'Status: Trigger OK tapi run_id belum siap. Coba lagi beberapa detik.';
+          var missingRunId = 'Trigger OK tetapi run_id belum tersedia. Coba lagi beberapa detik.';
+          statusEl.textContent = 'Status: ' + missingRunId;
+          gcSetCaptureResultActions(false, false);
+          gcUpdateCapturePreviewProgress(0, '0% · ' + missingRunId);
+          gcSetCapturePreviewStatus(missingRunId, 'error');
         }
       } catch (e) {
         statusEl.textContent = 'Status: Error — ' + e.message;
+        gcSetCaptureResultActions(false, false);
+        gcUpdateCapturePreviewProgress(0, '0% · Collect GitHub error · ' + e.message);
+        gcSetCapturePreviewStatus('Collect via GitHub error · ' + e.message, 'error');
         try { gcPipelineSet('capture', 'err', e.message); } catch (_) {}
       }
     }
@@ -14108,6 +14036,9 @@ function isApiLike(u){
           const data = await res.json();
           if (!data.ok) {
             statusEl.textContent = 'Status: Gagal cek status';
+            gcSetCaptureResultActions(false, false);
+            gcUpdateCapturePreviewProgress(0, '0% · Gagal membaca status Collect GitHub');
+            gcSetCapturePreviewStatus('Gagal membaca status Collect GitHub.', 'error');
             clearInterval(_ghPollTimer);
             _ghPollTimer = null;
             return;
@@ -14139,7 +14070,11 @@ function isApiLike(u){
                 if (!zipRes.ok) {
                   var errTxt = '';
                   try { errTxt = await zipRes.text(); } catch (_) {}
-                  statusEl.textContent = 'Status: Selesai tapi gagal unduh artifact (' + zipRes.status + ') ' + String(errTxt).slice(0, 120);
+                  var artifactError = 'Gagal unduh artifact (' + zipRes.status + ') ' + String(errTxt).slice(0, 120);
+                  statusEl.textContent = 'Status: Selesai tapi ' + artifactError;
+                  gcSetCaptureResultActions(false, false);
+                  gcUpdateCapturePreviewProgress(0, '0% · ' + artifactError);
+                  gcSetCapturePreviewStatus(artifactError, 'error');
                   return;
                 }
                 const blob = await zipRes.blob();
@@ -14184,21 +14119,7 @@ function isApiLike(u){
                   }
                 } catch (_) {}
                 // 2) Coba load ke Workspace
-                var loadedWs = false;
-                try {
-                  const zipInput = document.getElementById('zip-input');
-                  if (zipInput && typeof DataTransfer !== 'undefined') {
-                    const transfer = new DataTransfer();
-                    transfer.items.add(new File([blob], 'game-resources.zip', { type: 'application/zip' }));
-                    zipInput.files = transfer.files;
-                    zipInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    loadedWs = true;
-                    try {
-                      var wsBtn = document.querySelector('.nav-btn[data-panel="workspace"], button[onclick*="workspace"]');
-                      if (wsBtn) wsBtn.click();
-                    } catch (_) {}
-                  }
-                } catch (_) { loadedWs = false; }
+                var loadedWs = await gcLoadCaptureBlobToWorkspace(blob, 'game-resources.zip', true);
                 gcSetCaptureResultActions(true, loadedWs);
                 gcUpdateCapturePreviewProgress(100, loadedWs ? '100% · ZIP diunduh · paket siap di Workspace' : '100% · ZIP diunduh · buka Workspace untuk Load ZIP');
                 var githubPreviewStatus = document.getElementById('gc-cockpit-preview-status');
@@ -14227,17 +14148,29 @@ function isApiLike(u){
                 statusEl.textContent = 'Status: Selesai tapi unduh gagal — ' + msg;
               }
             } else {
-              statusEl.textContent = 'Status: Selesai (conclusion: ' + (data.conclusion || '?') + ') — tidak ada artifact';
+                  var noArtifact = 'Collect selesai tetapi artifact tidak tersedia.';
+                  statusEl.textContent = 'Status: ' + noArtifact;
+                  gcSetCaptureResultActions(false, false);
+                  gcUpdateCapturePreviewProgress(0, '0% · ' + noArtifact);
+                  gcSetCapturePreviewStatus(noArtifact, 'error');
             }
           }
         } catch (e) {
-          statusEl.textContent = 'Status: Poll error — ' + e.message;
+          var pollError = 'Poll error — ' + e.message;
+          statusEl.textContent = 'Status: ' + pollError;
+          gcSetCaptureResultActions(false, false);
+          gcUpdateCapturePreviewProgress(0, '0% · ' + pollError);
+          gcSetCapturePreviewStatus(pollError, 'error');
         }
 
         if (tries >= maxTries) {
           clearInterval(_ghPollTimer);
           _ghPollTimer = null;
-          statusEl.textContent += ' (timeout — proses terlalu lama)';
+          var pollTimeout = 'Timeout — proses Collect GitHub terlalu lama.';
+          statusEl.textContent = 'Status: ' + pollTimeout;
+          gcSetCaptureResultActions(false, false);
+          gcUpdateCapturePreviewProgress(0, '0% · ' + pollTimeout);
+          gcSetCapturePreviewStatus(pollTimeout, 'error');
         }
       }, 5000);
     }
@@ -14328,19 +14261,6 @@ function isApiLike(u){
         cl.innerHTML = (report.items || []).map(function (it) {
           return '<div class="' + (it.ok ? 'ok' : 'no') + '">' + (it.ok ? '✓' : '·') + ' ' + it.label + (it.optional && !it.ok ? ' (opsional)' : '') + '</div>';
         }).join('');
-      }
-      var cockpitAudit = document.getElementById('gc-cockpit-completeness');
-      if (cockpitAudit) {
-        var requiredItems = (report.items || []).filter(function (it) { return !it.optional; });
-        var missingItems = requiredItems.filter(function (it) { return !it.ok; });
-        var okItems = requiredItems.filter(function (it) { return it.ok; });
-        cockpitAudit.classList.toggle('is-ready', missingItems.length === 0 && requiredItems.length > 0);
-        cockpitAudit.classList.toggle('is-missing', missingItems.length > 0);
-        cockpitAudit.innerHTML = '<strong>' + (missingItems.length ? 'Paket belum lengkap' : 'Paket siap offline') + ' · ' + pct + '%</strong>' +
-          '<div class="gc-cockpit-checks">' +
-          okItems.map(function (it) { return '<span class="gc-cockpit-check">✓ ' + it.label + '</span>'; }).join('') +
-          missingItems.map(function (it) { return '<span class="gc-cockpit-check missing">! ' + it.label + '</span>'; }).join('') +
-          '</div>' + (missingItems.length ? '<div style="margin-top:5px">Mainkan fitur terkait lagi, jalankan auto-spin, lalu Collect ulang.</div>' : '<div style="margin-top:5px">kelengkapan.json dan api-map.json siap diperiksa di Workspace.</div>');
       }
       var tp = document.getElementById('gc-ct-pct');
       var tb = document.getElementById('gc-ct-bar');
@@ -15324,7 +15244,7 @@ function isApiLike(u){
     <div id="gc-precollect-modal" aria-hidden="true">
       <div class="gc-pc-bar">
         <strong>Preview Game</strong>
-        <span class="hint">Putar ±10× di game, lalu tutup → Get data → Full Collect</span>
+        <span class="hint">Putar fitur utama di game, lalu lanjutkan Full Collect</span>
         <button type="button" class="btn btn-sm btn-secondary" onclick="openPreCollectInTab()">Buka tab baru</button>
         <button type="button" class="btn btn-sm btn-success" onclick="closePreCollectPreview(true)">Selesai → Collect</button>
         <button type="button" class="btn btn-sm btn-secondary" onclick="closePreCollectPreview(false)">Tutup</button>
