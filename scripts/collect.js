@@ -22,7 +22,7 @@
  */
 import { chromium } from "playwright";
 import { zipSync, strToU8 } from "fflate";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { runStrictAutoInteract } from "./auto-interact.js";
 import {
@@ -659,6 +659,8 @@ async function main() {
   zipFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
   zipFiles["authorized-research.json"] = strToU8(JSON.stringify({ version: 1, enabled: AUTHORIZED_RESEARCH, licenseRef: LICENSE_REF, challengeManualComplete: CHALLENGE_MANUAL_COMPLETE, mockOffline: MOCK_OFFLINE, targetHost: new URL(TARGET_URL).host, note: "Self-attestation metadata; verify license independently before distribution." }, null, 2));
   if (MOCK_OFFLINE) zipFiles["mock-offline-config.json"] = strToU8(JSON.stringify({ version: 1, enabled: true, source: "github-actions-collector", apiMap: "api-map.json", note: "Mock/replay preparation only; not a production backend." }, null, 2));
+  if (existsSync("edu-network-adapter.js")) zipFiles["edu-network-adapter.js"] = new Uint8Array(readFileSync("edu-network-adapter.js"));
+  if (existsSync("edu-network-sync.txt")) zipFiles["EDU_NETWORK_SYNC.txt"] = new Uint8Array(readFileSync("edu-network-sync.txt"));
   zipFiles["README.md"] = strToU8(`# Game Resource Package (Game Collector Pro)
 Target: ${safeTargetUrl}
 Main document status: ${mainDocStatus}

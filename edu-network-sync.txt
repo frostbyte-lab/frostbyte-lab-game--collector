@@ -1,0 +1,54 @@
+EDU NETWORK SYNC CONTRACT
+==========================
+
+Target package: Wild Bandito / collector result
+Source capture: Game Collector Pro
+Target host: Cloudflare Pages Edu-network
+Target slot: configurable; install into game-N/ after owner selects slot
+
+AUTHORITATIVE API BASE
+----------------------
+Use the same-origin EduNetwork Pages domain at runtime. Do not keep provider CDN/API URLs as a live dependency.
+
+STANDARD FLOW
+-------------
+1. GET  /api/game/config?game_id=game-N
+2. POST /api/game/init {player_id, game_id, initial_balance?}
+3. POST /api/game/session {player_id, game_id}
+4. POST /api/game/bet {player_id, game_id, session_id, amount}
+5. POST /api/game/spin {player_id, game_id, session_id, bet}
+6. GET  /api/game/result?spin_id=...
+7. GET  /api/game/history?player_id=...&game_id=game-N&limit=20
+8. POST /api/game/collect {player_id, game_id, session_id}
+
+PROVIDER SNAPSHOT MAPPING
+-------------------------
+verifySession -> EduNetwork session/init flow
+GameName/Get -> EduNetwork config
+GameWallet/Get -> EduNetwork balance
+Resources/GetByResourcesTypeIds -> local ZIP assets + EduNetwork config when dynamic data is required
+Provider spin/bet/result -> EduNetwork spin/bet/result; response adapter is required because schemas differ
+Provider history -> EduNetwork history
+
+ASSET RULES
+-----------
+All signed CDN assets must be local inside the ZIP under assets/. Runtime must not depend on signed URLs. URL rewrite is permitted only for the EduNetwork API origin and local asset paths.
+
+BALANCE RULE
+------------
+EduNetwork starts players at balance 0. A teacher/admin must provision a virtual balance through the EduNetwork admin API before spin is playable. Never restore provider balance or real-money values from the captured game.
+
+DEPLOY CHECKLIST
+----------------
+- Extract ZIP into the selected game-N directory.
+- Run npm run prepare-deploy.
+- Configure game_id to the same game-N value.
+- Configure game symbols/paytable in EduNetwork D1.
+- Verify config, init, session, balance, spin, result, and history endpoints.
+- Set an educational virtual balance through admin controls.
+- Run browser smoke test on the Pages custom domain.
+- Record deployment date, slot, commit SHA, and API base in history.
+
+LIMITATIONS
+-----------
+This contract does not bypass authentication, DRM, license servers, anti-cheat, or provider access controls. Captured APIs are snapshots and are not a replacement for a licensed provider backend.
