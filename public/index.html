@@ -2647,6 +2647,284 @@
       margin: 0 auto;
     }
 
+    /* ===== Collector cockpit: Preview | Kode & Asset ===== */
+    #panel-collect.active {
+      padding: 20px 24px 32px;
+    }
+    #panel-collect.active .collect-wrapper {
+      max-width: 1180px;
+    }
+    #panel-collect.active .collect-hero {
+      margin-bottom: 18px;
+    }
+    #panel-collect.active .collect-hero .hero-logo {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 10px;
+      padding: 5px;
+      border-radius: 14px;
+    }
+    #panel-collect.active .collect-hero h2 {
+      font-size: 24px;
+      margin-bottom: 4px;
+    }
+    #panel-collect.active .collect-hero p {
+      font-size: 12px;
+    }
+    .gc-cockpit {
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(360px, .88fr);
+      gap: 14px;
+      align-items: stretch;
+      margin-bottom: 14px;
+    }
+    .gc-cockpit-card {
+      min-width: 0;
+      min-height: 500px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid rgba(42,50,61,.95);
+      border-radius: 14px;
+      background: linear-gradient(165deg, rgba(21,26,33,.98), rgba(14,17,22,.96));
+      box-shadow: 0 8px 24px rgba(0,0,0,.22);
+    }
+    .gc-cockpit-head {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,.025);
+    }
+    .gc-cockpit-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #f8fafc;
+      font-weight: 800;
+      letter-spacing: .01em;
+    }
+    .gc-cockpit-title .eyebrow {
+      display: block;
+      margin-top: 2px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+    .gc-cockpit-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 3px 8px;
+      border: 1px solid rgba(148,163,184,.25);
+      border-radius: 999px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .gc-cockpit-badge.is-live {
+      border-color: rgba(94,225,192,.45);
+      color: var(--accent);
+      background: rgba(94,225,192,.08);
+    }
+    .gc-cockpit-preview {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      background: #080c12;
+    }
+    .gc-cockpit-frame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 438px;
+      border: 0;
+      background: #080c12;
+    }
+    .gc-cockpit-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      color: var(--text-muted);
+      background: radial-gradient(circle at 50% 35%, rgba(94,225,192,.08), transparent 42%), #080c12;
+      pointer-events: none;
+    }
+    .gc-cockpit-placeholder[hidden] { display: none; }
+    .gc-cockpit-placeholder strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+    .gc-cockpit-placeholder span {
+      display: block;
+      max-width: 300px;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .gc-cockpit-codebody {
+      display: grid;
+      grid-template-rows: auto minmax(230px, 1fr) auto;
+      flex: 1;
+      min-height: 0;
+    }
+    .gc-cockpit-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .gc-cockpit-stat {
+      min-width: 0;
+      padding: 8px 9px;
+      border: 1px solid rgba(148,163,184,.14);
+      border-radius: 9px;
+      background: rgba(255,255,255,.025);
+    }
+    .gc-cockpit-stat strong {
+      display: block;
+      color: #f8fafc;
+      font-size: 16px;
+      line-height: 1.1;
+    }
+    .gc-cockpit-stat span {
+      display: block;
+      overflow: hidden;
+      color: var(--text-muted);
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gc-cockpit-code {
+      min-height: 0;
+      margin: 0;
+      padding: 14px;
+      overflow: auto;
+      color: #cbd5e1;
+      background: #0a0f17;
+      font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      white-space: pre;
+      tab-size: 2;
+    }
+    .gc-cockpit-code.is-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-family: inherit;
+      text-align: center;
+      white-space: pre-wrap;
+    }
+    .gc-cockpit-footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: rgba(255,255,255,.025);
+    }
+    .gc-cockpit-status {
+      flex: 1 1 180px;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text-muted);
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gc-cockpit-status.is-ready { color: var(--accent); }
+    .gc-url-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 14px;
+      padding: 12px;
+      border: 1px solid rgba(94,225,192,.28);
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(94,225,192,.08), rgba(96,165,250,.06));
+      box-shadow: 0 8px 24px rgba(0,0,0,.16);
+    }
+    .gc-url-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      color: #e2e8f0;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .gc-url-label span {
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .gc-url-input-wrap { min-width: 0; }
+    .gc-url-input-wrap input[type="url"] {
+      width: 100%;
+      min-height: 44px;
+      margin: 0 !important;
+      padding: 11px 13px;
+      border-color: rgba(148,163,184,.3);
+      background: rgba(8,12,18,.65);
+      font-size: 14px;
+    }
+    .gc-url-actions {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .gc-advanced-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: #e2e8f0;
+      font-size: 13px;
+    }
+    .gc-advanced-heading span {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 400;
+    }
+    .gc-url-actions .btn {
+      min-height: 44px;
+      white-space: nowrap;
+    }
+    @media (max-width: 860px) {
+      .gc-cockpit { grid-template-columns: 1fr; }
+      .gc-cockpit-card { min-height: 420px; }
+      .gc-cockpit-frame { min-height: 360px; }
+    }
+    @media (max-width: 560px) {
+      #panel-collect.active { padding: 14px 12px 24px; }
+      .gc-url-bar { grid-template-columns: 1fr; }
+      .gc-url-actions { display: grid; grid-template-columns: 1fr 1fr; }
+      .gc-url-actions .btn { width: 100%; }
+      .gc-cockpit-head { padding: 10px 11px; }
+      .gc-cockpit-stats { padding: 10px 11px; gap: 6px; }
+      .gc-cockpit-code { padding: 11px; font-size: 10px; }
+      .gc-cockpit-footer { padding: 9px 11px; }
+    }
+
     .collect-hero {
       text-align: center;
       margin-bottom: 32px;
@@ -3397,8 +3675,8 @@
         </div>
       </div>
       <nav>
-        <button class="nav-btn active" data-panel="collect">Collect</button>
-        <button class="nav-btn" data-panel="workspace">Workspace</button>
+        <button class="nav-btn active" data-panel="collect">COLLECT</button>
+        <button class="nav-btn" data-panel="workspace">Kode &amp; Asset</button>
         <button class="nav-btn" data-panel="history">Activity</button>
       </nav>
     </header>
@@ -3412,10 +3690,65 @@
           <p>Collect game resources from web browsers and preview them offline. Powered by Frostbyte Technologies.</p>
         </div>
 
-        <div class="collect-card">
-          <label for="url">Game URL</label>
-          <input id="url" type="url" placeholder="https://example.com/game">
+        <div class="gc-cockpit" aria-label="Preview dan Kode & Asset">
+          <section class="gc-cockpit-card" aria-labelledby="gc-cockpit-preview-title">
+            <div class="gc-cockpit-head">
+              <div class="gc-cockpit-title" id="gc-cockpit-preview-title">
+                <span aria-hidden="true">▶</span>
+                <span>Preview Game<span class="eyebrow">Mainkan dan cek sumber sebelum collect</span></span>
+              </div>
+              <span class="gc-cockpit-badge" id="gc-cockpit-preview-badge">IDLE</span>
+            </div>
+            <div class="gc-cockpit-preview">
+              <iframe id="gc-cockpit-frame" class="gc-cockpit-frame" title="Preview game" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
+              <div class="gc-cockpit-placeholder" id="gc-cockpit-placeholder">
+                <div><strong>Preview akan tampil di sini</strong><span>Tempel URL game di bawah, lalu tekan COLLECT untuk memuat preview dan mengambil resource.</span></div>
+              </div>
+            </div>
+            <div class="gc-cockpit-footer">
+              <span class="gc-cockpit-status" id="gc-cockpit-preview-status">Menunggu URL game…</span>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="gcCockpitOpenInTab()" title="Buka URL game di tab baru">Buka tab</button>
+            </div>
+          </section>
+          <section class="gc-cockpit-card" aria-labelledby="gc-cockpit-assets-title">
+            <div class="gc-cockpit-head">
+              <div class="gc-cockpit-title" id="gc-cockpit-assets-title">
+                <span aria-hidden="true">{ }</span>
+                <span>Kode &amp; Asset<span class="eyebrow">File, kode, API, dan paket hasil collect</span></span>
+              </div>
+              <span class="gc-cockpit-badge" id="gc-cockpit-asset-badge">0 file</span>
+            </div>
+            <div class="gc-cockpit-codebody">
+              <div class="gc-cockpit-stats" aria-label="Ringkasan asset">
+                <div class="gc-cockpit-stat"><strong id="gc-cockpit-file-count">0</strong><span>file</span></div>
+                <div class="gc-cockpit-stat"><strong id="gc-cockpit-code-count">0</strong><span>kode</span></div>
+                <div class="gc-cockpit-stat"><strong id="gc-cockpit-asset-count">0</strong><span>asset</span></div>
+              </div>
+              <pre id="gc-cockpit-code" class="gc-cockpit-code is-empty">Belum ada paket.
 
+Setelah Collect selesai, file dan cuplikan kode akan muncul di sini.</pre>
+              <div class="gc-cockpit-footer">
+                <span class="gc-cockpit-status" id="gc-cockpit-asset-status">Menunggu hasil collect…</span>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="gcCockpitOpenWorkspace()">Buka Workspace</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="gcCockpitCopyCode()">Copy code</button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="gc-url-bar">
+          <div class="gc-url-input-wrap">
+            <label class="gc-url-label" for="url"><span>URL</span><span>Tempel link game yang diizinkan untuk dikoleksi</span></label>
+            <input id="url" type="url" placeholder="https://example.com/game" autocomplete="url">
+          </div>
+          <div class="gc-url-actions">
+            <button type="button" class="btn btn-primary" onclick="gcCockpitCollect('cloudflare')" title="Preview lalu collect dengan Cloudflare">COLLECT</button>
+            <button type="button" class="btn btn-secondary" onclick="gcCockpitCollect('github')" title="Preview lalu collect melalui GitHub Actions">GitHub</button>
+          </div>
+        </div>
+
+        <div class="collect-card gc-advanced-card">
+          <div class="gc-advanced-heading"><strong>Pengaturan &amp; pipeline lanjutan</strong><span>Kontrol teknis untuk capture, API, asset, dan ZIP.</span></div>
           <div class="gc-research-card" style="margin-top:12px;padding:11px;border:1px solid rgba(96,165,250,.32);border-radius:10px;background:rgba(96,165,250,.06);">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;"><input type="checkbox" id="gc-authorized-research" checked> <b>Authorized Research Mode</b></label>
@@ -4811,7 +5144,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           if (nameLower.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
             setLoading(true, 'Membuka ZIP', 'Memvalidasi daftar file tanpa mengekstrak semuanya...'); const zip = await JSZip.loadAsync(file, { checkCRC32: false, createFolders: false }); currentZip = zip;
             const paths = []; zip.forEach((relativePath, zipEntry) => { if (zipEntry.dir) return; const normalizedPath = String(relativePath).replaceAll('\\', '/').replace(/^\.\//, '').replace(/^\/+/, ''); if (!normalizedPath) return; paths.push(normalizedPath); zipFileMap[normalizedPath] = zipEntry; });
-            paths.sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); renderFileTree(paths); if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file · ' + formatBytes(file.size) + ')'; appendLog('ZIP siap dibaca: ' + file.name + ' — ' + paths.length + ' file · ' + formatBytes(file.size) + ' (ekstraksi saat file dibuka)', 'ok');
+            paths.sort((a,b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'})); renderFileTree(paths); gcCockpitUpdateAssets(paths, file.name, file.size); if (projectNameEl) projectNameEl.textContent = file.name + ' (' + paths.length + ' file · ' + formatBytes(file.size) + ')'; appendLog('ZIP siap dibaca: ' + file.name + ' — ' + paths.length + ' file · ' + formatBytes(file.size) + ' (ekstraksi saat file dibuka)', 'ok');
             const fp = document.getElementById('file-panel'); if (fp && fp.classList.contains('collapsed')) toggleFilePanel(); if (typeof sizeMonacoHost === 'function') setTimeout(sizeMonacoHost, 100); setLoading(true, 'ZIP siap diedit', paths.length + ' file ditemukan · klik file untuk membukanya'); setTimeout(() => setLoading(false), 550);
             // Process 5: clear cache lama + (opsional) cache paket kecil ke SW untuk preview offline
             try {
@@ -4825,11 +5158,116 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
               }
             } catch (_) {}
           } else {
-            setLoading(true, 'Membuka file', file.name + ' · membaca isi...'); const content = await file.text(); currentZip = new JSZip(); currentZip.file(file.name, content); zipFileMap[file.name] = { async: async (type) => type === 'string' ? content : new Blob([content]) }; openFiles.set(file.name, content); renderFileTree([file.name]); if (projectNameEl) projectNameEl.textContent = file.name + ' (1 file)'; openFile(file.name, content, content.length); appendLog('File dimuat: ' + file.name, 'ok'); setLoading(false);
+            setLoading(true, 'Membuka file', file.name + ' · membaca isi...'); const content = await file.text(); currentZip = new JSZip(); currentZip.file(file.name, content); zipFileMap[file.name] = { async: async (type) => type === 'string' ? content : new Blob([content]) }; openFiles.set(file.name, content); renderFileTree([file.name]); gcCockpitUpdateAssets([file.name], file.name, file.size); if (projectNameEl) projectNameEl.textContent = file.name + ' (1 file)'; openFile(file.name, content, content.length); appendLog('File dimuat: ' + file.name, 'ok'); setLoading(false);
           }
           const bf = document.getElementById('breadcrumb-file'); if (bf) bf.textContent = '—'; const bc = document.getElementById('breadcrumb'); if (bc) bc.classList.remove('active'); const fi = document.getElementById('file-info'); if (fi) fi.textContent = 'No file selected';
         } catch (err) { setLoading(false); if (projectNameEl) projectNameEl.textContent = 'Gagal memuat'; console.error('ZIP/file load failed', err); appendLog('Gagal membuka file: ' + (err.message || err), 'err'); alert('Gagal membuka file: ' + (err.message || err)); } finally { e.target.value = ''; }
       });
+    function gcCockpitSetPreview(gameUrl, status) {
+      const frame = document.getElementById('gc-cockpit-frame');
+      const placeholder = document.getElementById('gc-cockpit-placeholder');
+      const badge = document.getElementById('gc-cockpit-preview-badge');
+      const statusEl = document.getElementById('gc-cockpit-preview-status');
+      if (!frame) return;
+      const value = String(gameUrl || '').trim();
+      if (!value) return;
+      if (placeholder) placeholder.hidden = false;
+      if (badge) { badge.textContent = 'LOADING'; badge.classList.add('is-live'); }
+      if (statusEl) { statusEl.textContent = status || 'Memuat preview…'; statusEl.classList.remove('is-ready'); }
+      frame.onload = function () {
+        if (placeholder) placeholder.hidden = true;
+        if (badge) { badge.textContent = 'LIVE'; badge.classList.add('is-live'); }
+        if (statusEl) { statusEl.textContent = 'Preview aktif · siap dimainkan'; statusEl.classList.add('is-ready'); }
+      };
+      frame.onerror = function () {
+        if (badge) { badge.textContent = 'BLOCKED'; badge.classList.remove('is-live'); }
+        if (statusEl) statusEl.textContent = 'Preview ditolak oleh sumber game';
+      };
+      if (frame.src !== value) frame.src = value;
+    }
+
+    function gcCockpitOpenInTab() {
+      const input = document.getElementById('url');
+      const value = String(input && input.value || '').trim();
+      if (!value) { alert('Masukkan URL game terlebih dahulu.'); return; }
+      try { new URL(value); } catch (_) { alert('URL tidak valid.'); return; }
+      window.open(value, '_blank', 'noopener,noreferrer');
+    }
+
+    function gcCockpitOpenWorkspace() {
+      const nav = document.querySelector('[data-panel="workspace"]');
+      if (nav) nav.click();
+    }
+
+    async function gcCockpitCopyCode() {
+      const code = document.getElementById('gc-cockpit-code');
+      const value = String(code && code.textContent || '').trim();
+      if (!value || /^Belum ada paket\./.test(value)) {
+        appendLog('Belum ada cuplikan kode untuk disalin.', 'warn');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(value);
+        appendLog('Cuplikan kode berhasil disalin.', 'ok');
+      } catch (_) {
+        appendLog('Clipboard tidak tersedia pada browser ini.', 'warn');
+      }
+    }
+
+    function gcCockpitSetCode(filename, content) {
+      const codeEl = document.getElementById('gc-cockpit-code');
+      if (!codeEl) return;
+      const text = String(content == null ? '' : content);
+      codeEl.classList.remove('is-empty');
+      codeEl.textContent = (filename ? '// ' + filename + '\\n\\n' : '') + text.slice(0, 16000) + (text.length > 16000 ? '\\n\\n// … cuplikan dipotong; buka Workspace untuk seluruh kode' : '');
+    }
+
+    async function gcCockpitUpdateAssets(paths, filename, sizeBytes) {
+      const list = (paths || []).filter(function (p) { return p && !String(p).endsWith('/'); });
+      const codeRe = /\.(html?|xhtml|css|s[ac]ss|less|js|mjs|cjs|jsx|ts|tsx|json|jsonc|xml|svg|vue|svelte|py|php|rb|go|rs|java|kt|swift|lua|sql|graphql|gql|md|txt)$/i;
+      const assetRe = /\.(png|jpe?g|gif|webp|avif|ico|bmp|svg|mp3|ogg|wav|m4a|aac|mp4|webm|wasm|woff2?|ttf|otf|atlas)$/i;
+      const codeCount = list.filter(function (p) { return codeRe.test(p); }).length;
+      const assetCount = list.filter(function (p) { return assetRe.test(p); }).length;
+      const fileCount = document.getElementById('gc-cockpit-file-count');
+      const codeCountEl = document.getElementById('gc-cockpit-code-count');
+      const assetCountEl = document.getElementById('gc-cockpit-asset-count');
+      const badge = document.getElementById('gc-cockpit-asset-badge');
+      const statusEl = document.getElementById('gc-cockpit-asset-status');
+      if (fileCount) fileCount.textContent = String(list.length);
+      if (codeCountEl) codeCountEl.textContent = String(codeCount);
+      if (assetCountEl) assetCountEl.textContent = String(assetCount);
+      if (badge) badge.textContent = list.length + ' file';
+      if (statusEl) {
+        statusEl.textContent = list.length ? ('Paket siap · ' + (sizeBytes ? formatBytes(sizeBytes) + ' · ' : '') + 'buka file untuk edit') : 'Menunggu hasil collect…';
+        statusEl.classList.toggle('is-ready', list.length > 0);
+      }
+      if (!list.length) return;
+
+      let candidate = currentFile && list.includes(currentFile) ? currentFile : null;
+      if (!candidate) candidate = list.find(function (p) { return /(^|\/)(index|main|app)\.(html?|js|ts|json)$/i.test(p); });
+      if (!candidate) candidate = list.find(function (p) { return codeRe.test(p); });
+      if (!candidate) return;
+      try {
+        let text = openFiles && openFiles.has(candidate) ? openFiles.get(candidate) : '';
+        if (!text && zipFileMap && zipFileMap[candidate] && typeof zipFileMap[candidate].async === 'function') {
+          text = await zipFileMap[candidate].async('string');
+        }
+        if (text) gcCockpitSetCode(candidate, text);
+      } catch (_) {}
+    }
+
+    function gcCockpitCollect(kind) {
+      const input = document.getElementById('url');
+      const value = String(input && input.value || '').trim();
+      if (!value) { alert('Masukkan URL game terlebih dahulu.'); if (input) input.focus(); return; }
+      try { new URL(value); } catch (_) { alert('URL tidak valid (harus http/https).'); return; }
+      gcCockpitSetPreview(value, 'Preview aktif · proses collect dimulai…');
+      const assetStatus = document.getElementById('gc-cockpit-asset-status');
+      if (assetStatus) { assetStatus.textContent = 'Mengambil kode, asset, API, dan ZIP…'; assetStatus.classList.remove('is-ready'); }
+      return kind === 'github' ? runGitHubCollect() : runCollect();
+    }
+    window.gcCockpitCollect = gcCockpitCollect;
+
     function renderFileTree(paths) {
       // Build a nested tree object from flat zip paths
       const treeRoot = {};
@@ -5237,6 +5675,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
       openFiles.set(filename, textContent);
       updateEditorTabs(filename);
+      try { gcCockpitSetCode(filename, textContent); } catch (_) {}
     }
 
     function updateEditorTabs(activePath) {
@@ -13129,6 +13568,7 @@ function isApiLike(u){
         alert('URL tidak valid (harus http/https)');
         return;
       }
+      try { gcCockpitSetPreview(gameUrl, 'Preview aktif · proses collect dimulai…'); } catch (_) {}
 
       try { gcPipelineReset(); } catch (_) {}
       try { gcPipelineSet('online', 'ok', 'URL siap · sign diharapkan valid'); } catch (_) {}
@@ -13342,6 +13782,7 @@ function isApiLike(u){
         alert('URL tidak valid (harus http/https)');
         return;
       }
+      try { gcCockpitSetPreview(gameUrl, 'Preview aktif · proses GitHub dimulai…'); } catch (_) {}
 
       if (_ghPollTimer) {
         clearInterval(_ghPollTimer);
