@@ -2760,6 +2760,12 @@
       border: 0;
       background: #080c12;
     }
+    @media (max-width: 768px) {
+      .gc-cockpit { grid-template-columns: 1fr; }
+      .gc-cockpit-card { min-height: 0; }
+      .gc-cockpit-preview { min-height: min(76svh, 700px); justify-content: center; align-items: stretch; }
+      .gc-cockpit-frame { width: min(100%, 390px); height: min(76svh, 700px); min-height: 560px; margin: 0 auto; flex: 0 1 390px; }
+    }
     .gc-cockpit-placeholder {
       position: absolute;
       inset: 0;
