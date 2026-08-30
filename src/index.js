@@ -40,6 +40,7 @@ import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
 import { savePackageToGitHub, listGitHubPackages, downloadGitHubPackage } from "./collect/github-packages.js";
 import { runManusTask } from "./lib/manus-api.js";
+import { buildAraaActivity, ARAA_IDENTITY } from "./araa-core.js";
 import {
   MAX_SINGLE_FILE,
   MAX_RAW_TOTAL,
@@ -253,6 +254,21 @@ async function handleRequest(request, env) {
     // Build probe — sengaja no-store agar tidak tertutup cache edge.
     if (request.method === "GET" && url.pathname === "/api/build") {
       return Response.json({ ok: true, service: "game-collector-pro", build: env.GC_BUILD_ID || GC_BUILD_ID, sourceCommit: env.GC_SOURCE_COMMIT || null }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
+
+    // A Core Raa: standalone evidence intelligence; no external model/provider.
+    if (request.method === "POST" && url.pathname === "/api/araa/analyze") {
+      try {
+        const body = await request.json();
+        const report = buildAraaActivity(body?.evidence || body || {});
+        return Response.json(report, { headers: { "Cache-Control": "no-store, max-age=0", "X-ARaa-Mode": "standalone" } });
+      } catch (error) {
+        return Response.json({ ok: false, error: "ARAA_ANALYZE_FAILED", message: "A Core Raa tidak dapat membaca evidence JSON." }, { status: 400 });
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/araa/identity") {
+      return Response.json({ ok: true, identity: ARAA_IDENTITY }, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
 
     // Safe source preflight: lightweight check only; never bypasses challenge/protection.

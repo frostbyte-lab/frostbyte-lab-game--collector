@@ -4652,6 +4652,11 @@
               <span class="activity-card-title">MASTER TOOLSET</span>
               <span class="activity-card-desc">Capability registry · capture · security · offline · QA · external connectors</span>
             </button>
+            <button type="button" class="activity-card activity-card-chat" id="btn-activity-araa" onclick="openActivityAraa()">
+              <span class="activity-card-icon" aria-hidden="true">R</span>
+              <span class="activity-card-title">A Core Raa</span>
+              <span class="activity-card-desc">AI Core mandiri · diagnosis evidence · skor readiness · rekomendasi yang dapat dijelaskan</span>
+            </button>
           </div>
 
           <details class="fb-portfolio">
@@ -4755,6 +4760,25 @@
             <div id="offline-ready-ai" class="offline-ready-summary" hidden style="border-color:rgba(94,225,192,.35);background:rgba(94,225,192,.06);"></div>
             <div id="offline-ready-conformance-report" class="offline-ready-summary" hidden></div>
             <pre id="offline-ready-report" class="offline-ready-report" hidden></pre>
+          </div>
+        </div>
+
+        <div class="activity-view" id="activity-araa-view" hidden>
+          <div class="activity-view-bar">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeActivitySub()">← Kembali</button>
+            <strong>A Core Raa</strong>
+            <span class="activity-view-hint">Standalone Evidence Intelligence · offline</span>
+          </div>
+          <div class="offline-ready-page">
+            <p class="offline-ready-intro"><b>A Core Raa</b> adalah otak internal Game Collector. Ia membaca evidence nyata, menjalankan rules engine, menjelaskan temuan, dan tidak mengirim data ke provider AI eksternal.</p>
+            <div class="offline-ready-actions">
+              <button type="button" class="btn btn-primary btn-sm" id="araa-analyze-btn" onclick="runAraaAnalysis()">Analisis Evidence Sekarang</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="araaExportReport()">Export Laporan ARaa</button>
+            </div>
+            <div id="araa-status" class="offline-ready-status">Belum ada analisis. Klik Analisis Evidence Sekarang.</div>
+            <div id="araa-summary" class="offline-ready-summary" hidden></div>
+            <div id="araa-findings" class="offline-ready-summary" hidden></div>
+            <pre id="araa-audit" class="offline-ready-report" hidden></pre>
           </div>
         </div>
 
@@ -7431,9 +7455,46 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
       });
     }
+    async function openActivityAraa() {
+      var hub = document.getElementById('activity-hub');
+      var views = ['activity-chat-view', 'activity-log-view', 'activity-term-view', 'activity-offline-view', 'activity-master-view', 'activity-araa-view'];
+      if (hub) hub.hidden = true;
+      views.forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = id !== 'activity-araa-view'; });
+      await runAraaAnalysis();
+    }
+    async function runAraaAnalysis() {
+      var status = document.getElementById('araa-status');
+      var summary = document.getElementById('araa-summary');
+      var findings = document.getElementById('araa-findings');
+      var audit = document.getElementById('araa-audit');
+      var button = document.getElementById('araa-analyze-btn');
+      if (status) status.textContent = 'A Core Raa sedang membaca evidence lokal…';
+      if (button) button.disabled = true;
+      try {
+        var evidence = { manifest: window.currentManifest || {}, analysis: window.currentAnalysis || {}, capture: window.__gcLastCapture || {}, errors: window.__pvLastErrors || [], operations: JSON.parse(localStorage.getItem('gc_ops_events_v3') || '[]') };
+        var response = await fetch('/api/araa/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ evidence: evidence }) });
+        var report = await response.json();
+        if (!response.ok || report.ok === false) throw new Error(report.message || report.error || 'Analisis ARaa gagal');
+        window.__araaLastReport = report;
+        if (status) status.textContent = 'A Core Raa selesai · standalone · score ' + report.score + '/100 · ' + report.level;
+        if (summary) { summary.hidden = false; summary.innerHTML = '<strong>A Core Raa · ' + report.score + '/100 · ' + report.level + '</strong><p>' + offlineReadyEsc(report.nextAction) + '</p><hr><pre style="white-space:pre-wrap;margin:0;">' + offlineReadyEsc(report.facts.join('\\n')) + '</pre>'; }
+        if (findings) { findings.hidden = false; findings.innerHTML = '<strong>Temuan &amp; prioritas</strong>' + (report.findings.length ? '<ol>' + report.findings.map(function (f) { return '<li><b>' + offlineReadyEsc(f.severity.toUpperCase() + ' · ' + f.title) + '</b><br>' + offlineReadyEsc(f.detail) + '<br><small>Tindakan: ' + offlineReadyEsc(f.action) + '</small></li>'; }).join('') + '</ol>' : '<p>Tidak ada blocker dari evidence yang tersedia.</p>'); }
+        if (audit) { audit.hidden = false; audit.textContent = JSON.stringify({ identity: report.identity, generatedAt: report.generatedAt, score: report.score, findings: report.findings, priorities: report.priorities }, null, 2); }
+        try { actRecord('audit', 'A Core Raa selesai', JSON.stringify({ score: report.score, level: report.level, findings: report.findings.length })); } catch (_) {}
+      } catch (error) {
+        if (status) status.textContent = 'A Core Raa gagal: ' + (error.message || error);
+        try { appendLog('A Core Raa: ' + (error.message || error), 'err'); } catch (_) {}
+      } finally { if (button) button.disabled = false; }
+    }
+    function araaExportReport() {
+      var report = window.__araaLastReport;
+      if (!report) { runAraaAnalysis(); return; }
+      var blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'a-core-raa-report-' + Date.now() + '.json'; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }
     async function openActivityMasterToolset() {
       var hub = document.getElementById('activity-hub');
-      var views = ['activity-chat-view', 'activity-log-view', 'activity-term-view', 'activity-offline-view', 'activity-master-view'];
+      var views = ['activity-chat-view', 'activity-log-view', 'activity-term-view', 'activity-offline-view', 'activity-master-view', 'activity-araa-view'];
       if (hub) hub.hidden = true;
       views.forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = id !== 'activity-master-view'; });
       var summary = document.getElementById('master-toolset-summary');
@@ -7456,7 +7517,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
     function openActivityOfflineReady() {
       var hub = document.getElementById('activity-hub');
-      var views = ['activity-chat-view', 'activity-log-view', 'activity-term-view', 'activity-offline-view', 'activity-master-view'];
+      var views = ['activity-chat-view', 'activity-log-view', 'activity-term-view', 'activity-offline-view', 'activity-master-view', 'activity-araa-view'];
       if (hub) hub.hidden = true;
       views.forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = id !== 'activity-offline-view'; });
       var input = document.getElementById('offline-ready-zip');
