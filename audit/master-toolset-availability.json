@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "generatedAt": "2026-08-30T02:49:06.101Z",
+  "summary": {
+    "total": 6,
+    "available": 2,
+    "unavailable": 4
+  },
+  "results": [
+    {
+      "id": "chromium-playwright",
+      "available": true,
+      "command": "/usr/bin/chromium",
+      "packageName": "playwright",
+      "probeOnly": true,
+      "policy": "availability-only; no capture, bypass, or binary execution"
+    },
+    {
+      "id": "chrome-cdp",
+      "available": true,
+      "command": "/usr/bin/chromium",
+      "packageName": "playwright",
+      "probeOnly": true,
+      "policy": "availability-only; no capture, bypass, or binary execution"
+    },
+    {
+      "id": "wabt",
+      "available": false,
+      "command": null,
+      "packageName": null,
+      "probeOnly": true,
+      "policy": "availability-only; no capture, bypass, or binary execution"
+    },
+    {
+      "id": "mitmproxy",
+      "available": false,
+      "command": null,
+      "packageName": null,
+      "probeOnly": true,
+      "policy": "availability-only; no capture, bypass, or binary execution"
+    },
+    {
+      "id": "wireshark",
+      "available": false,
+      "command": null,
+      "packageName": null,
+      "probeOnly": true,
+      "policy": "availability-only; no capture, bypass, or binary execution"
+    },
+    {
+      "id": "ghidra",
+      "available": false,
+      "command": null,
+      "packageName": null,
+      "probeOnly": true,
+      "policy": "availability-only; no capture, bypass, or binary execution"
+    }
+  ]
+}
