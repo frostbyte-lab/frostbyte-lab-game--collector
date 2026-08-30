@@ -61,6 +61,14 @@ import {
 } from "./history/kv.js";
 import { parseLogText } from "./history/log-parser.js";
 const GC_BUILD_ID = "production-hardening";
+const PREFLIGHT_PRIVATE_HOST = /^(localhost|127\\.|0\\.|10\\.|192\\.168\\.|169\\.254\\.|172\\.(1[6-9]|2\\d|3[0-1])\\.|::1$)/i;
+function parsePreflightTarget(raw) {
+  try {
+    const u = new URL(String(raw || ""));
+    if (!/^https?:$/.test(u.protocol) || u.username || u.password || PREFLIGHT_PRIVATE_HOST.test(u.hostname) || u.hostname.endsWith(".local")) return null;
+    return u;
+  } catch { return null; }
+}
 
 import {
   hasProgressStore,
@@ -245,6 +253,21 @@ async function handleRequest(request, env) {
     // Build probe — sengaja no-store agar tidak tertutup cache edge.
     if (request.method === "GET" && url.pathname === "/api/build") {
       return Response.json({ ok: true, service: "game-collector-pro", build: env.GC_BUILD_ID || GC_BUILD_ID, sourceCommit: env.GC_SOURCE_COMMIT || null }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
+
+    // Safe source preflight: lightweight check only; never bypasses challenge/protection.
+    if (request.method === "GET" && url.pathname === "/api/preflight") {
+      const target = parsePreflightTarget(url.searchParams.get("url"));
+      if (!target) return Response.json({ ok: false, error: "PUBLIC_URL_INVALID", message: "URL harus HTTP(S) publik tanpa credential atau host private." }, { status: 400 });
+      try {
+        const probe = await fetch(target.toString(), { redirect: "manual", headers: { "User-Agent": "GameCollectorPreflight/1.0" } });
+        const sample = (await probe.text()).slice(0, 100000);
+        const lower = sample.toLowerCase();
+        const loadingFailed = /loading\s+failed|error\s*code\s*:?\s*g?\d{3,5}|download failed/.test(lower);
+        const protectedSource = probe.status === 401 || probe.status === 403 || /captcha|cloudflare|access denied|challenge-platform|turnstile|drm|license server/.test(lower);
+        const result = { ok: true, target: target.origin + target.pathname, status: probe.status, redirected: probe.status >= 300 && probe.status < 400, contentType: probe.headers.get("content-type") || null, contentLength: Number(probe.headers.get("content-length") || 0) || null, loadingFailed, protectedSource, canAttemptCapture: probe.status >= 200 && probe.status < 300 && !loadingFailed && !protectedSource, message: loadingFailed ? "Sumber game sedang gagal memuat (loading failure/G1006)." : protectedSource ? "Sumber memerlukan akses atau challenge yang tidak boleh dilewati." : probe.status >= 400 ? "Sumber mengembalikan error HTTP." : "Sumber dapat dicoba." };
+        return Response.json(result, { headers: { "Cache-Control": "no-store, max-age=0" } });
+      } catch (error) { return Response.json({ ok: false, error: "PREFLIGHT_FAILED", message: String(error?.message || error) }, { status: 502 }); }
     }
 
     // Health

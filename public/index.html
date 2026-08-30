@@ -13786,6 +13786,33 @@ function isApiLike(u){
       return raw;
     }
 
+    async function gcPreflightTarget(gameUrl) {
+      try {
+        var response = await fetch('/api/preflight?url=' + encodeURIComponent(gameUrl), { headers: { 'Accept': 'application/json' } });
+        var result = await response.json().catch(function () { return {}; });
+        if (result.loadingFailed) {
+          var message = 'Sumber game gagal memuat (G1006/loading failure). Coba lagi nanti atau gunakan direct demo resmi.';
+          var status = document.getElementById('status');
+          if (status) status.textContent = 'Status: ' + message;
+          gcSetCapturePreviewStatus(message, 'error');
+          gcUpdateCapturePreviewProgress(0, '0% · ' + message);
+          try { appendLog(message, 'warn'); } catch (_) {}
+          return false;
+        }
+        if (result.protectedSource) {
+          var protectedMessage = 'Sumber memerlukan challenge/akses terlindungi. Collector tidak melewatinya.';
+          var protectedStatus = document.getElementById('status');
+          if (protectedStatus) protectedStatus.textContent = 'Status: ' + protectedMessage;
+          gcSetCapturePreviewStatus(protectedMessage, 'error');
+          gcUpdateCapturePreviewProgress(0, '0% · Akses sumber terlindungi');
+          return false;
+        }
+        return true;
+      } catch (_) {
+        // Preflight failure is advisory; capture may still work through the browser path.
+        return true;
+      }
+    }
     async function runCollect() {
       try { gcSetFlowStep(4); } catch (_gc) {}
       const urlInput = document.getElementById('url');
@@ -13802,6 +13829,7 @@ function isApiLike(u){
         alert('URL tidak valid (harus http/https)');
         return;
       }
+      if (!(await gcPreflightTarget(gameUrl))) return;
       try { gcCockpitSetPreview(gameUrl, 'Preview aktif · proses collect dimulai…'); } catch (_) {}
       try {
         gcSetCaptureResultActions(false, false);
