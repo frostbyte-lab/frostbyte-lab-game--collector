@@ -33,6 +33,7 @@ import { staticAnalyzeHtml, staticAnalyzeZip } from "./collect/static-scan.js";
 import { buildUrlMap, formatStatusReport } from "./collect/url-map.js";
 import { sha256 } from "./offline/strict-collector.js";
 import { buildConformanceReport } from "./offline/conformance-lab.js";
+import { getMasterToolsetReport } from "./tools/master-toolset.js";
 import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
 import { savePackageToGitHub, listGitHubPackages, downloadGitHubPackage } from "./collect/github-packages.js";
@@ -268,6 +269,12 @@ export default {
         }
       };
       return Response.json(health, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/tools/master") {
+      return Response.json({ ok: true, report: getMasterToolsetReport() }, {
+        headers: { "Cache-Control": "no-store, max-age=0" }
+      });
     }
 
     // Native API substitute: authorized local session/wallet/ledger only.
