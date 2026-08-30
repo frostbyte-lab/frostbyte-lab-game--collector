@@ -13859,10 +13859,18 @@ function isApiLike(u){
 
         if (!res.ok) {
           let errMsg = res.statusText;
+          let rawErr = '';
+          try { rawErr = await res.clone().text(); } catch (_) {}
           try {
             const err = await res.json();
             errMsg = err.error || err.message || errMsg;
-          } catch (_) {}
+          } catch (_) { if (rawErr) errMsg = rawErr.slice(0, 240); }
+          if (res.status === 503 && /1102|cpu|worker.*limit|script.*exceeded/i.test(String(errMsg) + ' ' + rawErr)) {
+            statusEl.textContent = 'Status: Worker mencapai batas proses · beralih ke Collect via GitHub…';
+            try { gcUpdateCapturePreviewProgress(5, '5% · Beralih ke runner GitHub untuk capture besar…'); } catch (_) {}
+            try { appendLog('Worker mencapai batas CPU (1102); fallback otomatis ke GitHub Actions dimulai.', 'warn'); } catch (_) {}
+            try { await runGitHubCollect(); return; } catch (fallbackError) { errMsg = 'Fallback GitHub gagal: ' + (fallbackError?.message || fallbackError); }
+          }
           statusEl.textContent = 'Status: Gagal — ' + errMsg;
           try {
             gcSetCaptureResultActions(false, false);
