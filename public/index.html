@@ -4611,6 +4611,11 @@
               <span class="activity-card-title">FULL_OFFLINE_READY</span>
               <span class="activity-card-desc">Audit ZIP per game · validasi browser tanpa network · lihat blocker nyata</span>
             </button>
+            <button type="button" class="activity-card activity-card-term" id="btn-activity-master" onclick="openActivityMasterToolset()">
+              <span class="activity-card-icon" aria-hidden="true">50</span>
+              <span class="activity-card-title">MASTER TOOLSET</span>
+              <span class="activity-card-desc">Capability registry · capture · security · offline · QA · external connectors</span>
+            </button>
           </div>
 
           <details class="fb-portfolio">
@@ -4713,6 +4718,19 @@
             <div id="offline-ready-ai" class="offline-ready-summary" hidden style="border-color:rgba(94,225,192,.35);background:rgba(94,225,192,.06);"></div>
             <div id="offline-ready-conformance-report" class="offline-ready-summary" hidden></div>
             <pre id="offline-ready-report" class="offline-ready-report" hidden></pre>
+          </div>
+        </div>
+
+        <div class="activity-view" id="activity-master-view" hidden>
+          <div class="activity-view-bar">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeActivitySub()">← Kembali</button>
+            <strong>MASTER TOOLSET</strong>
+            <span class="activity-view-hint">Capability-aware registry</span>
+          </div>
+          <div class="offline-ready-page">
+            <p class="offline-ready-intro">Registry ini membedakan tool yang sudah aktif, partial, dan memerlukan connector eksternal. Status tidak berarti tool sensitif boleh dipakai tanpa izin.</p>
+            <div id="master-toolset-summary" class="offline-ready-summary">Memuat capability…</div>
+            <div id="master-toolset-list" class="offline-ready-summary" style="max-height:560px;overflow:auto;"></div>
           </div>
         </div>
 
@@ -7376,9 +7394,32 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
       });
     }
+    async function openActivityMasterToolset() {
+      var hub = document.getElementById('activity-hub');
+      var views = ['activity-chat-view', 'activity-log-view', 'activity-term-view', 'activity-offline-view', 'activity-master-view'];
+      if (hub) hub.hidden = true;
+      views.forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = id !== 'activity-master-view'; });
+      var summary = document.getElementById('master-toolset-summary');
+      var list = document.getElementById('master-toolset-list');
+      try {
+        var response = await fetch('/api/tools/master', { cache: 'no-store' });
+        var payload = await response.json();
+        if (!response.ok || !payload.ok) throw new Error(payload.error || 'Registry tidak tersedia');
+        var report = payload.report || {};
+        var counts = report.summary || {};
+        if (summary) summary.innerHTML = '<b>MASTER TOOLSET 1/50</b><br><small>Total: ' + Number(counts.total || 0) + ' · Aktif: ' + Number(counts.active || 0) + ' · Partial: ' + Number(counts.partial || 0) + ' · External: ' + Number(counts.external || 0) + '</small><p class="offline-ready-hint">Tool external memerlukan instalasi dan otorisasi terpisah. Registry ini menunjukkan capability yang tersedia, bukan izin untuk membypass kontrol provider.</p>';
+        if (list) list.innerHTML = (report.tools || []).map(function (tool) { var color = tool.status === 'active' ? '#5ee1c0' : tool.status === 'partial' ? '#ffd166' : '#ff8b8b'; return '<div style="display:grid;grid-template-columns:36px 1fr auto;gap:8px;align-items:start;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08);"><b style="color:' + color + '">' + Number(tool.index) + '</b><div><b>' + offlineReadyEsc(tool.name) + '</b><br><small>' + offlineReadyEsc(tool.description) + '</small></div><span style="color:' + color + ';font-size:11px;text-transform:uppercase;">' + offlineReadyEsc(tool.status) + '</span></div>'; }).join('');
+        try { actRecord('audit', 'Buka Master Toolset', JSON.stringify({ total: counts.total, active: counts.active, partial: counts.partial, external: counts.external })); } catch (_) {}
+      } catch (error) {
+        if (summary) summary.textContent = 'Gagal memuat Master Toolset: ' + (error && error.message ? error.message : error);
+        if (list) list.innerHTML = '';
+      }
+    }
+    window.openActivityMasterToolset = openActivityMasterToolset;
+
     function openActivityOfflineReady() {
       var hub = document.getElementById('activity-hub');
-      var views = ['activity-chat-view', 'activity-log-view', 'activity-term-view', 'activity-offline-view'];
+      var views = ['activity-chat-view', 'activity-log-view', 'activity-term-view', 'activity-offline-view', 'activity-master-view'];
       if (hub) hub.hidden = true;
       views.forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = id !== 'activity-offline-view'; });
       var input = document.getElementById('offline-ready-zip');
@@ -7518,10 +7559,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       var log = document.getElementById('activity-log-view');
       var term = document.getElementById('activity-term-view');
       var offline = document.getElementById('activity-offline-view');
+      var master = document.getElementById('activity-master-view');
       if (hub) hub.hidden = true;
       if (chat) chat.hidden = true;
       if (log) log.hidden = true;
       if (offline) offline.hidden = true;
+      if (master) master.hidden = true;
       if (term) term.hidden = false;
       renderActivityTerminal();
       try { actRecord('nav', 'Buka Console', 'User membuka console log Activity'); } catch (_) {}
@@ -7562,9 +7605,11 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       var chat = document.getElementById('activity-chat-view');
       var logv = document.getElementById('activity-log-view');
       var offline = document.getElementById('activity-offline-view');
+      var master = document.getElementById('activity-master-view');
       if (hub) hub.hidden = true;
       if (chat) chat.hidden = true;
       if (offline) offline.hidden = true;
+      if (master) master.hidden = true;
       if (logv) logv.hidden = false;
       var det = document.getElementById('act-log-detail');
       if (det) det.hidden = true;
@@ -7578,10 +7623,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       var logv = document.getElementById('activity-log-view');
       var term = document.getElementById('activity-term-view');
       var offline = document.getElementById('activity-offline-view');
+      var master = document.getElementById('activity-master-view');
       if (chat) chat.hidden = true;
       if (logv) logv.hidden = true;
       if (term) term.hidden = true;
       if (offline) offline.hidden = true;
+      if (master) master.hidden = true;
       if (hub) hub.hidden = false;
     }
     function actRenderLogList() {
