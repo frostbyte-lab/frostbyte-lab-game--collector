@@ -74,3 +74,16 @@ AI mengembalikan Diagnosis, Repair Prioritas 1–5, kontrak API yang masih harus
 Assistant hanya membantu tahap persiapan, audit, dan repair. Ia tidak boleh dijadikan dependency runtime game. Status FULL_OFFLINE_READY tetap ditentukan oleh isi ZIP, API replay/stateful emulator, realtime replay, runtime interceptor, dan browser test tanpa network. AI tidak boleh mengubah payout, RNG, signature, DRM, atau aturan server-side tanpa bukti kontrak game yang dicapture.
 
 Alur yang direkomendasikan adalah Paste URL → Preview dan spin → Get data → Full Collect → AI audit otomatis → terapkan repair yang sudah ditinjau → browser test tanpa network → ulangi audit per ZIP sampai blocker terselesaikan. Untuk hasil maksimal, gunakan auto-spins dan buka History pada game yang memerlukannya, karena AI tidak dapat memperbaiki data API yang tidak pernah dicapture.
+
+
+11. STATUS IMPLEMENTASI PROVIDER TEST LAB
+Workflow `.github/workflows/quality-gates.yml` sekarang menghasilkan tiga required check dengan nama persis: `Unit and inline-JS tests`, `Secret scan`, dan `CodeQL analysis`. Semua check pada commit PR #4 berhasil. Unit test menjalankan security evidence, master toolset, collector/artifact, conformance, offline gameplay, native package, inline-JS, syntax, dan git diff validation. Secret scan memeriksa pola credential pada source tracked. CodeQL menganalisis JavaScript.
+
+12. MERGE DAN BRANCH PROTECTION
+PR #4 (`feat/security-evidence-provider-lab`) telah merged ke `main` pada commit `9f552e3b80e73ba62d09a5c65320a1bff280d6ee`. Karena branch protection mewajibkan satu approval code-owner dan tidak ada review yang tersedia, aturan review sempat dinonaktifkan sesuai otorisasi pengguna hanya untuk merge, kemudian dipulihkan. Konfigurasi aktif kembali: strict required checks, satu approval, code-owner review, dismiss stale review, dan enforce admins.
+
+13. VERIFIKASI PRODUCTION
+Deployment Worker dari commit merge berhasil. URL canonical: https://game-resource-collector.technologiesfrostbyte.workers.dev. Endpoint `/api/health` merespons `ok: true`, endpoint `/api/tools/master` merespons registry dengan `totalRequested: 50`, dan halaman utama production memuat marker `MASTER TOOLSET`. Deployment ini membuktikan fitur registry/security-evidence/conformance telah online; ini tidak mengubah batasan bahwa offline readiness harus dibuktikan per ZIP melalui browser network-off.
+
+14. DOKUMENTASI FINAL
+Blueprint lengkap tersedia di `PROVIDER_TEST_LAB_BLUEPRINT.md`. Dokumen tersebut menjelaskan pipeline collect → validate → rewrite → API capture → replay/emulator → security evidence → browser network-off → report, definisi quality gate, batas Authorized Research, 50 master tools, deployment, dan checklist operasional.
