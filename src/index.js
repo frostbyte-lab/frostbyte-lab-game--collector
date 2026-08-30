@@ -9,6 +9,7 @@ import { uploadGameToEduNetwork, continueEduUpload, eduConfig } from "./hosting/
 import { safe } from "./lib/safe.js";
 import { detectProtectedResource, sanitizeProtectedText } from "./security/protected-resource.js";
 import { handleNativeApi } from "./native-api.js";
+import { handlePublicMetadata, handleOfficialEmbed } from "./public-metadata.js";
 import { TYPES, isExcluded, classifyResource } from "./classify/resource.js";
 import { classifySlotSubfolder, folderOf } from "./classify/slot-folder.js";
 import { buildAllowedSet, shouldIncludeResource } from "./classify/select-filter.js";
@@ -273,6 +274,14 @@ export default {
     // It never bypasses DRM or proxies a provider backend.
     if (url.pathname.startsWith("/api/game")) {
       return handleNativeApi(request, env);
+    }
+
+    // Public metadata and official embed discovery only; never proxies protected runtime assets.
+    if (url.pathname === "/api/public/metadata") {
+      return handlePublicMetadata(request);
+    }
+    if (url.pathname === "/api/public/embed") {
+      return handleOfficialEmbed(request);
     }
 
     // Asset proxy same-origin (tanpa R2) — Hybrid online
