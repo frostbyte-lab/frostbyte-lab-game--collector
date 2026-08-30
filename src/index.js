@@ -34,6 +34,7 @@ import { buildUrlMap, formatStatusReport } from "./collect/url-map.js";
 import { sha256 } from "./offline/strict-collector.js";
 import { buildConformanceReport } from "./offline/conformance-lab.js";
 import { getMasterToolsetReport } from "./tools/master-toolset.js";
+import { buildPowerFullAudit } from "./audit/power-full.js";
 import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
 import { savePackageToGitHub, listGitHubPackages, downloadGitHubPackage } from "./collect/github-packages.js";
@@ -312,6 +313,15 @@ export default {
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "JSON tidak valid" }, { status: 400 }); }
       const report = buildConformanceReport(body || {});
       return Response.json({ ok: true, provider: "local-conformance-lab", report });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/audit/power-full") {
+      let body;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "JSON tidak valid" }, { status: 400 }); }
+      const serialized = JSON.stringify(body || {});
+      if (serialized.length > 900_000) return Response.json({ ok: false, error: "EVIDENCE_TOO_LARGE", message: "Evidence audit melebihi batas 900 KB; kirim ringkasan dan sample terbatas." }, { status: 413 });
+      const report = buildPowerFullAudit(body || {});
+      return Response.json({ ok: true, provider: "power-full-audit", report }, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
 
     if (request.method === "POST" && url.pathname === "/api/ai/analyze") {

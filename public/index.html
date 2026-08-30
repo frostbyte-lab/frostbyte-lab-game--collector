@@ -4710,6 +4710,7 @@
             <div class="offline-ready-actions">
               <button type="button" class="btn btn-primary btn-sm" id="offline-ready-play" onclick="playOfflineReview()">▶ Play Review</button>
               <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-conformance" onclick="runOfflineConformance()">Conformance API</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-power" onclick="runPowerFullAudit()">Power Full Audit</button>
               <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-current" onclick="auditCurrentZipOffline()">Audit ZIP Workspace</button>
               <button type="button" class="btn btn-secondary btn-sm" id="offline-ready-reset" onclick="resetOfflineReadyAudit()">Reset</button>
             </div>
@@ -7468,6 +7469,42 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       } catch (err) {
         if (status) status.textContent = 'Gagal membaca ZIP: ' + (err && err.message ? err.message : err);
       }
+    }
+    async function runPowerFullAudit() {
+      var status = document.getElementById('offline-ready-status');
+      var panel = document.getElementById('offline-ready-conformance-report');
+      try {
+        var audit = offlineReadyLastAudit;
+        if (!audit) { if (status) status.textContent = 'Pilih dan audit ZIP terlebih dahulu.'; return; }
+        var zip = audit.sourceFile ? await JSZip.loadAsync(audit.sourceFile) : (typeof currentZip !== 'undefined' ? currentZip : null);
+        var readJson = async function (names) {
+          if (!zip) return null;
+          for (var i = 0; i < names.length; i++) {
+            var entry = zip.file(names[i]);
+            if (entry) { try { return JSON.parse(await entry.async('text')); } catch (_) {} }
+          }
+          return null;
+        };
+        var apiMap = await readJson(['api-map.json', 'metadata/api-map.json']);
+        var security = await readJson(['security-evidence.json', 'metadata/security-evidence.json']);
+        var network = await readJson(['network-log.json', 'metadata/network-log.json', 'network-timeline.json']);
+        var payload = {
+          manifest: (audit.report && audit.report.names) || [],
+          apiMap: apiMap || {},
+          apiContract: (apiMap && (apiMap.contract || apiMap.contracts || apiMap.apiContract)) || [],
+          networkRequests: Array.isArray(network) ? network : (network && (network.requests || network.entries)) || [],
+          securityEvidence: security || {},
+          browserTest: audit.browserTest || { networkIsolated: false, gameplayReady: false }
+        };
+        if (status) status.textContent = 'Menjalankan Power Full Audit dengan quality gate ketat…';
+        var response = await fetch('/api/audit/power-full', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), cache: 'no-store' });
+        var data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || data.error || 'Power Full Audit gagal');
+        var report = data.report || {};
+        if (panel) { panel.hidden = false; panel.innerHTML = '<b>POWER FULL AUDIT · ' + offlineReadyEsc(report.status || 'UNKNOWN') + '</b><br><small>Score: ' + Number(report.score || 0) + '% · Blocker: ' + Number((report.blockers || []).length) + ' · Warning: ' + Number((report.warnings || []).length) + '</small><pre class="offline-ready-report" style="max-height:360px;white-space:pre-wrap;">' + offlineReadyEsc(JSON.stringify(report, null, 2)) + '</pre>'; }
+        if (status) status.textContent = 'Power Full Audit selesai: ' + report.status;
+        try { actRecord('audit', 'Power Full Audit ' + report.status, JSON.stringify({ score: report.score, blockers: (report.blockers || []).length, filename: audit.filename })); } catch (_) {}
+      } catch (error) { if (status) status.textContent = 'Power Full Audit gagal: ' + (error && error.message ? error.message : error); }
     }
     async function playOfflineReview() {
       var status = document.getElementById('offline-ready-status');
