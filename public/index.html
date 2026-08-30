@@ -3751,6 +3751,17 @@
           </div>
         </div>
 
+        <section class="collect-card gc-public-tools" aria-labelledby="gc-public-tools-title" style="margin-top:12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div><strong id="gc-public-tools-title">Metadata publik &amp; demo resmi</strong><div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Tambahan aman untuk halaman katalog; runtime/DRM pihak ketiga tidak dikoleksi.</div></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="gcPublicMetadata()">Collect metadata</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="gcOfficialEmbed()">Buka integrasi resmi</button>
+            </div>
+          </div>
+          <pre id="gc-public-result" aria-live="polite" style="display:none;white-space:pre-wrap;margin:10px 0 0;padding:10px;border-radius:8px;background:rgba(15,23,42,.7);color:var(--text-secondary);font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:220px;overflow:auto;"></pre>
+        </section>
+
         <div class="collect-card gc-advanced-card">
           <div class="gc-advanced-heading"><span><strong>Research &amp; keamanan</strong><span>Otorisasi dan perlindungan capture otomatis.</span></span><button type="button" class="gc-accordion-toggle" onclick="gcToggleFold('gc-research-card', this)" aria-controls="gc-research-card" aria-expanded="true">v</button></div>
           <div class="gc-research-card gc-fold-body" id="gc-research-card" style="margin-top:12px;padding:11px;border:1px solid rgba(96,165,250,.32);border-radius:10px;background:rgba(96,165,250,.06);">
@@ -15259,6 +15270,32 @@ function isApiLike(u){
     </div>
 
 <style id="gc-ops-premium-style">#gc-ops-fab{position:fixed;right:16px;bottom:16px;z-index:99990;border:1px solid #35506b;background:#0b1726;color:#dbeafe;border-radius:999px;padding:9px 13px;font:700 12px system-ui;box-shadow:0 10px 30px #0008;cursor:pointer}#gc-ops-fab b{color:#5ee1c0}#gc-ops-panel{position:fixed;right:16px;bottom:62px;width:min(430px,calc(100vw - 32px));max-height:min(560px,calc(100vh - 90px));z-index:99991;background:#07111f;color:#dbeafe;border:1px solid #29405f;border-radius:14px;box-shadow:0 20px 60px #000b;overflow:hidden;font:12px system-ui;display:none}#gc-ops-panel.open{display:block}#gc-ops-panel header{display:flex;justify-content:space-between;padding:12px 14px;background:#0e1b2e;border-bottom:1px solid #29405f}#gc-ops-panel button{border:1px solid #365273;background:#13263d;color:#dbeafe;border-radius:7px;padding:6px 9px;cursor:pointer}.gc-ops-actions{display:flex;gap:6px;padding:9px 12px;border-bottom:1px solid #1e3450}.gc-ops-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:10px 12px}.gc-ops-stat{background:#0d1b2d;border:1px solid #203a59;border-radius:8px;padding:8px}.gc-ops-stat b{display:block;font-size:16px;color:#7dd3fc}.gc-ops-stat span{color:#94a3b8;font-size:10px}.gc-ops-list{overflow:auto;max-height:360px;padding:0 10px 10px}.gc-ops-event{padding:8px 5px;border-bottom:1px solid #172b45;display:grid;grid-template-columns:58px 1fr auto;gap:7px}.gc-ops-event time{color:#64748b}.gc-ops-event .msg{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gc-ops-event .ok{color:#4ade80}.gc-ops-event .bad{color:#fb7185}.gc-ops-event .info{color:#7dd3fc}</style><button id="gc-ops-fab" type="button" title="Operations Center">OPS <b id="gc-ops-badge">0</b></button><section id="gc-ops-panel" aria-label="Operations Center"><header><strong>Operations Center</strong><button id="gc-ops-close" type="button">Tutup</button></header><div class="gc-ops-actions"><button id="gc-ops-export" type="button">Export log</button><button id="gc-ops-clear" type="button">Clear</button></div><div class="gc-ops-summary"><div class="gc-ops-stat"><b id="gc-ops-requests">0</b><span>request</span></div><div class="gc-ops-stat"><b id="gc-ops-errors">0</b><span>error</span></div><div class="gc-ops-stat"><b id="gc-ops-clicks">0</b><span>aksi tombol</span></div></div><div id="gc-ops-list" class="gc-ops-list"></div></section><script>(function(){'use strict';if(window.__GC_OPS_V3)return;window.__GC_OPS_V3=true;var K='gc_ops_events_v3',M=300,E=[],R=0,X=0,C=0;function load(){try{var a=JSON.parse(localStorage.getItem(K)||'[]');E=Array.isArray(a)?a.slice(-M):[]}catch(_){}}function save(){try{localStorage.setItem(K,JSON.stringify(E.slice(-M)))}catch(_){}}function url(v){try{var u=new URL(String(v),location.href);return u.origin+u.pathname}catch(_){return String(v||'').split('?')[0].slice(0,240)}}function esc(v){return String(v==null?'':v).replace(/[<>]/g,'').replace(/\s+/g,' ').trim().slice(0,180)}function emit(k,m,meta){E.push({at:new Date().toISOString(),kind:k,message:esc(m),meta:meta||null});if(E.length>M)E.shift();save();render()}function render(){var l=document.getElementById('gc-ops-list');if(!l)return;l.innerHTML=E.slice(-80).reverse().map(function(e){var t=new Date(e.at).toLocaleTimeString();return '<div class="gc-ops-event"><time>'+t+'</time><span class="msg">'+e.message+'</span><span class="'+(e.kind==='error'?'bad':e.kind==='ok'?'ok':'info')+'">'+e.kind+'</span></div>'}).join('')||'<div style="padding:18px;color:#64748b">Belum ada aktivitas.</div>';document.getElementById('gc-ops-requests').textContent=R;document.getElementById('gc-ops-errors').textContent=X;document.getElementById('gc-ops-clicks').textContent=C;document.getElementById('gc-ops-badge').textContent=E.length}function exportLog(){var b=new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),events:E},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='game-collector-operations-'+Date.now()+'.json';a.click();setTimeout(function(){URL.revokeObjectURL(a.href)},1000);emit('ok','Log operations diekspor')}load();var p=document.getElementById('gc-ops-panel');document.getElementById('gc-ops-fab').addEventListener('click',function(){p.classList.toggle('open');render()});document.getElementById('gc-ops-close').addEventListener('click',function(){p.classList.remove('open')});document.getElementById('gc-ops-export').addEventListener('click',exportLog);document.getElementById('gc-ops-clear').addEventListener('click',function(){E=[];R=X=C=0;save();emit('ok','Log lokal dibersihkan')});document.addEventListener('click',function(e){var b=e.target&&e.target.closest?e.target.closest('button,[role="button"],input[type="submit"],input[type="button"]'):null;if(!b||b.id==='gc-ops-fab'||b.closest('#gc-ops-panel'))return;C++;emit('info','Aksi: '+(b.id||esc(b.getAttribute('aria-label')||b.title||b.textContent)||'button'),{id:b.id||null})},true);var f=window.fetch;if(f)window.fetch=function(i,o){var raw=typeof i==='string'?i:i&&i.url||'',meth=(o&&o.method)||(i&&i.method)||'GET',st=Date.now();R++;emit('info',String(meth).toUpperCase()+' '+url(raw));return f.apply(this,arguments).then(function(r){if(!r.ok)X++;emit(r.ok?'ok':'error',String(meth).toUpperCase()+' '+r.status+' '+url(raw),{status:r.status,durationMs:Date.now()-st});return r}).catch(function(e){X++;emit('error',String(meth).toUpperCase()+' gagal '+url(raw),{error:esc(e&&e.message||e)});throw e})};window.addEventListener('error',function(e){X++;emit('error','Runtime error: '+esc(e.message||'unknown'))});window.addEventListener('unhandledrejection',function(e){X++;emit('error','Unhandled rejection: '+esc(e.reason&&e.reason.message||e.reason||'unknown'))});emit('ok','Operations Center siap',{build:'premium-observability-v3'});render()})();</script>
+<script>
+(function(){
+  function publicResult(value, isError){
+    var node=document.getElementById('gc-public-result'); if(!node)return;
+    node.style.display='block'; node.style.color=isError?'#fda4af':'var(--text-secondary)';
+    node.textContent=typeof value==='string'?value:JSON.stringify(value,null,2);
+  }
+  function target(){ var value=(document.getElementById('url')||{}).value||''; if(!value.trim()){ publicResult('Tempel URL halaman publik terlebih dahulu.',true); return null; } return value.trim(); }
+  window.gcPublicMetadata=async function(){
+    var url=target(); if(!url)return;
+    publicResult('Membaca metadata HTML publik…');
+    try { var res=await fetch('/api/public/metadata',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:url})}); var data=await res.json(); publicResult(data,res.ok&&data.ok!==false); }
+    catch(error){ publicResult('Metadata gagal diambil: '+(error&&error.message||error),true); }
+  };
+  window.gcOfficialEmbed=async function(){
+    var url=target(); if(!url)return;
+    publicResult('Mencari jalur integrasi resmi…');
+    try {
+      var res=await fetch('/api/public/embed',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:url})});
+      var data=await res.json(); publicResult(data,res.ok&&data.ok!==false);
+      if(data.ok && data.official_integration_url) window.open(data.official_integration_url,'_blank','noopener,noreferrer');
+      else if(data.ok) publicResult((data.message||'Gunakan integrasi resmi dari sumber.')+'\n\n'+JSON.stringify(data.metadata||{},null,2));
+    } catch(error){ publicResult('Integrasi resmi gagal diperiksa: '+(error&&error.message||error),true); }
+  };
+})();
+</script>
 </body>
 </html>
 
