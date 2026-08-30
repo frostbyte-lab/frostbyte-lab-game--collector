@@ -13814,9 +13814,12 @@ function isApiLike(u){
       statusEl.textContent = 'Status: [2/6 Capture] Collecting · wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + '...';
       let progressTimer = null;
       let progressId = null;
+      let captureTimeout = null;
       try {
         progressId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
         window.__gcActiveProgressId = progressId;
+        var captureController = new AbortController();
+        captureTimeout = setTimeout(function () { captureController.abort(); }, 8 * 60 * 1000);
         gcShowLiveCapture(true);
         gcRenderLiveFiles([], 0, 2);
         // Poll progress + live file list
@@ -13825,6 +13828,7 @@ function isApiLike(u){
             const pr = await fetch('/api/progress?id=' + encodeURIComponent(progressId));
             const pd = await pr.json();
             if (pd && (pd.label || pd.phase)) {
+              pd.__receivedAt = Date.now();
               statusEl.textContent = 'Status: [2/6 Capture] ' + (pd.phase || '') + (pd.label ? ' — ' + pd.label : '') + (pd.pct != null ? ' (' + pd.pct + '%)' : '');
               try {
                 var ph = String(pd.phase || pd.label || '').toLowerCase();
@@ -13847,8 +13851,10 @@ function isApiLike(u){
         const res = await fetch('/api/collect', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: gameUrl, progressId, ...opts })
+          body: JSON.stringify({ url: gameUrl, progressId, ...opts }),
+          signal: captureController.signal
         });
+        if (captureTimeout) { clearTimeout(captureTimeout); captureTimeout = null; }
         clearInterval(progressTimer);
 
         if (!res.ok) {
@@ -13982,7 +13988,7 @@ function isApiLike(u){
         }
         statusEl.textContent = 'Status: ' + (data.message || 'Selesai');
       } catch (e) {
-        var detail = gcDescribeCollectError(e, '/api/collect');
+        var detail = e && e.name === 'AbortError' ? 'Capture melewati batas 8 menit. Coba lagi dengan wait/spins lebih kecil atau gunakan Collect via GitHub.' : gcDescribeCollectError(e, '/api/collect');
         statusEl.textContent = 'Status: Error — ' + detail;
         try {
           gcSetCaptureResultActions(false, false);
@@ -13992,6 +13998,7 @@ function isApiLike(u){
         } catch (_) {}
       } finally {
         if (progressTimer) clearInterval(progressTimer);
+        if (captureTimeout) { clearTimeout(captureTimeout); captureTimeout = null; }
         if (window.__gcActiveProgressId === progressId) window.__gcActiveProgressId = null;
       }
     }
