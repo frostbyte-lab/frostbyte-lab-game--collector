@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-30T02:49:06.101Z",
+  "generatedAt": "2026-08-30T02:55:06.698Z",
   "summary": {
     "total": 6,
-    "available": 2,
-    "unavailable": 4
+    "available": 6,
+    "unavailable": 0
   },
   "results": [
     {
@@ -25,32 +25,32 @@
     },
     {
       "id": "wabt",
-      "available": false,
-      "command": null,
+      "available": true,
+      "command": "/usr/bin/wat2wasm",
       "packageName": null,
       "probeOnly": true,
       "policy": "availability-only; no capture, bypass, or binary execution"
     },
     {
       "id": "mitmproxy",
-      "available": false,
-      "command": null,
+      "available": true,
+      "command": "/usr/bin/mitmproxy",
       "packageName": null,
       "probeOnly": true,
       "policy": "availability-only; no capture, bypass, or binary execution"
     },
     {
       "id": "wireshark",
-      "available": false,
-      "command": null,
+      "available": true,
+      "command": "/usr/bin/wireshark",
       "packageName": null,
       "probeOnly": true,
       "policy": "availability-only; no capture, bypass, or binary execution"
     },
     {
       "id": "ghidra",
-      "available": false,
-      "command": null,
+      "available": true,
+      "command": "/home/ubuntu/.local/bin/ghidra",
       "packageName": null,
       "probeOnly": true,
       "policy": "availability-only; no capture, bypass, or binary execution"
