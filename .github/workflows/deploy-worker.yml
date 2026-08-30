@@ -21,4 +21,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+          command: deploy --var GC_SOURCE_COMMIT:${{ github.sha }} --var GC_BUILD_ID:production-${{ github.sha }}

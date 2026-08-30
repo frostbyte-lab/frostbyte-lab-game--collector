@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
 
 permissions:
   contents: read
@@ -44,6 +46,9 @@ jobs:
           node --test tests/native-game-package.test.mjs
       - name: Validate inline JavaScript
         run: node scripts/check-inline-js.cjs
+      - name: Production security smoke test
+        if: github.event_name != 'pull_request'
+        run: node scripts/security-smoke.cjs
       - name: Validate syntax and whitespace
         run: |
           node --check src/index.js

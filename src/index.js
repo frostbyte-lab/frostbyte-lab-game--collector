@@ -35,6 +35,7 @@ import { sha256 } from "./offline/strict-collector.js";
 import { buildConformanceReport } from "./offline/conformance-lab.js";
 import { getMasterToolsetReport } from "./tools/master-toolset.js";
 import { buildPowerFullAudit } from "./audit/power-full.js";
+import { addCapabilityScopes, checkRateLimit, preflightResponse, withSecurityHeaders } from "./security/response-hardening.js";
 import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
 import { savePackageToGitHub, listGitHubPackages, downloadGitHubPackage } from "./collect/github-packages.js";
@@ -59,7 +60,7 @@ import {
   deleteSession
 } from "./history/kv.js";
 import { parseLogText } from "./history/log-parser.js";
-const GC_BUILD_ID = "4a02a2b-replication";
+const GC_BUILD_ID = "production-hardening";
 
 import {
   hasProgressStore,
@@ -238,13 +239,12 @@ function detectCollectFailure(html, manifest, gameCount, mainDocStatus = 0) {
   };
 }
 
-export default {
-  async fetch(request, env) {
+async function handleRequest(request, env) {
     const url = new URL(request.url);
 
     // Build probe — sengaja no-store agar tidak tertutup cache edge.
     if (request.method === "GET" && url.pathname === "/api/build") {
-      return Response.json({ ok: true, service: "game-collector-pro", build: GC_BUILD_ID }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+      return Response.json({ ok: true, service: "game-collector-pro", build: env.GC_BUILD_ID || GC_BUILD_ID, sourceCommit: env.GC_SOURCE_COMMIT || null }, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
 
     // Health
@@ -253,7 +253,8 @@ export default {
         ok: true,
         service: "game-collector-pro",
         version: "4.5-replication",
-        build: GC_BUILD_ID,
+        build: env.GC_BUILD_ID || GC_BUILD_ID,
+        sourceCommit: env.GC_SOURCE_COMMIT || null,
         github: Boolean(env.GITHUB_TOKEN),
         assetProxy: true,
         limits: {
@@ -273,7 +274,7 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/api/tools/master") {
-      return Response.json({ ok: true, report: getMasterToolsetReport() }, {
+      return Response.json({ ok: true, report: addCapabilityScopes(getMasterToolsetReport()) }, {
         headers: { "Cache-Control": "no-store, max-age=0" }
       });
     }
@@ -2549,6 +2550,15 @@ ${formatCollectAuditSummary(collectAudit)}
       }
       return Response.json({ error: msg }, { status: 500 });
     }
+  }
+
+export default {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") return preflightResponse(request, env);
+    const limited = checkRateLimit(request, env);
+    if (limited) return limited;
+    const response = await handleRequest(request, env);
+    return withSecurityHeaders(response, request, env);
   }
 };
 
