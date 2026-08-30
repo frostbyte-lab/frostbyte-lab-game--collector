@@ -59,3 +59,12 @@ Sebelum menguji provider, pastikan URL dan game memang berizin, challenge manual
 | Offline validation harness | `src/offline/offline-validation.js` |
 | Required CI checks | `.github/workflows/quality-gates.yml` |
 | Deployment workflow | `.github/workflows/deploy-worker.yml` |
+
+
+## Power Full Audit v2
+
+Engine `src/audit/power-full.js` menggabungkan evidence manifest, asset gaps, API contract, network timeline, browser network-off, security evidence, dan gameplay result menjadi satu laporan deterministik. Endpoint production-nya adalah `POST /api/audit/power-full`; payload dibatasi agar evidence tidak membebani Worker dan harus sudah direda​ksi sebelum dikirim.
+
+Audit v2 memeriksa lima gerbang: package, API, security, browser network-off, dan gameplay. Audit hanya menghasilkan `FULL_OFFLINE_READY` bila semua blocker kosong, lima kontrak API minimum (`session`, `init`, `balance`, `spin`, `result`) tersedia, browser benar-benar network-isolated, gameplay berhasil, dan tidak ada network violation. Sinyal DRM/license/anti-bot/signature/restriction tanpa otorisasi menghasilkan `AUTHORIZED_RESEARCH_REQUIRED`. Selain status, laporan menghasilkan score, counts, blockers, warnings, next actions, serta policy flags.
+
+Activity → FULL_OFFLINE_READY sekarang memiliki tombol **Power Full Audit**. Tombol membaca `api-map.json`, `security-evidence.json`, dan network evidence dari ZIP yang dipilih, mengirim ringkasan evidence ke engine, lalu menampilkan status dan JSON report. Tombol tersebut tidak memalsukan browser test; bukti network-off tetap harus berasal dari test yang benar-benar dijalankan.

@@ -87,3 +87,9 @@ Deployment Worker dari commit merge berhasil. URL canonical: https://game-resour
 
 14. DOKUMENTASI FINAL
 Blueprint lengkap tersedia di `PROVIDER_TEST_LAB_BLUEPRINT.md`. Dokumen tersebut menjelaskan pipeline collect → validate → rewrite → API capture → replay/emulator → security evidence → browser network-off → report, definisi quality gate, batas Authorized Research, 50 master tools, deployment, dan checklist operasional.
+
+
+15. POWER FULL AUDIT V2
+Engine `src/audit/power-full.js` dan endpoint `POST /api/audit/power-full` sekarang menggabungkan manifest ZIP, missing assets, API contract, network evidence, browser network-off, gameplay, dan security evidence. Quality gate memiliki lima gerbang: package, API, security, browser network-off, dan gameplay. Status `FULL_OFFLINE_READY` hanya diberikan jika seluruh blocker kosong, lima kontrak minimum session/init/balance/spin/result tersedia, browser network-off terbukti, gameplay lulus, dan tidak ada network violation.
+
+Activity → FULL_OFFLINE_READY sekarang memiliki tombol `Power Full Audit`. Tombol membaca api-map.json, security-evidence.json, serta network evidence dari ZIP terpilih. Evidence dikirim dalam bentuk ringkasan yang dibatasi; credential tetap tidak boleh dimasukkan. Sinyal DRM/license/anti-bot/signature/restriction tanpa otorisasi menghasilkan `AUTHORIZED_RESEARCH_REQUIRED`. Smoke test production endpoint berhasil menghasilkan `FULL_OFFLINE_READY` untuk evidence lengkap sintetis.
