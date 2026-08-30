@@ -31,6 +31,7 @@ import {
   classifyApiResource
 } from "./zip-aware-detect.js";
 import { buildApiMap } from "../src/package/api-map.js";
+import { detectSecurityEvidence } from "../src/analyze/security-evidence.js";
 
 const TARGET_URL = process.env.TARGET_URL;
 const WAIT_SECONDS = Math.max(5, parseInt(process.env.WAIT_SECONDS || "22", 10));
@@ -554,6 +555,16 @@ async function main() {
   const blockedPage = isBlockedHtml(html) || mainDocStatus >= 400;
   const htmlLower = String(html || '').toLowerCase();
   const blockerReport = [];
+  const securityEvidence = detectSecurityEvidence({
+    texts: [html],
+    urls: resources.map((resource) => resource.url),
+    requests: failedRequests
+  });
+  for (const finding of securityEvidence.findings) {
+    if (finding.severity === 'critical' || finding.severity === 'high') {
+      blockerReport.push({ kind: finding.kind, severity: finding.severity, message: finding.message, evidence: finding.evidence });
+    }
+  }
   const addBlocker = (kind, severity, message, evidence = []) => {
     if (blockerReport.some((item) => item.kind === kind)) return;
     blockerReport.push({ kind, severity, message, evidence: evidence.slice(0, 20) });
@@ -620,11 +631,12 @@ async function main() {
   };
   apiMap.blockers = blockerReport;
   zipFiles["api-map.json"] = strToU8(JSON.stringify(apiMap, null, 2));
+  zipFiles["security-evidence.json"] = strToU8(JSON.stringify(securityEvidence, null, 2));
   zipFiles["realtime.json"] = strToU8(JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), sessions: realtimeSummary }, null, 2));
   zipFiles["replication-report.json"] = strToU8(JSON.stringify({
     version: 1, generatedAt: new Date().toISOString(), target: safeTargetUrl,
     status: blockerReport.some((item) => item.severity === 'critical') ? 'MANUAL_ACTION_REQUIRED' : blockerReport.length ? 'PARTIAL' : 'CAPTURED',
-    blockers: blockerReport, failedRequests, proactiveStaticAssets, realtime: { sessions: realtimeSummary.length, framesReceived: realtimeSummary.reduce((n, s) => n + s.received, 0), framesSent: realtimeSummary.reduce((n, s) => n + s.sent, 0) }
+    blockers: blockerReport, failedRequests, proactiveStaticAssets, securityEvidence, realtime: { sessions: realtimeSummary.length, framesReceived: realtimeSummary.reduce((n, s) => n + s.received, 0), framesSent: realtimeSummary.reduce((n, s) => n + s.sent, 0) }
   }, null, 2));
 
   const manifest = {
@@ -654,7 +666,8 @@ async function main() {
     realtime: realtimeSummary,
     blockers: blockerReport,
     failedRequests,
-    proactiveStaticAssets: proactiveAssets
+    proactiveStaticAssets: proactiveAssets,
+    securityEvidence
   };
   zipFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
   zipFiles["authorized-research.json"] = strToU8(JSON.stringify({ version: 1, enabled: AUTHORIZED_RESEARCH, licenseRef: LICENSE_REF, challengeManualComplete: CHALLENGE_MANUAL_COMPLETE, mockOffline: MOCK_OFFLINE, targetHost: new URL(TARGET_URL).host, note: "Self-attestation metadata; verify license independently before distribution." }, null, 2));
@@ -668,6 +681,7 @@ Critical API: ${criticalApis.length}
 API contracts: ${apiContracts.length} · replay exchanges: ${replaySequence.length}
 Smart rewrite: ${smart.rewritten} · frame-buster: ${smart.neutralized}
 Proactive static assets: ${proactiveAssets.fetched} fetched · ${proactiveAssets.reused} reused · ${proactiveAssets.failed} failed
+Security findings: ${securityEvidence.summary.total} · critical ${securityEvidence.summary.critical} · high ${securityEvidence.summary.high}
 Auto spins: ${AUTO_SPINS} · history: ${AUTO_HISTORY}
 Realtime sessions: ${realtimeSummary.length} · received frames: ${realtimeSummary.reduce((n, s) => n + s.received, 0)}
 Blockers: ${blockerReport.length ? blockerReport.map((item) => item.kind).join(', ') : 'none'}
