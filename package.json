@@ -24,7 +24,8 @@
     "test:security-evidence": "node tests/security-evidence.test.mjs",
     "validate:offline-package": "node scripts/validate-offline-package.js",
     "validate:native-package": "node scripts/validate-native-package.js",
-    "check:master-toolset": "node scripts/check-master-toolset.cjs"
+    "check:master-toolset": "node scripts/check-master-toolset.cjs",
+    "security:smoke": "node scripts/security-smoke.cjs"
   },
   "dependencies": {
     "@cloudflare/playwright": "^1.3.0",
