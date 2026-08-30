@@ -3702,7 +3702,7 @@
           <h2>Game Collector Pro</h2>
           <p>Preview, capture, audit, dan siapkan paket offline dari satu alur.</p>
           <div class="gc-primary-flow" aria-label="Kontrol capture utama">
-            <button type="button" class="btn btn-primary gc-primary-preview" id="gc-primary-preview" onclick="gcUnifiedPreview()">▶ PREVIEW &amp; CAPTURE</button>
+            <button type="button" class="btn btn-primary gc-primary-preview" id="gc-primary-preview" onclick="gcUnifiedPreview()">▶ MULAI CAPTURE</button>
             <button type="button" class="btn btn-secondary gc-primary-stop" id="gc-primary-stop" onclick="gcUnifiedStop()" hidden>■ STOP &amp; FINALIZE</button>
             <span class="gc-primary-progress" id="gc-primary-progress">0% · Belum ada sesi capture</span>
           </div>
@@ -3720,12 +3720,12 @@
             <div class="gc-cockpit-preview">
               <iframe id="gc-cockpit-frame" class="gc-cockpit-frame" title="Preview game" allow="autoplay; fullscreen; gamepad; pointer-lock; clipboard-read; clipboard-write; accelerometer; gyroscope; orientation-lock" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
               <div class="gc-cockpit-placeholder" id="gc-cockpit-placeholder">
-                <div><strong>Preview akan tampil di sini</strong><span>Masukkan URL di bawah, lalu tekan Preview &amp; Capture untuk memulai sesi.</span></div>
+                <div><strong>Preview akan tampil di sini</strong><span>Masukkan URL di bawah, lalu tekan Mulai Capture untuk memulai sesi.</span></div>
               </div>
             </div>
             <div class="gc-cockpit-footer gc-capture-footer">
               <div class="gc-capture-status-group">
-                <span class="gc-cockpit-status" id="gc-cockpit-preview-status">Masukkan URL, lalu tekan Preview &amp; Capture.</span>
+                <span class="gc-cockpit-status" id="gc-cockpit-preview-status">Masukkan URL, lalu tekan Mulai Capture.</span>
                 <div class="gc-capture-progress-track" role="progressbar" aria-label="Progress capture" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                   <span class="gc-capture-progress-bar" id="gc-capture-progress-bar"></span>
                 </div>
@@ -3733,7 +3733,7 @@
               </div>
               <div class="gc-capture-actions" aria-label="Aksi hasil capture">
                 <button type="button" class="btn btn-secondary btn-sm" id="gc-capture-download" onclick="gcDownloadLastCapture()" hidden disabled>Download ZIP</button>
-                <button type="button" class="btn btn-primary btn-sm" id="gc-capture-workspace" onclick="gcCockpitOpenWorkspace()" disabled>Buka Workspace</button>
+                <button type="button" class="btn btn-primary btn-sm" id="gc-capture-workspace" onclick="gcCockpitOpenWorkspace()" hidden disabled>Buka Workspace</button>
               </div>
             </div>
           </section>
@@ -3755,8 +3755,8 @@
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
             <div><strong id="gc-public-tools-title">Metadata publik &amp; demo resmi</strong><div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Tambahan aman untuk halaman katalog; runtime/DRM pihak ketiga tidak dikoleksi.</div></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="gcPublicMetadata()">Collect metadata</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="gcOfficialEmbed()">Buka integrasi resmi</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="gcPublicMetadata()">Ambil Metadata Publik</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="gcOfficialEmbed()">Buka Demo/Integrasi Resmi</button>
             </div>
           </div>
           <pre id="gc-public-result" aria-live="polite" style="display:none;white-space:pre-wrap;margin:10px 0 0;padding:10px;border-radius:8px;background:rgba(15,23,42,.7);color:var(--text-secondary);font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:220px;overflow:auto;"></pre>
@@ -3773,11 +3773,11 @@
               <label style="font-size:11px;color:var(--text-muted);">License / izin resmi (URL atau ID referensi)
                 <input id="gc-license-ref" type="text" placeholder="https://... atau LICENSE-REF-001" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
               </label>
-              <button type="button" class="btn btn-secondary btn-sm" id="gc-challenge-manual" onclick="gcMarkManualChallenge()" title="Tandai challenge sudah diselesaikan secara manual di browser">Challenge manual belum selesai</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="gc-challenge-manual" onclick="gcMarkManualChallenge()" title="Catat bahwa Anda telah memverifikasi akses secara sah; sistem tidak melewati CAPTCHA atau DRM">Tandai verifikasi akses</button>
             </div>
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;">
-              <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);"><input type="checkbox" id="gc-mock-offline" checked> Siapkan mock offline dan replay API</label>
-              <span id="gc-research-status" style="font-size:11px;color:var(--text-muted);">Izin belum dicatat · challenge manual belum selesai</span>
+              <details style="width:100%;margin-top:8px;"><summary style="cursor:pointer;font-size:11px;color:var(--text-secondary);">Opsi lanjutan</summary><label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);margin-top:7px;"><input type="checkbox" id="gc-mock-offline"> Siapkan mock offline dan replay API</label></details>
+              <span id="gc-research-status" style="font-size:11px;color:var(--text-muted);">Izin belum dicatat · verifikasi akses belum dicatat</span>
             </div>
           </div>
 
@@ -5258,7 +5258,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         download.hidden = !hasPackage;
         download.disabled = !hasPackage;
       }
-      if (workspace) workspace.disabled = !workspaceReady;
+      if (workspace) { workspace.disabled = !workspaceReady; workspace.hidden = !workspaceReady; }
     }
 
     function gcRememberLastCapture(blob, filename, downloadUrl) {
@@ -5338,7 +5338,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       var start = document.getElementById('gc-primary-preview');
       var stop = document.getElementById('gc-primary-stop');
       var progress = document.getElementById('gc-primary-progress');
-      if (start) { start.disabled = !!running; start.textContent = running ? '● CAPTURE BERJALAN' : '▶ PREVIEW & CAPTURE'; }
+      if (start) { start.disabled = !!running; start.textContent = running ? '● CAPTURE BERJALAN' : '▶ MULAI CAPTURE'; }
       if (stop) stop.hidden = !running;
       if (progress && label) progress.textContent = label;
       if (running) gcSetCaptureResultActions(false, false);
@@ -5351,7 +5351,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (!started) return;
       __gcUnifiedCaptureRunning = true;
       gcSetUnifiedCaptureUi(true, '0% · Preview aktif · progress capture tampil di bawah preview');
-      try { appendLog('Sesi Preview & Capture dimulai. Mainkan game; resource yang tertangkap akan ditampilkan.', 'info'); } catch (_) {}
+      try { appendLog('Sesi capture dimulai. Mainkan game; resource yang tertangkap akan ditampilkan.', 'info'); } catch (_) {}
       __gcUnifiedCapturePromise = Promise.resolve().then(function () { return runCollect(); }).finally(function () {
         __gcUnifiedCaptureRunning = false;
         __gcUnifiedCapturePromise = null;
@@ -13691,10 +13691,10 @@ function isApiLike(u){
     function gcMarkManualChallenge() {
       window.__gcManualChallengeComplete = true;
       var btn = document.getElementById('gc-challenge-manual');
-      if (btn) { btn.textContent = 'Challenge manual selesai ✓'; btn.classList.add('is-done'); }
+      if (btn) { btn.textContent = 'Verifikasi akses dicatat ✓'; btn.classList.add('is-done'); }
       var status = document.getElementById('gc-research-status');
-      if (status) status.textContent = (document.getElementById('gc-license-ref')?.value || '').trim() ? 'Izin tercatat · challenge manual selesai' : 'Izin belum dicatat · challenge manual selesai';
-      try { if (typeof actRecord === 'function') actRecord('research', 'Challenge manual ditandai selesai', 'User mengonfirmasi challenge di browser.'); } catch (_) {}
+      if (status) status.textContent = (document.getElementById('gc-license-ref')?.value || '').trim() ? 'Izin tercatat · verifikasi akses dicatat' : 'Izin belum dicatat · verifikasi akses dicatat';
+      try { if (typeof actRecord === 'function') actRecord('research', 'Verifikasi akses dicatat', 'User mengonfirmasi akses yang sah di browser.'); } catch (_) {}
     }
     function gcCollectOptions() {
       const wait = String(Math.min(180, Math.max(3, Number(document.getElementById('collect-wait')?.value) || 22)));
