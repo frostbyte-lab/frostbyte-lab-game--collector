@@ -1,0 +1,87 @@
+name: quality-gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: quality-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-inline-js:
+    name: Unit and inline-JS tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run repository tests
+        run: |
+          npm run test:security-evidence
+          node tests/master-toolset.test.mjs
+          npm run test:collect-signed-assets
+          npm run test:collect-artifact
+          npm run test:package-readiness
+          npm run test:conformance-lab
+          npm run test:offline-gameplay
+          npm run validate:native-package
+          node --test tests/native-game-package.test.mjs
+      - name: Validate inline JavaScript
+        run: node scripts/check-inline-js.cjs
+      - name: Validate syntax and whitespace
+        run: |
+          node --check src/index.js
+          node --check src/tools/master-toolset.js
+          node --check scripts/collect.js
+          git diff --check
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Scan tracked source for credential patterns
+        shell: bash
+        run: |
+          set -o pipefail
+          if git grep -nI -E -- \
+            '-----BEGIN [A-Z ]*PRIVATE KEY-----|sk-[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|(authorization|api[-_]?key|password|secret|token)[[:space:]]*[:=][[:space:]]*["'"'][^"'"']{12,}["'"']' \
+            -- ':!docs/**' ':!*.md' ':!*.txt' ':!tests/**'; then
+            echo "Potential credential pattern found in tracked source."
+            exit 1
+          fi
+          echo "No credential pattern found in tracked source."
+
+  codeql-analysis:
+    name: CodeQL analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"
