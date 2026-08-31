@@ -10,6 +10,8 @@ test('preview and live log use a responsive side-by-side workspace', () => {
   assert.match(html, /overflow:hidden!important/);
   assert.match(html, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\); gap: 8px; overflow-x: hidden/);
   assert.match(html, /Selalu dua kolom/);
+  assert.match(html, /\.gc-cockpit-preview \{ min-height: 300px; \}/);
+  assert.match(html, /\.gc-capture-actions \.btn\[hidden\] \{ display: none !important; \}/);
 });
 
 test('preview controls explain capture and offline audit behavior', () => {
