@@ -12395,8 +12395,33 @@ function isApiLike(u){
         } catch (_) {}
         step(2, 'SAFE ' + (s.safe|0) + ' · ERROR/track ' + (s.tracking|0) + ' · API ' + (s.api|0) + ' · REPLACE ' + (s.replaceCandidates|0), true);
 
-        // —— 3. Network runtime map (dari preview log jika ada) ——
-        setLoading(true, 'Pipeline Offline', '3/6 Network runtime…');
+        // —— 3. Analisis Xentinel melalui OpenRouter ——
+        setLoading(true, 'Pipeline Offline', '3/7 Analisis Xentinel…');
+        var xentinelReport = null;
+        try {
+          var aiFiles = (report.files || []).slice(0, 180).map(function (f) {
+            return { path: f.path || f.file || '', category: f.category || f.status || '', action: f.action || '', issues: f.issues || [] };
+          });
+          var aiPayload = {
+            source: 'Game Collector offline capture',
+            instruction: 'Analisis paket hasil capture untuk kesiapan offline. Identifikasi resource eksternal, tracking, dependency yang hilang, dan perbaikan aman. Jangan menyarankan bypass DRM, CAPTCHA, login, atau lisensi.',
+            summary: s,
+            files: aiFiles
+          };
+          var aiRes = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'analyze', data: aiPayload, context: 'Pipeline Offline Game Collector; hasil wajib aman dan dapat dipakai untuk audit lokal.' }) });
+          var aiBody = await aiRes.json().catch(function () { return {}; });
+          if (!aiRes.ok || !aiBody.ok) throw new Error(aiBody.message || aiBody.error || 'OpenRouter tidak tersedia');
+          xentinelReport = { generatedAt: new Date().toISOString(), provider: 'openrouter', model: 'openrouter/free', result: aiBody.result || null };
+          currentZip.file('pipeline/xentinel-report.json', JSON.stringify(xentinelReport, null, 2));
+          step(3, 'Xentinel menganalisis ' + aiFiles.length + ' entri dan laporan ditulis ke pipeline/xentinel-report.json', true);
+        } catch (xe) {
+          xentinelReport = { generatedAt: new Date().toISOString(), provider: 'openrouter', ok: false, error: String(xe && xe.message || xe) };
+          currentZip.file('pipeline/xentinel-report.json', JSON.stringify(xentinelReport, null, 2));
+          step(3, 'Xentinel gagal: ' + String(xe && xe.message || xe).slice(0, 160), false);
+        }
+
+        // —— 4. Network runtime map (dari preview log jika ada) ——
+        setLoading(true, 'Pipeline Offline', '4/7 Network runtime…');
         var net = [];
         try {
           (window.__pvLastErrors || []).forEach(function (e) {
@@ -12412,10 +12437,10 @@ function isApiLike(u){
           entries: net.slice(0, 200)
         };
         currentZip.file('pipeline/network-map.json', JSON.stringify(networkMap, null, 2));
-        step(3, net.length ? ('Network log ' + net.length + ' entri') : 'Belum ada log runtime — jalankan Preview lalu pipeline lagi untuk isi penuh', true);
+        step(4, net.length ? ('Network log ' + net.length + ' entri') : 'Belum ada log runtime — jalankan Preview lalu pipeline lagi untuk isi penuh', true);
 
-        // —— 4. Dependency map internal ——
-        setLoading(true, 'Pipeline Offline', '4/6 Peta dependency file…');
+        // —— 5. Dependency map internal ——
+        setLoading(true, 'Pipeline Offline', '5/7 Peta dependency file…');
         var pathToText = {};
         var names = Object.keys(zipFileMap || {});
         for (var i = 0; i < names.length; i++) {
@@ -12430,10 +12455,10 @@ function isApiLike(u){
           ? GCOfflineAnalyze.buildInternalDepMap(pathToText)
           : { edges: [], nodeCount: 0, edgeCount: 0 };
         currentZip.file('pipeline/dependency-map.json', JSON.stringify(depMap, null, 2));
-        step(4, 'Dependency ' + (depMap.edgeCount || 0) + ' edge · ' + (depMap.nodeCount || 0) + ' node', true);
+        step(5, 'Dependency ' + (depMap.edgeCount || 0) + ' edge · ' + (depMap.nodeCount || 0) + ' node', true);
 
-        // —— 5. Change-plan + sandbox mock ——
-        setLoading(true, 'Pipeline Offline', '5/6 Change-plan & sandbox…');
+        // —— 6. Change-plan + sandbox mock ——
+        setLoading(true, 'Pipeline Offline', '6/7 Change-plan & sandbox…');
         var plan = report.changePlan || {};
         try {
           if (GCOfflineAnalyze.buildChangePlan) {
@@ -12451,7 +12476,7 @@ function isApiLike(u){
             conv = await GCOfflineAnalyze.applyConversion(currentZip, report);
           }
         } catch (ce) {
-          step(5, 'Konversi parsial: ' + (ce.message || ce), false);
+          step(6, 'Konversi parsial: ' + (ce.message || ce), false);
         }
         if (conv && conv.zip) {
           // applyConversion may mutate currentZip in place
@@ -12463,7 +12488,7 @@ function isApiLike(u){
             /* optional */
           }
         } catch (_) {}
-        step(5, 'change-plan + sandbox mock ditulis ke pipeline/ & sandbox/', true);
+        step(6, 'change-plan + sandbox mock ditulis ke pipeline/ & sandbox/', true);
 
         // Refresh explorer
         try {
@@ -12482,8 +12507,8 @@ function isApiLike(u){
           }
         } catch (_) {}
 
-        // —— 6. Preview offline ——
-        setLoading(true, 'Pipeline Offline', '6/6 Preview Sandbox…');
+        // —— 7. Preview offline ——
+        setLoading(true, 'Pipeline Offline', '7/7 Preview Sandbox…');
         try {
           var ws = document.querySelector('.nav-btn[data-panel="workspace"]');
           if (ws) ws.click();
@@ -12491,7 +12516,7 @@ function isApiLike(u){
         if (typeof startPreview === 'function') {
           setTimeout(function () { startPreview('sandbox'); }, 250);
         }
-        step(6, 'Preview Sandbox dijalankan — host ulang: Download ZIP / Hosting', true);
+        step(7, 'Preview Sandbox dijalankan — host ulang: Download ZIP / Hosting', true);
 
         setLoading(false);
         var summary =
@@ -12499,6 +12524,7 @@ function isApiLike(u){
           steps.join('\n') +
           '\n\nFile ditulis:\n' +
           '· pipeline/analysis-report.json\n' +
+          '· pipeline/xentinel-report.json\n' +
           '· pipeline/change-plan.json\n' +
           '· pipeline/dependency-map.json\n' +
           '· pipeline/network-map.json\n' +
