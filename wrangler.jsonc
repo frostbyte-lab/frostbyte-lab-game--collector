@@ -7,9 +7,6 @@
   "browser": {
     "binding": "MYBROWSER"
   },
-  "ai": {
-    "binding": "AI"
-  },
   "assets": {
     "directory": "./public"
   },
@@ -21,6 +18,8 @@
     "GH_REPO": "frostbyte-lab-game--collector",
     "GH_WORKFLOW": "collect.yml",
     "PUBLIC_APP_NAME": "Game Collector Pro",
+    "OPENROUTER_MODEL": "openrouter/free",
+    "OPENROUTER_SITE_URL": "https://game-resource-collector.workers.dev",
     "EDU_GH_OWNER": "frostbyte-lab",
     "EDU_GH_REPO": "Edu-network",
     "EDU_GH_BRANCH": "main",

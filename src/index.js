@@ -1,4 +1,5 @@
 import { analyzeGame, repairMetadata, recommendGames, chatAboutGames } from "./ai.js";
+import { openRouterChat, openRouterHealth } from "./openrouter.js";
 /**
  * Game Collector Pro — Worker entry (modular Poin 5)
  */
@@ -131,7 +132,7 @@ function ghConfig(env = {}) {
     workflow: env.GH_WORKFLOW || "collect.yml"
   };
 }
-const AI_MODELS = { llama: "@cf/meta/llama-3.1-8b-instruct", "qwen3-coder": "@cf/qwen/qwen3-30b-a3b-fp8" };
+const AI_MODELS = { llama: "openrouter/free", "qwen3-coder": "openrouter/free" };
 
 function cleanAiJson(text) {
   const raw = String(text || "").trim();
@@ -150,11 +151,11 @@ function cleanAiJson(text) {
 }
 
 async function analyzeWithAI(env, body) {
-  if (!env.AI || typeof env.AI.run !== "function") {
+  if (!env.OPENROUTER_API_KEY) {
     return Response.json({
       ok: false,
       error: "AI_NOT_CONFIGURED",
-      message: "Cloudflare Workers AI belum terhubung pada deployment ini."
+      message: "OPENROUTER_API_KEY belum terhubung pada deployment ini."
     }, { status: 503 });
   }
 
@@ -197,14 +198,13 @@ async function analyzeWithAI(env, body) {
   ].filter(Boolean).join("\n\n");
 
   try {
-    const result = await env.AI.run(model, {
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ]
-    });
-    const parsed = cleanAiJson(result?.response || result?.result?.response || "");
-    return Response.json({ ok: true, model, modelKey, modelLabel: modelKey === "qwen3-coder" ? "Qwen3-Coder" : "Llama 3.1", ...parsed });
+    const result = await openRouterChat(env, [
+      { role: "system", content: system },
+      { role: "user", content: user }
+    ], { model, maxTokens: action === "repair" ? 2000 : 1400, temperature: 0.2 });
+    if (!result.ok) return Response.json({ ok: false, error: "AI_REQUEST_FAILED", message: result.error }, { status: result.status || 502 });
+    const parsed = cleanAiJson(result.text);
+    return Response.json({ ok: true, model: result.model, modelKey, modelLabel: "OpenRouter", ...parsed });
   } catch (error) {
     return Response.json({
       ok: false,
@@ -294,6 +294,8 @@ async function handleRequest(request, env) {
         version: "4.5-replication",
         build: env.GC_BUILD_ID || GC_BUILD_ID,
         sourceCommit: env.GC_SOURCE_COMMIT || null,
+        provider: "openrouter",
+        openRouter: openRouterHealth(env),
         github: Boolean(env.GITHUB_TOKEN),
         assetProxy: true,
         limits: {
