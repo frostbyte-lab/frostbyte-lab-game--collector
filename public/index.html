@@ -15595,6 +15595,36 @@ function isApiLike(u){
   };
 })();
 </script>
+<style id="gc-preview-capture-layout-v2">
+#preview-mode .preview-workspace.pv-main-split{display:grid!important;grid-template-columns:minmax(0,1.55fr) minmax(280px,.75fr)!important;gap:10px!important;min-width:0!important;overflow:hidden!important}
+#preview-mode .pv-pane-left,#preview-mode .pv-pane-right{min-width:0!important;width:auto!important;overflow:hidden!important}
+#preview-mode .pv-pane-left{display:flex!important;flex-direction:column!important}
+#preview-mode .preview-stage{flex:1 1 auto!important;min-height:360px!important;overflow:hidden!important}
+#preview-mode .preview-frame-wrap,#preview-mode .preview-frame{width:100%!important;max-width:100%!important}
+#preview-mode .pv-pane-right{display:flex!important;flex-direction:column!important;min-height:360px!important}
+#preview-mode .preview-log{flex:1 1 auto!important;min-height:0!important;max-height:none!important;overflow:auto!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important}
+#preview-mode .pv-toolbar{display:flex!important;flex-wrap:wrap!important;gap:6px!important}
+#preview-mode .pv-toolbar .pv-tbtn{white-space:nowrap!important}
+@media(max-width:760px){#preview-mode .preview-workspace.pv-main-split{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:6px!important}#preview-mode .preview-stage{min-height:280px!important}#preview-mode .pv-pane-right{min-height:280px!important}#preview-mode .pv-toolbar .pv-tbtn{font-size:11px!important;padding:6px 7px!important}}
+@media(max-width:500px){#preview-mode .preview-workspace.pv-main-split{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}#preview-mode .pane-tag{font-size:10px!important}#preview-mode .preview-stage{min-height:220px!important}#preview-mode .pv-pane-right{min-height:220px!important}}
+</style>
+<script id="gc-preview-capture-audit-v2">
+(function(){
+  function setLabel(id,text,title){var el=document.getElementById(id);if(el){el.textContent=text;if(title)el.title=title}}
+  function setup(){
+    setLabel('preview-mode-web','▶ Preview · Mulai Capture','Preview menjalankan sesi capture dan menampilkan game di panel kiri.');
+    setLabel('preview-mode-sandbox','◉ Capture · Audit Offline','Capture mode dengan pemeriksaan kesiapan offline A Core Raa.');
+    setLabel('preview-mode-hybrid','◇ Hybrid · Capture','Capture asset lokal dengan mode hybrid untuk game yang memiliki API.');
+    var scan=document.querySelector('#preview-mode .pv-tbtn.warn');if(scan){scan.textContent='◆ A Core Raa · Audit Offline';scan.title='Periksa evidence capture untuk kesiapan offline tanpa auto-fetch.'}
+    var back=document.querySelector('#preview-mode .pv-back-btn');if(back)back.textContent='← Kembali ke editor';
+    var web=document.getElementById('preview-mode-web');
+    if(web&&!web.dataset.captureBound){web.dataset.captureBound='1';web.addEventListener('click',function(){try{if(typeof gcSetCapturePreviewStatus==='function')gcSetCapturePreviewStatus('Preview aktif · sesi capture berjalan','running')}catch(_){ }try{if(typeof appendLog==='function')appendLog('Preview dipilih: mode capture berjalan. Mainkan game untuk merekam resource.','info')}catch(_){ }},true)}
+    var sandbox=document.getElementById('preview-mode-sandbox');
+    if(sandbox&&!sandbox.dataset.auditBound){sandbox.dataset.auditBound='1';sandbox.addEventListener('click',function(){try{if(typeof appendLog==='function')appendLog('Capture mode aktif: A Core Raa memeriksa kesiapan offline dari evidence yang tersedia.','info')}catch(_){ }},true)}
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
+})();
+</script>
 </body>
 </html>
 
