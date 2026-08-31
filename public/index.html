@@ -4372,12 +4372,12 @@
 
           <!-- AI Panel -->
           <div class="ai-panel hidden" id="ai-panel">
-            <div class="ai-label"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-bot"></use></svg> AI Assistant <span id="ai-panel-badge" style="font-weight:400;text-transform:none;color:var(--text-muted);">· Login AI (Groq/Gemini) atau Workers AI</span></div>
+            <div class="ai-label"><svg class="ui-icon ui-icon-sm" aria-hidden="true"><use href="#icon-bot"></use></svg> AI Assistant <span id="ai-panel-badge" style="font-weight:400;text-transform:none;color:var(--text-muted);">· OpenRouter API</span></div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
               <label for="ai-model" style="font-size:11px;color:var(--text-muted);white-space:nowrap;">Model AI</label>
-              <select id="ai-model" style="flex:1;padding:7px 9px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;" title="Hanya untuk Workers AI. Jika sudah Login AI, model dari sesi Groq/Gemini yang dipakai.">
-                <option value="llama">Workers · Llama 3.1</option>
-                <option value="qwen3-coder">Workers · Qwen3-Coder</option>
+              <select id="ai-model" style="flex:1;padding:7px 9px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;" title="Model OpenRouter yang dipakai untuk analisis kode.">
+                <option value="llama">OpenRouter · Free model</option>
+                <option value="qwen3-coder">OpenRouter · Free model (coding)</option>
               </select>
             </div>
             <p id="ai-session-hint" style="display:none;margin:0 0 8px;font-size:11px;color:var(--accent);"></p>
@@ -6569,11 +6569,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
 
     async function requestAI(action, question) {
-      // Semua tombol Analyze / Suggest Fix / Kirim: prioritas Login AI (Groq/Gemini), fallback Workers AI
-      if (hasCustomAIKeys() && typeof requestCustomAI === 'function') {
-        window.__useCustomAI = true;
-        return requestCustomAI(action, question);
-      }
+      // Semua tombol Analyze / Suggest Fix / Kirim memakai backend OpenRouter.
       window.__useCustomAI = false;
       const context = await resolveAIContext();
       const response = document.getElementById('ai-response');
@@ -6587,7 +6583,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         body: JSON.stringify({ ...context, action, question: question || '', model: document.getElementById('ai-model')?.value || 'llama' })
       });
       const result = await res.json().catch(() => ({}));
-      if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi. Login AI dulu (Groq/Gemini) jika Workers AI tidak tersedia.');
+      if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi. pastikan API key OpenRouter sudah dikonfigurasi.');
       aiSuggestedCode = result.repairedCode || null;
       const applyButton = document.getElementById('ai-apply-fix');
       if (applyButton) applyButton.hidden = !aiSuggestedCode;
@@ -7138,7 +7134,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         if (badge) {
           badge.textContent = loggedIn
             ? ('· sesi ' + label + (modelName ? ' · ' + modelName : ''))
-            : '· Login AI (Groq/Gemini/Meta/Manus) atau Workers AI';
+            : '· OpenRouter API';
           badge.style.color = loggedIn ? 'var(--accent)' : 'var(--text-muted)';
         }
         if (hint) {
@@ -7154,7 +7150,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           modelSel.disabled = !!loggedIn;
           modelSel.title = loggedIn
             ? 'Sesi Login AI aktif — model dari provider aktif dipakai'
-            : 'Hanya untuk Workers AI bila belum Login AI';
+            : 'OpenRouter API untuk analisis generatif';
         }
       } catch (_) {}
     }
@@ -14165,7 +14161,7 @@ function isApiLike(u){
         if (!value) { status.textContent = action === 'chat' ? 'Tulis pertanyaan Anda di kolom input terlebih dahulu.' : 'Masukkan data terlebih dahulu.'; if (input) input.focus(); return; }
         status.textContent = 'AI sedang memproses...'; output.textContent = '';
         try {
-          // Prioritas: Login AI (Groq/Gemini) → fallback Workers AI
+          // Prioritas: Login AI (Groq/Gemini) → menggunakan OpenRouter
           if (typeof hasCustomAIKeys === 'function' && hasCustomAIKeys() && typeof callCustomAIWithFailover === 'function') {
             const tasks = {
               analyze: 'Analisis data game/manifest berikut. Ringkas temuan, risiko, dan saran perbaikan. Bahasa Indonesia.',
@@ -14189,8 +14185,8 @@ function isApiLike(u){
           if (action !== 'chat') { try { data = JSON.parse(value); } catch {} }
           const res = await fetch('/api/ai', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action, data, question: action === 'chat' ? value : undefined, context: window.currentManifest || window.currentAnalysis || '' }) });
           const body = await res.json().catch(() => ({}));
-          if (!res.ok || !body.ok) throw new Error(body.error || 'AI tidak tersedia. Login AI (Groq/Gemini) atau aktifkan Workers AI.');
-          status.textContent = 'Selesai · Workers AI';
+          if (!res.ok || !body.ok) throw new Error(body.error || 'AI tidak tersedia. Login AI (Groq/Gemini) atau aktifkan OpenRouter.');
+          status.textContent = 'Selesai · OpenRouter';
           output.textContent = typeof body.result === 'string' ? body.result : JSON.stringify(body.result, null, 2);
         } catch (error) { status.textContent = 'Gagal: ' + error.message; }
       }
