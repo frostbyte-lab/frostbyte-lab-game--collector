@@ -40,7 +40,6 @@ import { addCapabilityScopes, checkRateLimit, preflightResponse, withSecurityHea
 import { STRICT_STATUS, markDownloadFailed } from "./classify/resource.js";
 import { ghFetch } from "./collect/github.js";
 import { savePackageToGitHub, listGitHubPackages, downloadGitHubPackage } from "./collect/github-packages.js";
-import { runManusTask } from "./lib/manus-api.js";
 import { buildAraaActivity, ARAA_IDENTITY } from "./araa-core.js";
 import {
   MAX_SINGLE_FILE,
@@ -347,7 +346,14 @@ async function handleRequest(request, env) {
       try { body = await request.json(); } catch {
         return Response.json({ ok: false, error: "INVALID_JSON" }, { status: 400 });
       }
-      return runManusTask(env, body || {});
+      const prompt = String(body?.prompt || body?.question || "").trim().slice(0, 30000);
+      if (!prompt) return Response.json({ ok: false, error: "PROMPT_REQUIRED", message: "Prompt AI wajib diisi." }, { status: 400 });
+      const result = await openRouterChat(env, [
+        { role: "system", content: "Anda adalah Xentinel, asisten AI Game Collector. Jawab dalam Bahasa Indonesia secara akurat dan ringkas." },
+        { role: "user", content: prompt }
+      ], { maxTokens: 2000, temperature: 0.2 });
+      if (!result.ok) return Response.json({ ok: false, error: "AI_REQUEST_FAILED", message: result.error }, { status: result.status || 502 });
+      return Response.json({ ok: true, provider: "openrouter", content: result.text, model: result.model });
     }
 
     if (request.method === "POST" && url.pathname === "/api/test/conformance") {

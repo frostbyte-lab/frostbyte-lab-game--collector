@@ -6468,16 +6468,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       return lines.join('\n') || 'AI tidak menemukan penjelasan tambahan.';
     }
 
-    /** Apakah user sudah isi API key Custom AI? */
-    function hasCustomAIKeys() {
-      try {
-        const slots = (typeof loadCustomAISlots === 'function' ? loadCustomAISlots() : [])
-          .filter(s => s && s.enabled && (s.provider === 'manus' || String(s.apiKey || '').trim()));
-        return slots.length > 0;
-      } catch (_) {
-        return false;
-      }
-    }
+    /** Backend AI tunggal: secret OpenRouter tetap berada di Worker. */
+    function hasCustomAIKeys() { return true; }
 
     /** Hapus highlight AI di Monaco */
     function clearAIDecorations() {
@@ -7259,11 +7251,11 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         return;
       }
       if (typeof callCustomAIWithFailover !== 'function') {
-        caiAppendChat('ai', 'Belum aktif AI. Pilih provider → isi key jika diperlukan; Manus memakai secret Worker.');
+        caiAppendChat('ai', 'OpenRouter belum tersedia. Pastikan secret Worker sudah dikonfigurasi.');
         return;
       }
       if (typeof hasCustomAIKeys === 'function' && !hasCustomAIKeys()) {
-        caiAppendChat('ai', 'Belum aktif AI. Pilih provider → email sebagai label; provider API memerlukan key, Manus memakai secret Worker.');
+        caiAppendChat('ai', 'OpenRouter belum tersedia. Pastikan secret Worker sudah dikonfigurasi.');
         return;
       }
 
@@ -7891,7 +7883,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (sendBtn) sendBtn.disabled = true;
       try {
         if (typeof callCustomAIWithFailover !== 'function') {
-          throw new Error('Belum login AI. Buka Login AI (Groq/Gemini) (Workspace).');
+          throw new Error('OpenRouter belum tersedia. Pastikan secret Worker sudah dikonfigurasi.');
         }
         var file = (typeof currentFile !== 'undefined' && currentFile) ? currentFile : null;
         var code = '';
@@ -8181,43 +8173,26 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     }
 
     async function callCustomAIWithFailover(messages, options = {}) {
-      const slots = loadCustomAISlots().filter(s => s.enabled && (s.provider === 'manus' || s.apiKey));
-      if (!slots.length) {
-        throw new Error('Belum login AI. Pilih provider pada Login AI; Manus membutuhkan secret Worker MANUS_API_KEY.');
-      }
-      const errors = [];
-      for (let i = 0; i < slots.length; i++) {
-        const slot = slots[i];
-        try {
-          if (typeof appendLog === 'function') {
-            appendLog('Custom AI: mencoba API No.' + (slot.name || (i + 1)) + '…', 'ok');
-          }
-          const result = slot.provider === 'manus'
-            ? await callManusBackend(slot, messages, options)
-            : await callOpenAICompatible(slot, messages, options);
-          if (typeof appendLog === 'function') {
-            appendLog('Custom AI: sukses via API No.' + (result.slotName || slot.name), 'ok');
-          }
-          return result;
-        } catch (e) {
-          errors.push('No.' + (slot.name || (i + 1)) + ': ' + e.message);
-          if (e.rateLimited || isRateLimitError(e.status, '', e.message)) {
-            if (typeof appendLog === 'function') {
-              appendLog('Custom AI: API No.' + (slot.name || (i + 1)) + ' kena limit → failover ke berikutnya', 'warn');
-            }
-            continue;
-          }
-          // non-limit error: still try next if more keys exist
-          if (i < slots.length - 1) {
-            if (typeof appendLog === 'function') {
-              appendLog('Custom AI: API No.' + (slot.name || (i + 1)) + ' gagal (' + e.message + ') → coba berikutnya', 'warn');
-            }
-            continue;
-          }
-          throw e;
-        }
-      }
-      throw new Error('Semua API Custom AI gagal/limit.\n' + errors.join('\n'));
+      const list = Array.isArray(messages) ? messages : [];
+      const question = list.map(function (m) {
+        var content = Array.isArray(m.content)
+          ? m.content.map(function (p) { return p && (p.text || p.image_url?.url || ''); }).join('\n')
+          : String(m.content || '');
+        return String(m.role || 'user').toUpperCase() + ': ' + content;
+      }).join('\n\n').slice(0, 30000);
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'chat',
+          question: question,
+          context: 'Permintaan berasal dari UI Game Collector. Semua jawaban wajib diproses oleh OpenRouter.'
+        })
+      });
+      const body = await response.json().catch(function () { return {}; });
+      if (!response.ok || !body.ok) throw new Error(body.message || body.error || 'OpenRouter tidak tersedia.');
+      if (typeof appendLog === 'function') appendLog('AI: sukses via OpenRouter', 'ok');
+      return { content: String(body.result || ''), model: 'openrouter/free', slotName: 'OpenRouter' };
     }
 
     function parseCustomAIJson(text) {
@@ -13864,9 +13839,9 @@ function isApiLike(u){
         var report = await gcInspectZipCompleteness(zip);
         offlineReadyLastAudit = { report: report, filename: filename || 'game-package.zip', browserTest: { status: 'NOT_RUN', networkIsolated: false, gameplayReady: false } };
         offlineReadyRender(report, offlineReadyLastAudit.filename, offlineReadyLastAudit.browserTest);
-        var canAI = typeof hasCustomAIKeys === 'function' && hasCustomAIKeys() && typeof callCustomAIWithFailover === 'function';
+        var canAI = typeof callCustomAIWithFailover === 'function';
         if (!canAI) {
-          gcRenderReadinessAssistant({ error: 'Belum ada provider AI aktif. Audit lokal tetap selesai; aktifkan Manus/Groq/Gemini/Meta untuk saran repair.' });
+          gcRenderReadinessAssistant({ error: 'OpenRouter belum tersedia. Audit lokal tetap selesai; periksa secret Worker.' });
           return { report: report, skipped: true, reason: 'no-provider' };
         }
         var content = await callCustomAIWithFailover([
@@ -14161,31 +14136,12 @@ function isApiLike(u){
         if (!value) { status.textContent = action === 'chat' ? 'Tulis pertanyaan Anda di kolom input terlebih dahulu.' : 'Masukkan data terlebih dahulu.'; if (input) input.focus(); return; }
         status.textContent = 'AI sedang memproses...'; output.textContent = '';
         try {
-          // Prioritas: Login AI (Groq/Gemini) → menggunakan OpenRouter
-          if (typeof hasCustomAIKeys === 'function' && hasCustomAIKeys() && typeof callCustomAIWithFailover === 'function') {
-            const tasks = {
-              analyze: 'Analisis data game/manifest berikut. Ringkas temuan, risiko, dan saran perbaikan. Bahasa Indonesia.',
-              repair: 'Perbaiki / rapikan metadata atau JSON berikut. Kembalikan hasil yang sudah diperbaiki (JSON valid jika input JSON). Bahasa Indonesia.',
-              recommend: 'Berikan rekomendasi game / perbaikan / langkah berikutnya berdasarkan data berikut. Bahasa Indonesia.',
-              chat: 'Jawab pertanyaan user tentang data game collector. Bahasa Indonesia, ringkas.'
-            };
-            const task = tasks[action] || tasks.chat;
-            const payload = action === 'chat' ? value : value;
-            const system = 'Anda asisten Game Collector Pro (AI Studio). ' + task;
-            const userMsg = (action === 'chat' ? ('PERTANYAAN:\n' + value) : ('DATA:\n' + String(payload).slice(0, 60000)));
-            const ai = await callCustomAIWithFailover([
-              { role: 'system', content: system },
-              { role: 'user', content: userMsg }
-            ], { max_tokens: 4000 });
-            status.textContent = 'Selesai' + (ai.slotName ? ' · via ' + ai.slotName : '') + (ai.model ? ' · ' + ai.model : '');
-            output.textContent = ai.content || '';
-            return;
-          }
+          // Semua fitur AI memakai OpenRouter melalui endpoint Worker.
           let data = value;
           if (action !== 'chat') { try { data = JSON.parse(value); } catch {} }
           const res = await fetch('/api/ai', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action, data, question: action === 'chat' ? value : undefined, context: window.currentManifest || window.currentAnalysis || '' }) });
           const body = await res.json().catch(() => ({}));
-          if (!res.ok || !body.ok) throw new Error(body.error || 'AI tidak tersedia. Login AI (Groq/Gemini) atau aktifkan OpenRouter.');
+          if (!res.ok || !body.ok) throw new Error(body.error || 'AI tidak tersedia. Pastikan secret OpenRouter sudah dikonfigurasi di Worker.');
           status.textContent = 'Selesai · OpenRouter';
           output.textContent = typeof body.result === 'string' ? body.result : JSON.stringify(body.result, null, 2);
         } catch (error) { status.textContent = 'Gagal: ' + error.message; }
