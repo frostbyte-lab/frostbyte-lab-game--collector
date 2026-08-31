@@ -4049,7 +4049,7 @@
           <input type="file" id="zip-input" accept=".zip,application/zip,*/*" style="display: none;">
           <button type="button" class="btn btn-secondary btn-sm" id="btn-analisa-game" onclick="runAnalisaGame()" title="Analisa dependency → offline sandbox">Analisa Game</button>
           <button type="button" class="btn btn-primary btn-sm" id="btn-offline-pipeline" onclick="runFullOfflinePipeline()" title="Collect→Analisa→Dep map→Sandbox→Preview">Pipeline Offline</button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Login AI — sesi API">Login AI</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-custom-ai-top" onclick="openCustomAIManager()" title="Buka Xentinel — OpenRouter">Xentinel AI</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-github-save-package" onclick="gcSaveCurrentWorkspaceToGitHub()" title="Simpan paket hasil edit ke GitHub">Simpan ke GitHub</button>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-github-load-package" onclick="gcLoadGitHubPackage()" title="Muat paket dari GitHub">Muat GitHub</button>
           <button type="button" class="btn btn-success btn-sm" id="btn-run-file" onclick="startPreview('sandbox')" title="Run / Preview">Run File</button>
@@ -4251,7 +4251,7 @@
               <span id="pv-filename-text">—</span>
             </div>
             <button type="button" class="pv-abtn" id="btn-pv-copy" onclick="copyErrorLog()">Copy</button>
-            <button type="button" class="pv-abtn custom" id="btn-pv-custom" onclick="openCustomAIManager()">Login AI</button>
+            <button type="button" class="pv-abtn custom" id="btn-pv-custom" onclick="openCustomAIManager()">Xentinel AI</button>
             <button type="button" class="pv-abtn ai" id="btn-pv-ai" onclick="openPreviewModal('AI')">AI</button>
           </div>
         </div>
@@ -4510,13 +4510,13 @@
         <div class="cai-head">
           <div>
             <strong id="cai-title">Login AI</strong>
-            <span class="cai-sub" id="cai-sub">Groq · Gemini · Email 1–5</span>
+            <span class="cai-sub" id="cai-sub">OpenRouter · Xentinel</span>
           </div>
           <button type="button" class="cai-close" onclick="closeCustomAIManager()" aria-label="Tutup">✕</button>
         </div>
 
         <div id="cai-session-status" class="cai-hint" style="margin:0 0 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,.2);font-size:12px;">
-          Belum aktif. Pilih provider AI → isi email sebagai label; provider API memerlukan key, Manus memakai secret Worker.
+          Xentinel menggunakan OpenRouter melalui Worker. API key tersimpan aman di Cloudflare.
         </div>
 
         <!-- Menu utama -->
@@ -4524,7 +4524,7 @@
           <button type="button" class="cai-opt" id="cai-opt-groq" onclick="caiShowPanel('groq')">
             <span class="cai-opt-num">1</span>
             <span class="cai-opt-body">
-              <strong>Groq</strong>
+              <strong>OpenRouter</strong>
               <small>Email 1–5 · login · terapkan ke semua tombol AI</small>
             </span>
             <span class="cai-opt-toggle" onclick="event.stopPropagation()">
@@ -4535,7 +4535,7 @@
           <button type="button" class="cai-opt" id="cai-opt-gemini" onclick="caiShowPanel('gemini')">
             <span class="cai-opt-num">2</span>
             <span class="cai-opt-body">
-              <strong>Gemini</strong>
+              <strong>OpenRouter Free</strong>
               <small>Email 1–5 · login · terapkan ke semua tombol AI</small>
             </span>
             <span class="cai-opt-toggle" onclick="event.stopPropagation()">
@@ -4546,7 +4546,7 @@
           <button type="button" class="cai-opt" id="cai-opt-meta" onclick="caiShowPanel('meta')">
             <span class="cai-opt-num">3</span>
             <span class="cai-opt-body">
-              <strong>Meta AI</strong>
+              <strong>OpenRouter Coding</strong>
               <small>Llama · OpenAI-compatible · Email 1–5</small>
             </span>
             <span class="cai-opt-toggle" onclick="event.stopPropagation()">
@@ -4557,7 +4557,7 @@
           <button type="button" class="cai-opt" id="cai-opt-manus" onclick="caiShowPanel('manus')">
             <span class="cai-opt-num">4</span>
             <span class="cai-opt-body">
-              <strong>Manus AI</strong>
+              <strong>Xentinel</strong>
               <small>Email + API key personal · sesi browser · failover aman</small>
             </span>
             <span class="cai-opt-toggle" onclick="event.stopPropagation()">
@@ -4594,7 +4594,7 @@
 
         <!-- Panel Chat -->
         <div id="cai-panel-chat" class="cai-panel" style="display:none;">
-          <p class="cai-hint" style="margin-bottom:8px;flex-shrink:0;">Chat memakai sesi AI yang sudah login.</p>
+          <p class="cai-hint" style="margin-bottom:8px;flex-shrink:0;">Chat Xentinel diproses melalui OpenRouter.</p>
           <div id="cai-chat-log" class="cai-chat-log"></div>
           <textarea id="cai-chat-input" class="cai-chat-input" rows="4" placeholder="Tulis permintaan…"></textarea>
           <div class="cai-actions">
@@ -7158,8 +7158,15 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       const el = document.getElementById('custom-ai-manager');
       if (!el) return;
       el.style.display = 'flex';
-      if (typeof updateAILoginUI === 'function') updateAILoginUI();
-      caiShowPanel('menu');
+      var title = document.getElementById('cai-title');
+      var sub = document.getElementById('cai-sub');
+      var status = document.getElementById('cai-session-status');
+      if (title) title.textContent = 'Xentinel AI';
+      if (sub) sub.textContent = 'OpenRouter · backend aktif';
+      if (status) status.textContent = 'Semua fitur AI diproses oleh OpenRouter. API key tidak disimpan di browser.';
+      caiShowPanel('chat');
+      var log = document.getElementById('cai-chat-log');
+      if (log && !log.children.length) caiAppendChat('ai', 'Xentinel siap membantu. Tulis pertanyaan atau minta perbaikan kode.');
     }
 
     function caiShowPanel(which) {
@@ -8573,7 +8580,6 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
     window.runAiZipRepair = runAiZipRepair;
 
     async function runDeteksiAI() {
-      return runTrackScanErrors();
       try {
       const logEl = document.getElementById('error-log');
 
@@ -9468,12 +9474,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         }
         if (q) {
           try {
-            if (typeof hasCustomAIKeys === 'function' && hasCustomAIKeys() && typeof requestCustomAI === 'function') {
-              await requestCustomAI('chat', q);
-            } else if (typeof askAI === 'function') {
+            if (typeof askAI === 'function') {
               await askAI();
             } else {
-              appendLog(label + ': ' + q.slice(0, 200), 'ok');
+              throw new Error('Fungsi AI belum tersedia.');
             }
           } catch (error) {
             appendLog(label + ': ' + error.message, 'err');
