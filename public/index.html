@@ -2968,7 +2968,8 @@
     @media (max-width: 860px) {
       /* Selalu dua kolom: keduanya mengecil mengikuti lebar layar, tanpa scroll horizontal. */
       .gc-cockpit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; overflow-x: hidden; }
-      .gc-cockpit-card { min-width: 0; min-height: 360px; }
+      .gc-cockpit-card { min-width: 0; min-height: 0; }
+      .gc-cockpit-preview { min-height: 300px; }
       .gc-cockpit-frame { min-height: 300px; }
       .gc-cockpit-title { min-width: 0; gap: 5px; font-size: 12px; }
       .gc-cockpit-title > span { min-width: 0; }
@@ -2980,6 +2981,7 @@
       .gc-capture-footer { grid-template-columns: 1fr; gap: 8px; }
       .gc-capture-actions { justify-content: stretch; }
       .gc-capture-actions .btn { flex: 1 1 0; min-width: 0; padding-inline: 5px; font-size: 10px; }
+      .gc-capture-actions .btn[hidden] { display: none !important; }
     }
     @media (max-width: 560px) {
       #panel-collect.active { padding: 14px 12px 24px; }
@@ -2992,6 +2994,7 @@
       .gc-cockpit-title .eyebrow { font-size: 8px; }
       .gc-cockpit-status { font-size: 10px; }
       .gc-capture-progress-label { font-size: 9px; }
+      .gc-cockpit-preview, .gc-cockpit-frame { min-height: 260px; height: 260px; }
       .gc-capture-log-panel summary { padding: 8px 7px; font-size: 10px; }
       .gc-capture-log-panel pre { padding: 7px; font-size: 9px; }
     }
