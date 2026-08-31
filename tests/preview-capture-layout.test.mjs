@@ -8,6 +8,8 @@ test('preview and live log use a responsive side-by-side workspace', () => {
   assert.match(html, /preview-workspace\.pv-main-split\{display:grid/);
   assert.match(html, /grid-template-columns:minmax\(0,1\.55fr\) minmax\(280px,\.75fr\)/);
   assert.match(html, /overflow:hidden!important/);
+  assert.match(html, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\); gap: 8px; overflow-x: hidden/);
+  assert.match(html, /Selalu dua kolom/);
 });
 
 test('preview controls explain capture and offline audit behavior', () => {
