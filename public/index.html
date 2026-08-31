@@ -7097,9 +7097,9 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         }
       }
       const topBtn = document.getElementById('btn-custom-ai-top');
-      if (topBtn) topBtn.textContent = loggedIn ? ('AI: ' + label) : 'Login AI';
+      if (topBtn) topBtn.textContent = 'Xentinel AI';
       const pvBtn = document.getElementById('btn-pv-custom');
-      if (pvBtn) pvBtn.textContent = loggedIn ? ('AI: ' + label) : 'Login AI';
+      if (pvBtn) pvBtn.textContent = 'Xentinel AI';
       // Sync provider on/off switches in menu
       CAI_PROVIDER_IDS.forEach(function (p) {
         const on = pe[p] !== false;
@@ -7190,8 +7190,8 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       if (pKey) pKey.style.display = 'none';
       if (box) box.classList.toggle('cai-mode-chat', which === 'chat');
       if (which === 'menu') {
-        if (title) title.textContent = 'Login AI';
-        if (sub) sub.textContent = 'Groq · Gemini · Meta · Manus AI';
+          if (title) title.textContent = 'Xentinel AI';
+          if (sub) sub.textContent = 'OpenRouter · backend aktif';
         if (typeof updateAILoginUI === 'function') updateAILoginUI();
       } else if (which === 'apply') {
         const meta = CAI_PROVIDERS[caiCurrentProvider] || CAI_PROVIDERS.groq;
@@ -8346,7 +8346,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       box.textContent = window.__customSuggestedFiles.map(function (s) {
         return '• ' + s.path + '  (' + s.tags.join(', ') + ' · skor ' + s.score + ')';
       }).join('\n');
-      if (typeof appendLog === 'function') appendLog('Custom AI targets: ' + window.__customSuggestedFiles.length + ' file', 'ok');
+      if (typeof appendLog === 'function') appendLog('OpenRouter targets: ' + window.__customSuggestedFiles.length + ' file', 'ok');
     }
 
     async function applyEduToSuggestedFiles() {
@@ -9377,7 +9377,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             if (input) input.value = prompt;
           } catch (_) {}
         }, 200);
-        appendLog('Custom AI: siap tanya untuk ' + path, 'ok');
+        appendLog('OpenRouter: siap tanya untuk ' + path, 'ok');
       } catch (e) {
         appendLog('Tanya AI gagal: ' + (e && e.message || e), 'err');
       }
