@@ -5688,13 +5688,15 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
           const parentDir = (entry.__path || '').includes('/')
             ? entry.__path.slice(0, entry.__path.lastIndexOf('/'))
             : '';
-          const actionBtn = isErr
-            ? `<button type="button" class="file-tree-action-v" title="Opsi perbaiki file error" aria-label="Perbaiki">V</button>`
-            : `<button type="button" class="file-tree-delete" title="Delete file permanently" aria-label="Delete file permanently">${deleteIconHTML()}</button>`;
+          const errorMark = isErr
+            ? `<span class="file-tree-error-mark" title="Error terdeteksi — klik file untuk membuka detail">[!]</span>`
+            : '';
+          const repairBtn = `<button type="button" class="file-tree-ai-repair" title="Perbaiki file dengan A Core Raa offline" aria-label="Perbaiki dengan A Core Raa">AI</button>`;
+          const actionBtn = `<button type="button" class="file-tree-delete" title="Hapus file" aria-label="Hapus file">${deleteIconHTML()}</button>`;
           const addBtn = `<button type="button" class="file-tree-add" title="Tambah file di folder ini" aria-label="Tambah file">+</button>`;
           const disp = explorerDisplayName(name);
           const badge = explorerTypeBadge(name);
-          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span>` + badge + addBtn + actionBtn;
+          fileEl.innerHTML = fileIconHTML(name) + `<span class="file-tree-name ${fileNameClass(name)}"></span>` + badge + errorMark + addBtn + repairBtn + actionBtn;
           fileEl.querySelector('.file-tree-name').textContent = disp;
           fileEl.title = entry.__path + (isErr && window.__gcScanErrorMeta && window.__gcScanErrorMeta[entry.__path]
             ? '\n⚠ ' + window.__gcScanErrorMeta[entry.__path]
@@ -5706,17 +5708,16 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             fileEl.setAttribute('data-err-label', lab);
           }
 
-          const actEl = fileEl.querySelector('.file-tree-action-v, .file-tree-delete');
-          if (actEl) {
-            actEl.addEventListener('click', (event) => {
-              event.stopPropagation();
-              if (isErr) {
-                openErrFixPopup(entry.__path);
-              } else {
-                deleteFile(entry.__path);
-              }
-            });
-          }
+          const repairEl = fileEl.querySelector('.file-tree-ai-repair');
+          if (repairEl) repairEl.addEventListener('click', (event) => {
+            event.stopPropagation();
+            openErrFixPopup(entry.__path);
+          });
+          const actEl = fileEl.querySelector('.file-tree-delete');
+          if (actEl) actEl.addEventListener('click', (event) => {
+            event.stopPropagation();
+            deleteFile(entry.__path);
+          });
           const addEl = fileEl.querySelector('.file-tree-add');
           if (addEl) {
             addEl.addEventListener('click', (event) => {
@@ -9440,7 +9441,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const prompt =
           'File: ' + path + '\n\nSaran sistem:\n' + sug +
           (ask ? '\n\nPertanyaan user:\n' + ask : '') +
-          '\n\nAnalisis masalah offline/URL absolut dan berikan perbaikan konkret.';
+          '\n\nAnalisis masalah offline/URL absolut dan berikan perbaikan konkret. Jangan gunakan API AI eksternal dan jangan melewati DRM, CAPTCHA, login, atau lisensi.';
         closeErrFixPopup();
         if (typeof openCustomAIManager === 'function') openCustomAIManager();
         setTimeout(function () {
@@ -9450,7 +9451,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
             if (input) input.value = prompt;
           } catch (_) {}
         }, 200);
-        appendLog('OpenRouter: siap tanya untuk ' + path, 'ok');
+        appendLog('A Core Raa offline: siap menganalisis dan memberi rencana perbaikan untuk ' + path, 'ok');
       } catch (e) {
         appendLog('Tanya AI gagal: ' + (e && e.message || e), 'err');
       }
@@ -15625,6 +15626,14 @@ function isApiLike(u){
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();
 })();
 </script>
+<style id="gc-file-ai-repair-controls-v1">
+.file-tree-item{min-width:0!important}
+.file-tree-item .file-tree-error-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;margin-left:4px;padding:1px 4px;border:1px solid rgba(255,107,94,.7);border-radius:4px;color:#ff9b91;background:rgba(255,107,94,.12);font:800 10px var(--mono,monospace);cursor:help}
+.file-tree-item .file-tree-ai-repair{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-width:30px;height:22px;margin-left:3px;padding:0 5px;border:1px solid rgba(94,225,192,.42);border-radius:5px;background:rgba(94,225,192,.08);color:var(--accent,#5ee1c0);font:800 10px var(--mono,monospace);cursor:pointer;opacity:.86}
+.file-tree-item .file-tree-ai-repair:hover,.file-tree-item .file-tree-ai-repair:focus-visible{background:rgba(94,225,192,.2);border-color:var(--accent,#5ee1c0);color:#fff;opacity:1;outline:2px solid rgba(94,225,192,.25);outline-offset:1px}
+.file-tree-item.scan-error .file-tree-name{color:#ffd1cb!important}
+@media(max-width:900px){.file-tree-item .file-tree-ai-repair{opacity:1!important;min-width:34px;height:26px}.file-tree-item .file-tree-error-mark{min-height:22px}}
+</style>
 </body>
 </html>
 
