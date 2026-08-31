@@ -3505,6 +3505,14 @@
       .gc-loading-spinner { width: 34px; height: 34px; margin: 0 auto 14px; border: 3px solid rgba(148,163,184,.28); border-top-color: #38bdf8; border-right-color: #60a5fa; border-radius: 50%; animation: gc-spin .78s linear infinite; }
       .gc-loading-title { font-size: 15px; font-weight: 700; }
       .gc-loading-detail { min-height: 18px; margin-top: 7px; color: #a9b8cf; font-size: 12px; word-break: break-word; }
+      .gc-ai-stage-list { display: grid; gap: 5px; margin-top: 14px; text-align: left; font-size: 11px; color: #94a3b8; }
+      .gc-ai-stage { display: flex; align-items: center; gap: 7px; padding: 5px 7px; border-radius: 7px; background: rgba(15,23,42,.42); transition: .2s ease; }
+      .gc-ai-stage-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #475569; }
+      .gc-ai-stage.active { color: #bae6fd; background: rgba(14,116,144,.22); }
+      .gc-ai-stage.active .gc-ai-stage-dot { background: #22d3ee; box-shadow: 0 0 0 4px rgba(34,211,238,.13); animation: gc-stage-pulse 1s ease-in-out infinite; }
+      .gc-ai-stage.done { color: #86efac; }
+      .gc-ai-stage.done .gc-ai-stage-dot { background: #22c55e; }
+      @keyframes gc-stage-pulse { 50% { transform: scale(.72); opacity: .62; } }
       .gc-loading-track { height: 6px; margin-top: 16px; overflow: hidden; border-radius: 999px; background: rgba(148,163,184,.18); }
       .gc-loading-bar { width: 32%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #22d3ee, #2563eb); background-size: 220% 100%; animation: gc-progress 1.25s ease-in-out infinite; }
       @keyframes gc-spin { to { transform: rotate(360deg); } }
@@ -3702,7 +3710,7 @@
     </symbol>
   </svg>
   <div class="gc-loading-overlay" id="gc-loading-overlay" hidden aria-live="polite" aria-busy="true">
-      <div class="gc-loading-card"><div class="gc-loading-spinner" aria-hidden="true"></div><div class="gc-loading-title" id="gc-loading-title">Memproses file...</div><div class="gc-loading-detail" id="gc-loading-detail">Mohon tunggu sebentar</div><div class="gc-loading-track" aria-hidden="true"><div class="gc-loading-bar"></div></div></div>
+      <div class="gc-loading-card"><div class="gc-loading-spinner" aria-hidden="true"></div><div class="gc-loading-title" id="gc-loading-title">Memproses file...</div><div class="gc-loading-detail" id="gc-loading-detail">Mohon tunggu sebentar</div><div class="gc-ai-stage-list" id="gc-ai-stage-list" hidden></div><div class="gc-loading-track" aria-hidden="true"><div class="gc-loading-bar"></div></div></div>
     </div>
   <div class="gc-update-note" id="gc-update-note" hidden role="status"></div>
   <div class="app-container">
@@ -5214,6 +5222,19 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const titleEl = document.getElementById('gc-loading-title'); const detailEl = document.getElementById('gc-loading-detail');
         if (titleEl && title) titleEl.textContent = title; if (detailEl && detail !== undefined) detailEl.textContent = detail;
       }
+      function setAIProcess(active, detail, stages) {
+        var list = document.getElementById('gc-ai-stage-list');
+        if (!active) { if (list) { list.hidden = true; list.innerHTML = ''; } return; }
+        var items = Array.isArray(stages) && stages.length ? stages : ['Membaca kode aktif', 'Memproses melalui OpenRouter', 'Menyiapkan hasil offline'];
+        var current = Math.max(0, Math.min(items.length - 1, Number(active) - 1));
+        setLoading(true, 'Xentinel AI · tahap ' + (current + 1) + '/' + items.length, detail || items[current]);
+        if (!list) return;
+        list.hidden = false;
+        list.innerHTML = items.map(function (label, i) {
+          var state = i < current ? 'done' : i === current ? 'active' : '';
+          return '<div class="gc-ai-stage ' + state + '"><span class="gc-ai-stage-dot"></span><span>' + label + '</span></div>';
+        }).join('');
+      }
       async function downloadBlob(blob, filename, label) {
         const href = URL.createObjectURL(blob); try { const a = document.createElement('a'); a.href = href; a.download = filename; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); appendLog((label || 'File') + ' berhasil diunduh: ' + filename, 'ok'); } finally { setTimeout(() => URL.revokeObjectURL(href), 1000); }
       }
@@ -6560,15 +6581,27 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       applyAIDecorations({ issueLines, changedLines: [] });
     }
 
+    function persistOfflineAIRecord(record) {
+      try {
+        if (!currentZip || !record) return;
+        if (!Array.isArray(window.__gcAIEditHistory)) window.__gcAIEditHistory = [];
+        window.__gcAIEditHistory.push(record);
+        window.__gcAIEditHistory = window.__gcAIEditHistory.slice(-30);
+        currentZip.file('pipeline/ai-edit-history.json', JSON.stringify({ version: 1, provider: 'openrouter', generatedAt: new Date().toISOString(), entries: window.__gcAIEditHistory }, null, 2));
+      } catch (e) { if (typeof appendLog === 'function') appendLog('Riwayat AI offline gagal ditulis: ' + (e.message || e), 'warn'); }
+    }
+
     async function requestAI(action, question) {
       // Semua tombol Analyze / Suggest Fix / Kirim memakai backend OpenRouter.
       window.__useCustomAI = false;
+      setAIProcess(1, action === 'repair' ? 'Membaca kode untuk disiapkan perbaikannya…' : 'Membaca kode aktif dan masalah lokal…');
       const context = await resolveAIContext();
       const response = document.getElementById('ai-response');
       if (response) {
         response.style.display = 'block';
         response.textContent = 'AI sedang menganalisis ' + context.filename + '...';
       }
+      setAIProcess(2, 'Mengirim konteks kode ke Xentinel melalui OpenRouter…');
       const res = await fetch('/api/ai/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -6576,7 +6609,9 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok || !result.ok) throw new Error(result.message || result.error || 'AI tidak dapat dihubungi. pastikan API key OpenRouter sudah dikonfigurasi.');
+      setAIProcess(3, result.repairedCode ? 'Menyiapkan kode perbaikan dan hasil offline…' : 'Menyiapkan laporan analisis offline…');
       aiSuggestedCode = result.repairedCode || null;
+      persistOfflineAIRecord({ at: new Date().toISOString(), action: action, file: context.filename, provider: 'openrouter', model: result.model || 'openrouter/free', result: result, applied: false });
       const applyButton = document.getElementById('ai-apply-fix');
       if (applyButton) applyButton.hidden = !aiSuggestedCode;
       if (response) {
@@ -6589,7 +6624,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
 
     async function analyzeWithAI() {
       try {
-        setLoading(true, 'AI sedang bekerja…', 'Menganalisis file: ' + (currentFile || '—'));
+        setAIProcess(1, 'Menganalisis file: ' + (currentFile || '—'));
         appendLog('AI: menganalisis error dan saran perbaikan...', 'ok');
         const result = await requestAI('analyze');
         decorateFromAIResult(result);
@@ -6599,13 +6634,13 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const response = document.getElementById('ai-response');
         if (response) { response.style.display = 'block'; response.textContent = 'AI: ' + error.message; }
       } finally {
-        setLoading(false);
+        setLoading(false); setAIProcess(false);
       }
     }
 
     async function repairWithAI() {
       try {
-        setLoading(true, 'AI sedang bekerja…', 'Menyusun usulan perbaikan: ' + (currentFile || '—'));
+        setAIProcess(1, 'Menyusun usulan perbaikan: ' + (currentFile || '—'));
         appendLog('AI: menyiapkan usulan perbaikan kode...', 'ok');
         const result = await requestAI('repair');
         decorateFromAIResult(result);
@@ -6616,16 +6651,18 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         const response = document.getElementById('ai-response');
         if (response) { response.style.display = 'block'; response.textContent = 'AI: ' + error.message; }
       } finally {
-        setLoading(false);
+        setLoading(false); setAIProcess(false);
       }
     }
 
     function applyAISuggestedFix() {
       if (!aiSuggestedCode || !editor || !currentFile) return;
-      if (!window.confirm('Terapkan usulan perbaikan AI ke file aktif? Anda masih bisa meninjaunya sebelum Save.')) return;
+      setAIProcess(1, 'Menulis kode perbaikan ke editor offline…');
+      if (!window.confirm('Terapkan usulan perbaikan AI ke file aktif? Anda masih bisa meninjaunya sebelum Save.')) { setLoading(false); setAIProcess(false); return; }
       const oldCode = editor.getValue() || '';
       const newCode = String(aiSuggestedCode);
       editor.setValue(newCode);
+      setAIProcess(2, 'Menyimpan perubahan ke paket ZIP offline…');
       openFiles.set(currentFile, newCode);
       if (currentZip) {
         try { currentZip.file(currentFile, newCode); } catch (_) {}
@@ -6635,9 +6672,12 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
         .filter(i => i && i.line)
         .map(i => ({ line: i.line, message: i.message, severity: i.severity }));
       applyAIDecorations({ issueLines, changedLines });
+      persistOfflineAIRecord({ at: new Date().toISOString(), action: 'apply-fix', file: currentFile, provider: 'openrouter', changedLines: changedLines, applied: true, code: newCode });
       const applyButton = document.getElementById('ai-apply-fix');
       if (applyButton) applyButton.hidden = true;
-      appendLog('AI: usulan perbaikan diterapkan (' + changedLines.length + ' baris berubah). Klik Save untuk menyimpan ke ZIP.', 'ok');
+      setAIProcess(3, 'Perubahan diterapkan dan riwayat disimpan offline.');
+      setTimeout(function () { setLoading(false); setAIProcess(false); }, 420);
+      appendLog('AI: usulan perbaikan diterapkan (' + changedLines.length + ' baris berubah) dan dicatat ke pipeline/ai-edit-history.json.', 'ok');
     }
 
     async function askAI() {
