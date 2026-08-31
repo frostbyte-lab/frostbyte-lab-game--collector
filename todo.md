@@ -1,0 +1,5 @@
+- [ ] Inventarisasi semua tombol dan handler, lalu tandai fungsi yang duplikat atau tidak efektif
+- [ ] Ubah Scan Error agar fokus ke audit offline A Core Raa
+- [ ] Klik error harus membuka file terkait dan menampilkan ikon [!]
+- [ ] Tambahkan tombol Perbaiki dengan AI pada setiap file editor
+- [ ] Tambahkan test interaksi dan verifikasi production untuk alur error-to-file-to-repair
