@@ -43,6 +43,13 @@ jobs:
         working-directory: android-app
         run: pnpm install --no-frozen-lockfile
 
+      - name: Validate native editor
+        working-directory: android-app
+        run: |
+          pnpm run typecheck
+          pnpm test
+          node ../tests/android-editor.test.mjs
+
       - name: Generate Android project
         working-directory: android-app
         env:
