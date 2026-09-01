@@ -10,7 +10,7 @@ on:
       - ".github/workflows/android-apk.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -69,3 +69,14 @@ jobs:
           path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish public APK release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: ZipScope APK build ${{ github.run_number }}
+          body: |
+            APK gratis ZipScope dari commit ${{ github.sha }}.
+            Fitur: native editor, syntax highlighting, plugin catalog, offline audit, dan AI Assistant melalui Worker.
+          files: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          generate_release_notes: false
