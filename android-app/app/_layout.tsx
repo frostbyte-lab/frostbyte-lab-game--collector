@@ -4,13 +4,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  useFonts,
-} from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
@@ -28,26 +21,21 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-  });
-
-    useEffect(() => {
+  useEffect(() => {
     let disposed = false;
     const hide = () => {
       if (!disposed) SplashScreen.hideAsync().catch(() => undefined);
     };
-    const fallbackTimer = setTimeout(hide, 1500);
-    if (fontsLoaded || fontError) hide();
+    // The first screen uses system fonts, so native startup must not wait for
+    // optional font assets. This also prevents a permanent splash on devices
+    // that cannot resolve bundled font metadata during cold start.
+    hide();
+    const fallbackTimer = setTimeout(hide, 1000);
     return () => {
       disposed = true;
       clearTimeout(fallbackTimer);
     };
-  }, [fontsLoaded, fontError]);
-
+  }, []);
 
   return (
     <SafeAreaProvider>
