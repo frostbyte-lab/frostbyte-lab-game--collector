@@ -40,7 +40,7 @@ function iconFor(kind: Kind): keyof typeof Ionicons.glyphMap { return ({ web: 'g
 
 function tokenizeLine(line: string, extension: string): Token[] {
   const tokens: Token[] = [];
-  const pattern = /\/\/.*$|#.*$|\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->|`(?:\\.|[^`])*`|'(?:\\.|[^'])*'|"(?:\\.|[^"])*"|\b\d+(?:\.\d+)?\b|[A-Za-z_$][\w$-]*|===|!==|=>|==|!=|<=|>=|&&|\|\||[{}()[\].,;:+*/%=<>!-]/g;
+  const pattern = /\/\/.*$|#.*$|\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->|`[^`]*`|'[^']*'|"[^"]*"|\b\d+(?:\.\d+)?\b|[A-Za-z_$][\w$-]*|===|!==|=>|==|!=|<=|>=|&&|\|\||[{}()[\].,;:+*/%=<>!-]/g;
   let cursor = 0; let match: RegExpExecArray | null;
   while ((match = pattern.exec(line))) {
     if (match.index > cursor) tokens.push({ value: line.slice(cursor, match.index), tone: 'plain' });
