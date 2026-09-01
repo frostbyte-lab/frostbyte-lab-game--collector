@@ -35,13 +35,19 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
-  useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
+    useEffect(() => {
+    let disposed = false;
+    const hide = () => {
+      if (!disposed) SplashScreen.hideAsync().catch(() => undefined);
+    };
+    const fallbackTimer = setTimeout(hide, 1500);
+    if (fontsLoaded || fontError) hide();
+    return () => {
+      disposed = true;
+      clearTimeout(fallbackTimer);
+    };
   }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>
