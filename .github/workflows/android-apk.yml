@@ -15,7 +15,7 @@ permissions:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -57,7 +57,6 @@ jobs:
           CI: "1"
         run: |
           pnpm exec expo prebuild --platform android --clean --no-install
-          pnpm install --frozen-lockfile
 
       - name: Build standalone release APK
         working-directory: android-app/android
