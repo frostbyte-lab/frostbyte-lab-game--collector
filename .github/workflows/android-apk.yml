@@ -15,6 +15,7 @@ permissions:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -41,7 +42,7 @@ jobs:
 
       - name: Install Android app dependencies
         working-directory: android-app
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Validate native editor
         working-directory: android-app
@@ -56,7 +57,7 @@ jobs:
           CI: "1"
         run: |
           pnpm exec expo prebuild --platform android --clean --no-install
-          pnpm install --no-frozen-lockfile
+          pnpm install --frozen-lockfile
 
       - name: Build standalone release APK
         working-directory: android-app/android
