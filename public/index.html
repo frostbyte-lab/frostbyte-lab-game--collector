@@ -14,9 +14,9 @@
   <!-- Monaco Editor CDN: koneksi dipercepat agar editor lancar di HP -->
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
-    <link rel="preload" as="script" crossorigin href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs/loader.min.js">
+    <link rel="preload" as="script" crossorigin href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.51.0/min/vs/loader.min.js">
     
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs/loader.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.51.0/min/vs/loader.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="/offline-analyze.js?v=20260826b"></script>
   <script type="module" src="https://unpkg.com/@google/model-viewer@4.0.0/dist/model-viewer.min.js"></script>
@@ -1443,9 +1443,18 @@
       letter-spacing: 0.06em;
       text-transform: uppercase;
       margin-bottom: 7px;
-      display: flex;
-      justify-content: space-between;
-      gap: 5px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .pane-tag > span:first-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .pane-tag > span:last-child {
+      white-space: nowrap;
       flex-shrink: 0;
     }
     .pv-file-running {
@@ -4934,7 +4943,7 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       }, 15000);
 
         if (typeof require !== 'undefined') {
-      require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs' }});
+      require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.51.0/min/vs' }});
 
       require(['vs/editor/editor.main'], function() {
         const host = document.getElementById('monaco-editor');
@@ -10868,7 +10877,6 @@ function isApiLike(u){
           frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups');
           frame.removeAttribute('allow');
         }
-        frame.src = pageBlob;
         previewReload = function(nextMode) {
           startPreview(nextMode || activePreviewMode);
         };
@@ -11004,6 +11012,8 @@ function isApiLike(u){
             appendLog('Catatan: partial sandbox — beberapa error runtime mungkin tidak tertangkap.', 'warn');
           }
         };
+        // Pasang listener dulu, baru mulai memuat iframe agar error awal tidak hilang.
+        frame.src = pageBlob;
       } catch (e) {
         appendLog('Preview gagal: ' + e.message, 'err');
       }

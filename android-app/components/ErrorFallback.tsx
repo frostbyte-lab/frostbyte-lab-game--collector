@@ -28,15 +28,15 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
     try {
       await reloadAppAsync();
     } catch (restartError) {
-      console.error('Failed to restart app:', restartError);
+      console.error('Gagal memulai ulang aplikasi:', restartError);
       resetError();
     }
   };
 
   const formatErrorDetails = (): string => {
-    let details = `Error: ${error.message}\n\n`;
+    let details = `Galat: ${error.message}\n\n`;
     if (error.stack) {
-      details += `Stack Trace:\n${error.stack}`;
+      details += `Jejak Galat:\n${error.stack}`;
     }
     return details;
   };
@@ -52,7 +52,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       {__DEV__ ? (
         <Pressable
           onPress={() => setIsModalVisible(true)}
-          accessibilityLabel="View error details"
+          accessibilityLabel="Lihat rincian galat"
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.topButton,
@@ -69,11 +69,11 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
 
       <View style={styles.content}>
         <Text style={[styles.title, { color: colors.foreground }]}>
-          Something went wrong
+          Terjadi kesalahan
         </Text>
 
         <Text style={[styles.message, { color: colors.mutedForeground }]}>
-          Please reload the app to continue.
+          Muat ulang aplikasi untuk melanjutkan.
         </Text>
 
         <Pressable
@@ -90,7 +90,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           <Text
             style={[styles.buttonText, { color: colors.primaryForeground }]}
           >
-            Try Again
+            Coba Lagi
           </Text>
         </Pressable>
       </View>
@@ -116,11 +116,11 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                 ]}
               >
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-                  Error Details
+                  Rincian Galat
                 </Text>
                 <Pressable
                   onPress={() => setIsModalVisible(false)}
-                  accessibilityLabel="Close error details"
+                  accessibilityLabel="Tutup rincian galat"
                   accessibilityRole="button"
                   style={({ pressed }) => [
                     styles.closeButton,
