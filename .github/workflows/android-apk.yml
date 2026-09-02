@@ -58,25 +58,23 @@ jobs:
           pnpm exec expo prebuild --platform android --clean --no-install
           pnpm install --no-frozen-lockfile
 
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: android-app/android
-        run: ./gradlew assembleDebug --no-daemon
-
+        run: ./gradlew assembleRelease --no-daemon
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ZipScope-fb-labb-debug
-          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          name: ZipScope-fb-labb-release
+          path: android-app/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
-
       - name: Publish public APK release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-${{ github.run_number }}
-          name: ZipScope APK build ${{ github.run_number }}
+          name: ZipScope Release APK build ${{ github.run_number }}
           body: |
-            APK gratis ZipScope dari commit ${{ github.sha }}.
+            APK release ZipScope dari commit ${{ github.sha }}.
             Fitur: native editor, syntax highlighting, plugin catalog, offline audit, dan AI Assistant melalui Worker.
-          files: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          files: android-app/android/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: false
