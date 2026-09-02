@@ -20,7 +20,7 @@ test('native APK supports edit, save, and offline audit actions', () => {
   assert.match(appSource, /setEditing\(true\)/);
   assert.match(appSource, /Simpan edit/);
   assert.match(appSource, /setEditedContent/);
-  assert.match(appSource, /Audit kode offline/);
+  assert.match(appSource, /Audit kode tanpa internet/);
   assert.match(appSource, /analyzeCode/);
 });
 
@@ -29,9 +29,9 @@ test('native APK does not pretend to include an external AI provider', () => {
 });
 
 test('plugin catalog exposes complete safe choices and labels network features honestly', () => {
-  for (const name of ['Syntax Highlight', 'Code Editor', 'Code Audit', 'HTML Preview', 'Media Preview', 'JSON Tools', 'Asset Inspector', 'AI Assistant', 'GitHub Sync']) assert.match(plugins, new RegExp(name));
+  for (const name of ['Sorotan Sintaks', 'Editor Kode', 'Audit Kode', 'Pratinjau HTML', 'Pratinjau Media', 'Alat JSON', 'Pemeriksa Aset', 'Asisten AI', 'Sinkronisasi GitHub']) assert.match(plugins, new RegExp(name));
   assert.match(plugins, /availableOffline: false/);
-  assert.match(appSource, /Pilihan Plugin/);
+  assert.match(appSource, /Pilihan Pengaya/);
   assert.match(appSource, /togglePlugin/);
 });
 
