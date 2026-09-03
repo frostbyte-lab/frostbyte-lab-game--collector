@@ -14274,6 +14274,7 @@ function isApiLike(u){
 
         // ========== Collect via GitHub Actions (semua di web, tanpa buka GitHub) ==========
     let _ghPollTimer = null;
+    let _ghArtifactWaitTries = 0;
 
     async function runGitHubCollect() {
       try { gcSetFlowStep(4); } catch (_gc) {}
@@ -14301,6 +14302,7 @@ function isApiLike(u){
         clearInterval(_ghPollTimer);
         _ghPollTimer = null;
       }
+      _ghArtifactWaitTries = 0;
 
       statusEl.textContent = 'Status: Memulai Collect via GitHub · wait ' + opts.wait_seconds + 's · spins ' + opts.auto_spins + '...';
       try { gcCollectToastShow('Collect via GitHub…'); gcUpdateCollectProgress({ pct: 5, fileCount: 0, items: GC_PACK_CHECKLIST.map(function(c){ return { label: c.label, ok: false, optional: !!c.optional }; }) }, 'antrian'); } catch (_) {}
@@ -14355,7 +14357,7 @@ function isApiLike(u){
     async function pollGitHubStatus(runId) {
       const statusEl = document.getElementById('status');
       let tries = 0;
-      const maxTries = 60; // ~5 menit @ 5s
+      const maxTries = 120; // ~10 menit @ 5s; runner + artifact indexing bisa lambat
 
       if (_ghPollTimer) clearInterval(_ghPollTimer);
 
@@ -14384,6 +14386,17 @@ function isApiLike(u){
             } catch (_) {}
 
           if (data.status === 'completed') {
+            // GitHub kadang menandai run selesai beberapa detik sebelum artifact
+            // tersedia melalui API. Jangan memutus polling pada kondisi ini.
+            if (data.conclusion === 'success' && (!data.artifact || !data.artifact.id)) {
+              _ghArtifactWaitTries++;
+              if (_ghArtifactWaitTries <= 12) {
+                statusEl.textContent = 'Status: Selesai — menunggu ZIP dipublikasikan GitHub (' + _ghArtifactWaitTries + '/12)...';
+                gcUpdateCapturePreviewProgress(94, '94% · Run selesai, menunggu artifact ZIP...');
+                return;
+              }
+            }
+
             clearInterval(_ghPollTimer);
             _ghPollTimer = null;
 
