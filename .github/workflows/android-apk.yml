@@ -43,7 +43,7 @@ jobs:
         working-directory: android-app
         run: pnpm install --no-frozen-lockfile
 
-      - name: Validate native editor
+      - name: Validate web wrapper
         working-directory: android-app
         run: |
           pnpm run typecheck
@@ -75,6 +75,6 @@ jobs:
           name: Game Collector Pro APK release ${{ github.run_number }}
           body: |
             APK release Game Collector Pro dari commit ${{ github.sha }}.
-            Fitur: native editor, syntax highlighting, plugin catalog, offline audit, dan AI Assistant melalui Worker.
+            APK ini memuat web utama Game Collector Pro melalui WebView agar tampilan dan alur Collect tetap sama dengan deployment produksi.
           files: android-app/android/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: false

@@ -2,37 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const bootstrap = await readFile(new URL('../android-app/app/index.tsx', import.meta.url), 'utf8');
-const source = await readFile(new URL('../android-app/components/ZipPreviewScreen.tsx', import.meta.url), 'utf8');
-const appSource = `${bootstrap}\n${source}`;
-const plugins = await readFile(new URL('../android-app/lib/plugins.ts', import.meta.url), 'utf8');
+const source = await readFile(new URL('../android-app/app/index.tsx', import.meta.url), 'utf8');
 
-test('native APK renders syntax-highlighted code with line numbers', () => {
-  assert.match(appSource, /function tokenizeLine/);
-  assert.match(appSource, /HighlightedCode/);
-  assert.match(appSource, /lineNumber/);
-  assert.match(appSource, /keyword: '#d78cff'/);
-  assert.match(appSource, /string: '#8fe388'/);
-  assert.match(appSource, /comment: '#718096'/);
+test('Android APK opens the same Game Collector Pro web application', () => {
+  assert.match(source, /game-resource-collector\.technologiesfrostbyte\.workers\.dev/);
+  assert.match(source, /<WebView/);
+  assert.match(source, /javaScriptEnabled/);
+  assert.match(source, /domStorageEnabled/);
 });
 
-test('native APK supports edit, save, and offline audit actions', () => {
-  assert.match(appSource, /setEditing\(true\)/);
-  assert.match(appSource, /Simpan edit/);
-  assert.match(appSource, /setEditedContent/);
-  assert.match(appSource, /Audit kode offline/);
-  assert.match(appSource, /analyzeCode/);
+test('Android APK has a visible network failure fallback', () => {
+  assert.match(source, /Web utama tidak dapat dibuka/);
+  assert.match(source, /Coba lagi/);
+  assert.match(source, /Buka di browser/);
 });
 
-test('native APK does not pretend to include an external AI provider', () => {
-  assert.doesNotMatch(appSource, /OpenRouter|OPENROUTER_API_KEY|invokeLLM/);
+test('Android APK does not load the old native ZIP application at startup', () => {
+  assert.doesNotMatch(source, /ZipPreviewScreen|DocumentPicker|expo-av|JSZip|KeyboardProvider/);
 });
 
-test('plugin catalog exposes complete safe choices and labels network features honestly', () => {
-  for (const name of ['Syntax Highlight', 'Code Editor', 'Code Audit', 'HTML Preview', 'Media Preview', 'JSON Tools', 'Asset Inspector', 'AI Assistant', 'GitHub Sync']) assert.match(plugins, new RegExp(name));
-  assert.match(plugins, /availableOffline: false/);
-  assert.match(appSource, /Pilihan Plugin/);
-  assert.match(appSource, /togglePlugin/);
-});
-
-console.log('native editor regression test passed');
+console.log('Android web-wrapper regression test passed');

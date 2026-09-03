@@ -1,45 +1,33 @@
-# ZipScope Android APK
+# Game Collector Pro Android APK
 
-ZipScope adalah aplikasi Android native untuk membuka ZIP besar, membaca folder bersarang, dan mempreview file di dalamnya.
+APK resmi mobile untuk membuka tampilan dan alur web utama Game Collector Pro di Android. Aplikasi memuat URL produksi yang sama melalui WebView, sehingga menu, branding, fitur Collect, Preview, Workspace, Activity, log, dan update web mengikuti deployment utama.
 
-## Yang didukung
+## URL web utama
 
-- ZIP besar dengan reader binary dan ekstraksi item secara lazy
-- HTML/HTM dijalankan sebagai preview web
-- JPG, JPEG, PNG, GIF, WebP, SVG
-- MP3 dengan kontrol putar/jeda
-- MP4 dengan kontrol video native
-- CSS, JavaScript, TypeScript, Python, JSON, Markdown, TXT, XML, YAML
-- Panel preview 70% dan log error 30%
-- Editor kode native dengan nomor baris dan syntax highlighting untuk keyword, string, komentar, angka, property, tag, dan operator
-- Mode edit dengan tombol Simpan edit; perubahan disimpan lokal selama sesi APK
-- Audit kode offline untuk URL eksternal, logging runtime, delimiter tidak seimbang, dan TODO/FIXME
-- Mode preview web layar penuh
+`https://game-resource-collector.technologiesfrostbyte.workers.dev/`
 
-## Pengujian ZIP
+## Perilaku jaringan
 
-Dari root repository jalankan:
+APK membutuhkan koneksi internet untuk memuat aplikasi web utama dan API capture. Jika web tidak dapat dibuka, APK menampilkan pesan error, tombol coba lagi, dan pilihan membuka web melalui browser. APK tidak menyalin atau mengeksekusi kode game secara lokal.
 
-pnpm --dir android-app test
+## Pengujian
 
-Smoke test membuat arsip sementara 12 MB dan 40 MB, membaca HTML dan gambar di dalamnya, lalu memastikan ZIP rusak ditolak.
-
-## Menjalankan aplikasi
-
-cd android-app
+```bash
 pnpm install
-pnpm exec expo start
+pnpm run typecheck
+pnpm test
+```
 
-## APK release lokal
+Build release lokal:
 
-pnpm exec expo prebuild --platform android --non-interactive --clean
+```bash
+pnpm exec expo prebuild --platform android --non-interactive --clean --no-install
 cd android
 ./gradlew assembleRelease
+```
 
-APK berada di android/app/build/outputs/apk/release/app-release.apk.
+APK berada di `android/app/build/outputs/apk/release/app-release.apk`.
 
-## Catatan
+## Catatan kompatibilitas
 
-ZIP terenkripsi memerlukan password dan saat ini ditolak dengan pesan error yang jelas; aplikasi tidak mencoba melewati enkripsi.
-
-Editor dan audit pada APK ini berjalan lokal tanpa provider AI eksternal. Integrasi AI OpenRouter berada pada Worker/web app utama, bukan pada APK native saat ini; audit offline sengaja tidak mengklaim dirinya sebagai LLM.
+Entry screen sengaja hanya memuat WebView dan komponen React Native dasar. Fitur ZIP/editor native lama tidak lagi menjadi entry point, sehingga APK release mengikuti web utama dan tidak membawa native module lama yang tidak diperlukan.
