@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 
 const LIVE_URL = 'https://game-resource-collector.technologiesfrostbyte.workers.dev/';
@@ -21,7 +23,8 @@ export default function LiveCollectorApp() {
   };
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+      <StatusBar style="light" backgroundColor="#08111f" />
       <WebView
         ref={webViewRef}
         source={{ uri: LIVE_URL }}
@@ -67,7 +70,7 @@ export default function LiveCollectorApp() {
           </Pressable>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
