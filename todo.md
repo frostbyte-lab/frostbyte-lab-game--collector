@@ -1,5 +1,14 @@
-- [ ] Inventarisasi semua tombol dan handler, lalu tandai fungsi yang duplikat atau tidak efektif
-- [ ] Ubah Scan Error agar fokus ke audit offline A Core Raa
-- [ ] Klik error harus membuka file terkait dan menampilkan ikon [!]
-- [ ] Tambahkan tombol Perbaiki dengan AI pada setiap file editor
-- [ ] Tambahkan test interaksi dan verifikasi production untuk alur error-to-file-to-repair
+- [x] Inventarisasi semua tombol dan handler, lalu tandai fungsi yang duplikat atau tidak efektif
+- [x] Ubah Scan Error agar fokus ke audit offline A Core Raa
+- [x] Klik error harus membuka file terkait dan menampilkan ikon [!]
+- [x] Tambahkan tombol Perbaiki dengan AI pada setiap file editor
+- [x] Tambahkan test interaksi dan verifikasi production untuk alur error-to-file-to-repair
+- [ ] Tambahkan Security Research Mode aman dengan bukti izin, scope allowlist, dan guardrail anti-bypass
+- [ ] Perkuat SSRF/private-IP protection, metode aman, rate limit, timeout, ukuran input, dan redaction
+- [ ] Tambahkan laporan temuan keamanan berbasis evidence dengan severity, confidence, dampak, dan remediation
+- [ ] Integrasikan mode riset ke UI dan alur sandbox network-off
+- [ ] Tambahkan regression/security test non-destruktif dan deploy production
+- [ ] Jadikan GitHub Actions jalur otomatis utama untuk seluruh proses collect
+- [ ] Tambahkan cache lokal HP opt-in untuk log/status/artifact dengan batas ukuran dan tombol hapus
+- [ ] Pastikan fallback Worker hanya dipakai bila GitHub tidak tersedia dan tampilkan statusnya dengan jelas
+- [ ] Uji alur GitHub dispatch, status, artifact, cache lokal, dan layout mobile
