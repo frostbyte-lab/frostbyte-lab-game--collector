@@ -103,7 +103,16 @@ export default function ZipPreviewScreen() {
   const saveEdit = () => { if (!selected || selected.kind !== 'code') return; setEditedContent(current => ({ ...current, [selected.name]: draftText })); setPreviewText(draftText); setEditing(false); log('EDIT tersimpan lokal: ' + selected.name); };
   const runAudit = () => { if (!selected || !previewText) return; if (!pluginState['code-audit']) { log('PLUGIN: Code Audit sedang nonaktif.'); return; } analyzeCode(previewText, selected).forEach(log); };
   const togglePlugin = (id: string) => { setPluginState(current => ({ ...current, [id]: !current[id] })); log('PLUGIN ' + id + ': ' + (pluginState[id] ? 'nonaktif' : 'aktif')); };
-  const askAI = async () => { if (!selected || !previewText) return; if (!pluginState['ai-assistant']) { log('PLUGIN: AI Assistant sedang nonaktif.'); return; } setAiBusy(true); setAiPanel(true); setAiResult('AI sedang menganalisis file…'); try { const response = await fetch('https://game-resource-collector.technologiesfrostbyte.workers.dev/api/ai/manus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: 'Analisis file kode berikut dalam Bahasa Indonesia. Jelaskan error dan risiko offline secara ringkas. Jika perlu perbaikan, berikan versi kode lengkap dalam satu code fence tanpa mengubah tujuan file. Jangan melewati DRM, CAPTCHA, login, lisensi, atau kontrol akses. File: ' + selected.name + '\\n\\n' + previewText.slice(0, 24000) }) }); const payload = await response.json() as { ok?: boolean; content?: string; message?: string; error?: string }; if (!response.ok || !payload.ok) throw new Error(payload.message || payload.error || 'AI gagal memproses'); setAiResult(payload.content || 'AI tidak mengembalikan hasil.'); log('AI selesai menganalisis: ' + selected.name); } catch (error) { const message = error instanceof Error ? error.message : 'AI tidak dapat dihubungi'; setAiResult('AI gagal: ' + message); log('ERROR AI: ' + message); } finally { setAiBusy(false); } };
+  const askAI = async () => {
+    if (!selected || !previewText) return;
+    if (!pluginState['ai-assistant']) { log('PLUGIN: AI Assistant sedang nonaktif.'); return; }
+    setAiPanel(true);
+    setAiBusy(true);
+    const findings = analyzeCode(previewText, selected);
+    setAiResult('Analisis lokal/offline\n\n' + findings.map(item => '• ' + item).join('\n') + '\n\nAI online dinonaktifkan pada build mandiri tanpa Cloudflare.');
+    log('AI Assistant offline selesai menganalisis: ' + selected.name);
+    setAiBusy(false);
+  };
   const applyAIResult = () => { const match = aiResult.match(/```(?:[a-zA-Z0-9+#.-]+)?\\n([\\s\\S]*?)```/); if (!match) { Alert.alert('Tidak ada patch kode', 'AI hanya mengembalikan penjelasan. Tinjau hasilnya lalu edit manual.'); return; } setDraftText(match[1]); setAiPanel(false); setEditing(true); log('Patch AI dimuat ke editor untuk ditinjau.'); };
   const stats = useMemo(() => ({ files: entries.filter(item => !item.isDirectory).length, media: entries.filter(item => ['image', 'audio', 'video'].includes(item.kind)).length }), [entries]);
   return <KeyboardAvoidingView style={[styles.root, { backgroundColor: colors.background, paddingTop: useSafeAreaInsets().top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
