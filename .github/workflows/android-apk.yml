@@ -10,7 +10,7 @@ on:
       - ".github/workflows/android-apk.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -43,6 +43,13 @@ jobs:
         working-directory: android-app
         run: pnpm install --no-frozen-lockfile
 
+      - name: Validate web wrapper
+        working-directory: android-app
+        run: |
+          pnpm run typecheck
+          pnpm test
+          node ../tests/android-editor.test.mjs
+
       - name: Generate Android project
         working-directory: android-app
         env:
@@ -51,14 +58,23 @@ jobs:
           pnpm exec expo prebuild --platform android --clean --no-install
           pnpm install --no-frozen-lockfile
 
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: android-app/android
-        run: ./gradlew assembleDebug --no-daemon
-
+        run: ./gradlew assembleRelease --no-daemon
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ZipScope-fb-labb-debug
-          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          name: Game-Collector-Pro-release
+          path: android-app/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Publish public APK release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Game Collector Pro APK release ${{ github.run_number }}
+          body: |
+            APK release Game Collector Pro dari commit ${{ github.sha }}.
+            APK ini memuat web utama Game Collector Pro melalui WebView agar tampilan dan alur Collect tetap sama dengan deployment produksi.
+          files: android-app/android/app/build/outputs/apk/release/app-release.apk
+          generate_release_notes: false

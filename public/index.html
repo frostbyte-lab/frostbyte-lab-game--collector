@@ -2966,18 +2966,37 @@
       white-space: nowrap;
     }
     @media (max-width: 860px) {
-      /* Tetap kiri-kanan: pada layar sempit pengguna dapat menggeser cockpit secara horizontal. */
-      .gc-cockpit { grid-template-columns: minmax(420px, 1.12fr) minmax(320px, .88fr); overflow-x: auto; }
-      .gc-cockpit-card { min-height: 420px; }
-      .gc-cockpit-frame { min-height: 360px; }
+      /* Selalu dua kolom: keduanya mengecil mengikuti lebar layar, tanpa scroll horizontal. */
+      .gc-cockpit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; overflow-x: hidden; }
+      .gc-cockpit-card { min-width: 0; min-height: 0; }
+      .gc-cockpit-preview { min-height: 300px; }
+      .gc-cockpit-frame { min-height: 300px; }
+      .gc-cockpit-title { min-width: 0; gap: 5px; font-size: 12px; }
+      .gc-cockpit-title > span { min-width: 0; }
+      .gc-cockpit-title .eyebrow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
+      .gc-cockpit-badge { flex: 0 0 auto; padding: 4px 6px; font-size: 9px; }
+      .gc-capture-live-panel { min-height: 118px; margin: 8px; padding: 14px 8px; }
+      .gc-capture-live-panel strong { font-size: 12px; }
+      .gc-capture-live-panel span { font-size: 9px; }
+      .gc-capture-footer { grid-template-columns: 1fr; gap: 8px; }
+      .gc-capture-actions { justify-content: stretch; }
+      .gc-capture-actions .btn { flex: 1 1 0; min-width: 0; padding-inline: 5px; font-size: 10px; }
+      .gc-capture-actions .btn[hidden] { display: none !important; }
     }
     @media (max-width: 560px) {
       #panel-collect.active { padding: 14px 12px 24px; }
       .gc-url-bar { grid-template-columns: 1fr; }
       .gc-url-actions { display: grid; grid-template-columns: 1fr 1fr; }
       .gc-url-actions .btn { width: 100%; }
-      .gc-cockpit-head { padding: 10px 11px; }
-      .gc-cockpit-footer { padding: 9px 11px; }
+      .gc-cockpit-head { padding: 8px 7px; }
+      .gc-cockpit-footer { padding: 8px 7px; }
+      .gc-cockpit-title { font-size: 10px; }
+      .gc-cockpit-title .eyebrow { font-size: 8px; }
+      .gc-cockpit-status { font-size: 10px; }
+      .gc-capture-progress-label { font-size: 9px; }
+      .gc-cockpit-preview, .gc-cockpit-frame { min-height: 260px; height: 260px; }
+      .gc-capture-log-panel summary { padding: 8px 7px; font-size: 10px; }
+      .gc-capture-log-panel pre { padding: 7px; font-size: 9px; }
     }
 
     .collect-hero {
@@ -15646,4 +15665,3 @@ function isApiLike(u){
 </style>
 </body>
 </html>
-
