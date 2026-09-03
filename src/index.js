@@ -517,6 +517,7 @@ async function handleRequest(request, env) {
         return Response.json({ error: "URL http/https tidak valid" }, { status: 400 });
       }
 
+      const dispatchStartedAt = Date.now();
       const dispatch = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/workflows/${ghConfig(env).workflow}/dispatches`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -538,10 +539,25 @@ async function handleRequest(request, env) {
       });
 
       if (dispatch.status === 204 || dispatch.ok) {
-        // Ambil run terbaru (sedikit delay di client; di sini coba list)
-        await new Promise(r => setTimeout(r, 1500));
-        const runs = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/workflows/${ghConfig(env).workflow}/runs?per_page=5&event=workflow_dispatch`);
-        const run = runs.data?.workflow_runs?.[0] || null;
+        // GitHub dapat membutuhkan beberapa detik untuk mendaftarkan run.
+        // Pilih run baru yang waktunya paling dekat dengan dispatch, bukan sekadar item pertama.
+        let run = null;
+        for (let attempt = 0; attempt < 4 && !run; attempt++) {
+          await new Promise(r => setTimeout(r, attempt === 0 ? 1200 : 1800));
+          const runs = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/workflows/${ghConfig(env).workflow}/runs?per_page=10&event=workflow_dispatch`);
+          const candidates = (runs.data?.workflow_runs || [])
+            .filter(x => x && x.id && x.event === "workflow_dispatch")
+            .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
+          run = candidates.find(x => {
+            const created = Date.parse(x.created_at || "");
+            return Number.isFinite(created) && created >= dispatchStartedAt - 15000;
+          }) || null;
+        }
+        // Fallback terakhir: item terbaru, agar kompatibel dengan API GitHub yang lambat.
+        if (!run) {
+          const runs = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/workflows/${ghConfig(env).workflow}/runs?per_page=3&event=workflow_dispatch`);
+          run = runs.data?.workflow_runs?.[0] || null;
+        }
         return Response.json({
           ok: true,
           message: "GitHub Actions dimulai. Tunggu 1–3 menit, lalu cek status.",
@@ -609,8 +625,11 @@ async function handleRequest(request, env) {
 
       let artifact = null;
       if (r.status === "completed" && r.conclusion === "success") {
-        const arts = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/runs/${runId}/artifacts`);
-        artifact = arts.data?.artifacts?.[0] || null;
+        const arts = await ghFetch(env, `/repos/${ghConfig(env).owner}/${ghConfig(env).repo}/actions/runs/${runId}/artifacts?per_page=20`);
+        const available = (arts.data?.artifacts || [])
+          .filter(a => a && !a.expired)
+          .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
+        artifact = available.find(a => a.name === "game-resources") || available[0] || null;
       }
       return Response.json({
         ok: true,
