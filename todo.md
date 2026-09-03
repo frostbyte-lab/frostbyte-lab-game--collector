@@ -1,5 +1,34 @@
-- [ ] Inventarisasi semua tombol dan handler, lalu tandai fungsi yang duplikat atau tidak efektif
-- [ ] Ubah Scan Error agar fokus ke audit offline A Core Raa
-- [ ] Klik error harus membuka file terkait dan menampilkan ikon [!]
-- [ ] Tambahkan tombol Perbaiki dengan AI pada setiap file editor
-- [ ] Tambahkan test interaksi dan verifikasi production untuk alur error-to-file-to-repair
+# Project TODO
+
+- [x] Inventarisasi semua tombol dan handler, lalu tandai fungsi yang duplikat atau tidak efektif
+- [x] Ubah Scan Error agar fokus ke audit offline A Core Raa
+- [x] Klik error harus membuka file terkait dan menampilkan ikon [!]
+- [x] Tambahkan tombol Perbaiki dengan AI pada setiap file editor
+- [x] Tambahkan test interaksi dan verifikasi production untuk alur error-to-file-to-repair
+- [ ] Tambahkan Security Research Mode aman dengan bukti izin, scope allowlist, dan guardrail anti-bypass
+- [ ] Perkuat SSRF/private-IP protection, metode aman, rate limit, timeout, ukuran input, dan redaction
+- [ ] Tambahkan laporan temuan keamanan berbasis evidence dengan severity, confidence, dampak, dan remediation
+- [ ] Integrasikan mode riset ke UI dan alur sandbox network-off
+- [ ] Tambahkan regression/security test non-destruktif dan deploy production
+- [ ] Jadikan GitHub Actions jalur otomatis utama untuk seluruh proses collect
+- [ ] Tambahkan cache lokal HP opt-in untuk log/status/artifact dengan batas ukuran dan tombol hapus
+- [ ] Pastikan fallback Worker hanya dipakai bila GitHub tidak tersedia dan tampilkan statusnya dengan jelas
+- [ ] Uji alur GitHub dispatch, status, artifact, cache lokal, dan layout mobile
+- [ ] Konfigurasi atau dokumentasikan blocker secrets GitHub Actions Cloudflare dan verifikasi workflow deploy
+- [ ] Uji halaman live Cloudflare melalui browser dan pastikan tombol Analyze menghasilkan report
+- [ ] Dokumentasikan repository canonical deployment agar tidak tertukar dengan a-core-raa-cloud
+- [x] Tambahkan unit test cloud khusus untuk redaction, scoring, dataset matching, dan blocker detection rules engine
+- [x] Buat checkpoint WebDev setelah seluruh verifikasi final selesai
+- [x] Audit dan perbaiki kegagalan Publish dashboard cloud A Core Raa
+- [x] Audit dan siapkan deployment A Core Raa Cloud ke Cloudflare dengan source GitHub terpisah
+- [x] Terapkan polish UI final dan siapkan push/deployment A Core Raa ke GitHub dan Cloudflare
+- [x] Port runtime analisis A Core Raa ke Cloudflare Worker agar tombol analisis berjalan pada URL Cloudflare
+- [x] Buat konfigurasi wrangler dan workflow GitHub untuk deployment resource Cloudflare A Core Raa yang terpisah
+- [x] Lengkapi dokumentasi end-to-end Cloudflare + GitHub dan panduan aktivasi auto-deploy
+- [x] Redesain UI Cloudflare menjadi sederhana, profesional, dan developer-tool modern bernuansa Replit
+- [ ] Audit dan terapkan penyempurnaan keamanan, ketelitian rules engine, UX, aksesibilitas, dan regression test
+- [x] Audit dan siapkan deployment A Core Raa Cloud ke Cloudflare dengan source GitHub terpisah
+- [x] Terapkan polish UI final dan siapkan push/deployment A Core Raa ke GitHub dan Cloudflare
+- [x] Port runtime analisis A Core Raa ke Cloudflare Worker agar tombol analisis berjalan pada URL Cloudflare
+- [x] Buat konfigurasi wrangler dan workflow GitHub untuk deployment resource Cloudflare A Core Raa yang terpisah
+- [x] Lengkapi dokumentasi end-to-end Cloudflare + GitHub dan panduan aktivasi auto-deploy

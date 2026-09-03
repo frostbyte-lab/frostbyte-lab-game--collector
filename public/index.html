@@ -3862,7 +3862,7 @@
               <button type="button" class="btn btn-secondary btn-sm" id="gc-challenge-manual" onclick="gcMarkManualChallenge()" title="Catat bahwa Anda telah memverifikasi akses secara sah; sistem tidak melewati CAPTCHA atau DRM">Tandai verifikasi akses</button>
             </div>
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;">
-              <details style="width:100%;margin-top:8px;"><summary style="cursor:pointer;font-size:11px;color:var(--text-secondary);">Opsi lanjutan</summary><label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);margin-top:7px;"><input type="checkbox" id="gc-mock-offline"> Siapkan mock offline dan replay API</label></details>
+              <details style="width:100%;margin-top:8px;"><summary style="cursor:pointer;font-size:11px;color:var(--text-secondary);">Opsi lanjutan</summary><label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);margin-top:7px;"><input type="checkbox" id="gc-mock-offline"> Siapkan mock offline dan replay API</label><label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);margin-top:7px;"><input type="checkbox" id="gc-local-metadata-cache"> Simpan status/metadata terakhir di HP (tanpa evidence mentah)</label></details>
               <span id="gc-research-status" style="font-size:11px;color:var(--text-muted);">Izin belum dicatat · verifikasi akses belum dicatat</span>
             </div>
           </div>
@@ -5389,6 +5389,13 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       window.__gcLastCaptureName = filename || 'game-resources.zip';
       window.__gcLastCaptureDownloadUrl = downloadUrl || '';
       gcSetCaptureResultActions(!!(window.__gcLastCaptureBlob || window.__gcLastCaptureDownloadUrl), false);
+      try {
+        var cacheToggle = document.getElementById('gc-local-metadata-cache');
+        if (cacheToggle && cacheToggle.checked) {
+          localStorage.setItem('gc_last_capture_metadata_v1', JSON.stringify({ savedAt: new Date().toISOString(), filename: window.__gcLastCaptureName, bytes: blob && blob.size || 0, source: 'github-actions', rawEvidenceStored: false }));
+          appendLog('Metadata capture disimpan lokal di HP; evidence mentah tidak disimpan.', 'ok');
+        }
+      } catch (_) {}
     }
 
     async function gcLoadCaptureBlobToWorkspace(blob, filename, focusWorkspace) {
@@ -5484,7 +5491,10 @@ $ # Tidak bisa apt/npm install di server — ini browser + Cloudflare Worker
       __gcUnifiedCaptureRunning = true;
       gcSetUnifiedCaptureUi(true, '0% · Preview aktif · progress capture tampil di bawah preview');
       try { appendLog('Sesi capture dimulai. Mainkan game; resource yang tertangkap akan ditampilkan.', 'info'); } catch (_) {}
-      __gcUnifiedCapturePromise = Promise.resolve().then(function () { return runCollect(); }).finally(function () {
+      __gcUnifiedCapturePromise = Promise.resolve().then(function () {
+        appendLog('Jalur utama: GitHub Actions. Worker hanya mengantrekan job dan mengambil artifact.', 'info');
+        return runGitHubCollect();
+      }).finally(function () {
         __gcUnifiedCaptureRunning = false;
         __gcUnifiedCapturePromise = null;
         gcSetUnifiedCaptureUi(false, 'Sesi selesai · periksa audit dan Workspace');

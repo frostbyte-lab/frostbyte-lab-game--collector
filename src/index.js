@@ -11,6 +11,7 @@ import { safe } from "./lib/safe.js";
 import { detectProtectedResource, sanitizeProtectedText } from "./security/protected-resource.js";
 import { handleNativeApi } from "./native-api.js";
 import { handlePublicMetadata, handleOfficialEmbed } from "./public-metadata.js";
+import { handleResearchAudit } from "./security/research-mode.js";
 import { TYPES, isExcluded, classifyResource } from "./classify/resource.js";
 import { classifySlotSubfolder, folderOf } from "./classify/slot-folder.js";
 import { buildAllowedSet, shouldIncludeResource } from "./classify/select-filter.js";
@@ -331,6 +332,10 @@ async function handleRequest(request, env) {
     }
     if (url.pathname === "/api/public/embed") {
       return handleOfficialEmbed(request);
+    }
+    // Authorized security research: evidence-only, passive, no bypass and no auto-fetch.
+    if (url.pathname === "/api/security/research") {
+      return handleResearchAudit(request);
     }
 
     // Asset proxy same-origin (tanpa R2) — Hybrid online
